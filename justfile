@@ -2,24 +2,28 @@
 default:
   just --list
 
+# Freeze to pip requirements
+freeze:
+  uv pip freeze > dev-requirements.txt
+
 # Create the virtual environment
 venv:
   python3.13 -m venv --upgrade-deps .venv
-  .venv/bin/python3 -m pip install wheel -r dev-requirements.txt -r requirements.txt
+  .venv/bin/python3 -m pip install wheel -r dev-requirements.txt
 
-# Format - for now just sort imports
+# Format - sort with isort and format with ruff
 format:
   .venv/bin/python3 -m isort --settings-path=pyproject.toml centipede tests
-  .venv/bin/python3 -m blue --config=pyproject.toml centipede tests
+  .venv/bin/python3 -m ruff format
 
 # Typecheck with mypy
 typecheck:
   .venv/bin/python3 -m mypy --config-file=pyproject.toml -p centipede
   .venv/bin/python3 -m mypy --config-file=pyproject.toml -p tests
 
-# Lint with flake8
+# Lint with ruff
 lint:
-  .venv/bin/python3 -m flake8 --config=pyproject.toml centipede tests
+  .venv/bin/python3 -m ruff check
 
 # Unit test with pytest
 unit:
