@@ -41,5 +41,5 @@ repl:
   .venv/bin/ipython
 
 # Run the main entrypoint
-exe:
-  .venv/bin/python3 -m centipede.main
+main ARGS="":
+  .venv/bin/python3 -m centipede.main {{ARGS}}

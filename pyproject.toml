@@ -38,3 +38,8 @@ exclude = [".venv"]
 max-line-length = 120
 ignore = []
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+include = ["centipede"]
+
