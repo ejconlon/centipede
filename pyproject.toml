@@ -41,5 +41,5 @@ ignore = []
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["centipede"]
+include = ["centipede", "tests"]
 
