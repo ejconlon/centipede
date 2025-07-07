@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import math
 from abc import ABCMeta, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Generator, Generic, List, Optional, Tuple, TypeVar, override
+from typing import Generator, Generic, Optional, Tuple, TypeVar, override
 
 import numpy as np
 import numpy.typing as npt
 import plotext as plt
+from pyrsistent import PVector
 
 type Time = Fraction
 type Delta = Fraction
@@ -19,8 +21,8 @@ type Rate = int
 type Array = npt.NDArray[np.float64]
 
 
-ZERO = Fraction(0)
-TAU = np.float64(2 * np.pi)
+_ZERO = Fraction(0)
+_TAU = np.float64(2 * np.pi)
 
 
 def mk_lspace(start: Time, end: Time, rate: Rate) -> Array:
@@ -34,17 +36,17 @@ def mk_lspace(start: Time, end: Time, rate: Rate) -> Array:
     return np.linspace(start=start_rnd, stop=end_rnd, num=num, dtype=np.float64)
 
 
-def mk_pspace(lspace: Array, freq: Freq, phase: Phase = ZERO) -> Array:
+def mk_pspace(lspace: Array, freq: Freq, phase: Phase = _ZERO) -> Array:
     assert freq > 0
     arr = lspace.copy()
-    np.multiply(arr, np.float64(freq) * TAU, out=arr)
+    np.multiply(arr, np.float64(freq) * _TAU, out=arr)
     if phase.numerator != 0:
         np.add(arr, np.float64(phase), out=arr)
-    np.mod(arr, TAU, out=arr)
+    np.mod(arr, _TAU, out=arr)
     return arr
 
 
-def mk_sin(lspace: Array, freq: Freq, phase: Phase = ZERO) -> Array:
+def mk_sin(lspace: Array, freq: Freq, phase: Phase = _ZERO) -> Array:
     arr = mk_pspace(lspace=lspace, freq=freq, phase=phase)
     np.sin(arr, out=arr)
     return arr
@@ -68,14 +70,14 @@ class Arc:
 
     @classmethod
     def empty(cls) -> Arc:
-        return Arc(ZERO, ZERO)
+        return _EMPTY_ARC
 
     @classmethod
     def cycle(cls, cyc: int) -> Arc:
         return Arc(Fraction(cyc), Fraction(cyc + 1))
 
     @classmethod
-    def union_all(cls, arcs: List[Arc]) -> Arc:
+    def union_all(cls, arcs: Sequence[Arc]) -> Arc:
         if len(arcs) == 0:
             return Arc.empty()
         else:
@@ -85,7 +87,7 @@ class Arc:
             return out
 
     @classmethod
-    def intersect_all(cls, arcs: List[Arc]) -> Arc:
+    def intersect_all(cls, arcs: Sequence[Arc]) -> Arc:
         if len(arcs) == 0:
             return Arc.empty()
         else:
@@ -162,7 +164,7 @@ class Arc:
         else:
             return Arc(self.start * factor, self.end * factor)
 
-    def scale_length(self, factor: Factor) -> Arc:
+    def clip(self, factor: Factor) -> Arc:
         if self.null() or factor == 1:
             return self._normalize()
         elif factor <= 0:
@@ -172,28 +174,34 @@ class Arc:
             return Arc(self.start, end)
 
 
-T = TypeVar("T")
+_EMPTY_ARC = Arc(_ZERO, _ZERO)
+
+
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
-class Ev(Generic[T]):
+class Ev(Generic[_T]):
     arc: Arc
-    val: T
+    val: _T
 
-    def shift(self, delta: Delta) -> Ev[T]:
+    def shift(self, delta: Delta) -> Ev[_T]:
         return Ev(self.arc.shift(delta), self.val)
 
-    def scale(self, factor: Factor) -> Ev[T]:
+    def scale(self, factor: Factor) -> Ev[_T]:
         return Ev(self.arc.scale(factor), self.val)
 
+    def clip(self, factor: Factor) -> Ev[_T]:
+        return Ev(self.arc.clip(factor), self.val)
 
-class Pat(Generic[T], metaclass=ABCMeta):
+
+class Pat(Generic[_T], metaclass=ABCMeta):
     @classmethod
-    def empty(cls) -> Pat[T]:
+    def empty(cls) -> Pat[_T]:
         return PatEmpty()
 
     @classmethod
-    def pure(cls, val: T) -> Pat[T]:
+    def pure(cls, val: _T) -> Pat[_T]:
         return PatPure(val)
 
     @abstractmethod
@@ -201,10 +209,10 @@ class Pat(Generic[T], metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         raise NotImplementedError()
 
-    def shift(self, delta: Delta) -> Pat[T]:
+    def shift(self, delta: Delta) -> Pat[_T]:
         if delta == 0:
             return self
         else:
@@ -214,7 +222,7 @@ class Pat(Generic[T], metaclass=ABCMeta):
                 case _:
                     return PatShift(delta, self)
 
-    def scale(self, factor: Factor) -> Pat[T]:
+    def scale(self, factor: Factor) -> Pat[_T]:
         if factor <= 0:
             return PatEmpty()
         elif factor == 1:
@@ -228,34 +236,34 @@ class Pat(Generic[T], metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class PatEmpty(Pat[T]):
+class PatEmpty(Pat[_T]):
     @override
     def active(self, bounds: Arc) -> Arc:
         return Arc.empty()
 
     @override
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         yield from ()
 
 
 @dataclass(frozen=True)
-class PatPure(Pat[T]):
-    val: T
+class PatPure(Pat[_T]):
+    val: _T
 
     @override
     def active(self, bounds: Arc) -> Arc:
         return bounds
 
     @override
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         for _, sub_arc in bounds.split_cycles():
             yield Ev(sub_arc, self.val)
 
 
 @dataclass(frozen=True)
-class PatMask(Pat[T]):
+class PatMask(Pat[_T]):
     mask: Arc
-    sub_pat: Pat[T]
+    sub_pat: Pat[_T]
 
     @override
     def active(self, bounds: Arc) -> Arc:
@@ -266,7 +274,7 @@ class PatMask(Pat[T]):
             return self.sub_pat.active(sub_bounds)
 
     @override
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         sub_bounds = bounds.intersect(self.mask)
         if sub_bounds.null():
             return
@@ -275,56 +283,46 @@ class PatMask(Pat[T]):
 
 
 @dataclass(frozen=True)
-class PatShift(Pat[T]):
+class PatShift(Pat[_T]):
     delta: Delta
-    sub_pat: Pat[T]
+    sub_pat: Pat[_T]
 
     @override
     def active(self, bounds: Arc) -> Arc:
         return self.sub_pat.active(bounds.shift(self.delta)).shift(-self.delta)
 
     @override
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         yield from map(
             lambda ev: ev.shift(-self.delta), self.sub_pat.rep(bounds.shift(self.delta))
         )
 
 
 @dataclass(frozen=True)
-class PatScale(Pat[T]):
+class PatScale(Pat[_T]):
     factor: Factor
-    sub_pat: Pat[T]
+    sub_pat: Pat[_T]
 
     @override
     def active(self, bounds: Arc) -> Arc:
         raise NotImplementedError()
 
     @override
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         raise NotImplementedError()
 
 
 @dataclass(frozen=True)
-class PatSeq(Pat[T]):
-    sub_pats: List[Pat[T]]
+class PatSeq(Pat[_T]):
+    sub_pats: PVector[Pat[_T]]
 
     @override
     def active(self, bounds: Arc) -> Arc:
         raise NotImplementedError()
 
     @override
-    def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
         raise NotImplementedError()
-
-
-# @dataclass(frozen=True)
-# class Periodic:
-#     arc: Arc
-#     freq: Freq
-#     phase: Phase = 0
-#
-#     def render(self, rate: Rate) -> Array:
-#         raise Exception('TODO')
 
 
 def main():
