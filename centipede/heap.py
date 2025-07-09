@@ -59,19 +59,75 @@ class Seq[T]:
                 return False
 
     def uncons(self) -> Optional[Tuple[T, Seq[T]]]:
-        raise Todo
+        match self:
+            case SeqEmpty():
+                return None
+            case SeqSingle(value):
+                return (value, Seq.empty())
+            case SeqDeep(_, front, between, back):
+                raise Todo
+            case _:
+                raise Impossible
 
-    def cons(self, val: T) -> Seq[T]:
-        raise Todo
+    def cons(self, value: T) -> Seq[T]:
+        match self:
+            case SeqEmpty():
+                return SeqSingle(value)
+            case SeqSingle(value):
+                raise Todo
+            case SeqDeep(_, front, between, back):
+                raise Todo
+            case _:
+                raise Impossible
 
     def unsnoc(self) -> Optional[Tuple[Seq[T], T]]:
-        raise Todo
+        match self:
+            case SeqEmpty():
+                return None
+            case SeqSingle(value):
+                return (Seq.empty(), value)
+            case SeqDeep(_, front, between, back):
+                raise Todo
+            case _:
+                raise Impossible
 
-    def snoc(self, val: T) -> Seq[T]:
-        raise Todo
+    def snoc(self, value: T) -> Seq[T]:
+        match self:
+            case SeqEmpty():
+                return SeqSingle(value)
+            case SeqSingle(value):
+                raise Todo
+            case SeqDeep(_, front, between, back):
+                raise Todo
+            case _:
+                raise Impossible
 
     def concat(self, other: Seq[T]):
-        raise Todo
+        match self:
+            case SeqEmpty():
+                return other
+            case SeqSingle(value):
+                match other:
+                    case SeqEmpty():
+                        return self
+                    case SeqSingle(other_value):
+                        raise Todo
+                    case SeqDeep(_, _, _, _):
+                        raise Todo
+                    case _:
+                        raise Impossible
+            case SeqDeep(_, _, _, _):
+                match other:
+                    case SeqEmpty():
+                        return self
+                    case SeqSingle(other_value):
+                        raise Todo
+                    case SeqDeep(_, _, _, _):
+                        raise Todo
+                    case _:
+                        raise Impossible
+            case _:
+                raise Impossible
 
 
 @dataclass(frozen=True)
