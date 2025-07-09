@@ -11,7 +11,6 @@ import numpy as np
 import numpy.typing as npt
 import plotext as plt
 from pyrsistent import PVector, pvector
-from pyrsistent_extras._pheap import PMinHeap, pminheap
 
 
 def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
@@ -206,15 +205,15 @@ class Ev[T]:
         return Ev(self.arc.clip(factor), self.val)
 
 
-type EvHeap[T] = PMinHeap[Arc, Ev[T]]
-
-
-def ev_heap_empty[T]() -> EvHeap[T]:
-    return pminheap()
-
-
-def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
-    raise NotImplementedError()
+# type EvHeap[T] = Heap[Arc, Ev[T]]
+#
+#
+# def ev_heap_empty[T]() -> EvHeap[T]:
+#     return Heap.empty()
+#
+#
+# def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
+#     raise NotImplementedError()
 
 
 # sealed
