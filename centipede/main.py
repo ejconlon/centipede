@@ -1,16 +1,30 @@
 from __future__ import annotations
 
-import math
-from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Generator, Generic, Optional, Tuple, TypeVar, override
+from functools import partial
+from math import ceil, floor
+from typing import Any, Callable, Generator, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import plotext as plt
-from pyrsistent import PVector
+from pyrsistent import PVector, pvector
+from pyrsistent_extras._pheap import PMinHeap, pminheap
+
+
+def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
+    def wrapper(_: None, arg: A) -> B:
+        return fn(arg)
+
+    return wrapper
+
+
+@dataclass
+class Box[Z]:
+    unwrap: Z
+
 
 type Time = Fraction
 type Delta = Fraction
@@ -21,7 +35,7 @@ type Rate = int
 type Array = npt.NDArray[np.float64]
 
 
-_ZERO = Fraction(0)
+_acc = Fraction(0)
 _TAU = np.float64(2 * np.pi)
 
 
@@ -36,7 +50,7 @@ def mk_lspace(start: Time, end: Time, rate: Rate) -> Array:
     return np.linspace(start=start_rnd, stop=end_rnd, num=num, dtype=np.float64)
 
 
-def mk_pspace(lspace: Array, freq: Freq, phase: Phase = _ZERO) -> Array:
+def mk_pspace(lspace: Array, freq: Freq, phase: Phase = _acc) -> Array:
     assert freq > 0
     arr = lspace.copy()
     np.multiply(arr, np.float64(freq) * _TAU, out=arr)
@@ -46,7 +60,7 @@ def mk_pspace(lspace: Array, freq: Freq, phase: Phase = _ZERO) -> Array:
     return arr
 
 
-def mk_sin(lspace: Array, freq: Freq, phase: Phase = _ZERO) -> Array:
+def mk_sin(lspace: Array, freq: Freq, phase: Phase = _acc) -> Array:
     arr = mk_pspace(lspace=lspace, freq=freq, phase=phase)
     np.sin(arr, out=arr)
     return arr
@@ -63,21 +77,21 @@ def test_plot() -> None:
     plot(lspace, arr)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class Arc:
     start: Time
     end: Time
 
-    @classmethod
-    def empty(cls) -> Arc:
+    @staticmethod
+    def empty() -> Arc:
         return _EMPTY_ARC
 
-    @classmethod
-    def cycle(cls, cyc: int) -> Arc:
+    @staticmethod
+    def cycle(cyc: int) -> Arc:
         return Arc(Fraction(cyc), Fraction(cyc + 1))
 
-    @classmethod
-    def union_all(cls, arcs: Sequence[Arc]) -> Arc:
+    @staticmethod
+    def union_all(arcs: Sequence[Arc]) -> Arc:
         if len(arcs) == 0:
             return Arc.empty()
         else:
@@ -86,8 +100,8 @@ class Arc:
                 out = out.union(arcs[i])
             return out
 
-    @classmethod
-    def intersect_all(cls, arcs: Sequence[Arc]) -> Arc:
+    @staticmethod
+    def intersect_all(arcs: Sequence[Arc]) -> Arc:
         if len(arcs) == 0:
             return Arc.empty()
         else:
@@ -114,8 +128,8 @@ class Arc:
         start = self.start if bounds is None else max(self.start, bounds.start)
         end = self.end if bounds is None else min(self.end, bounds.end)
         if start < end:
-            left_ix = math.floor(start)
-            right_ix = math.ceil(end)
+            left_ix = floor(start)
+            right_ix = ceil(end)
             for cyc in range(left_ix, right_ix):
                 s = max(Fraction(cyc), self.start)
                 e = min(Fraction(cyc + 1), self.end)
@@ -174,155 +188,333 @@ class Arc:
             return Arc(self.start, end)
 
 
-_EMPTY_ARC = Arc(_ZERO, _ZERO)
-
-
-_T = TypeVar("_T")
+_EMPTY_ARC = Arc(_acc, _acc)
 
 
 @dataclass(frozen=True)
-class Ev(Generic[_T]):
+class Ev[T]:
     arc: Arc
-    val: _T
+    val: T
 
-    def shift(self, delta: Delta) -> Ev[_T]:
+    def shift(self, delta: Delta) -> Ev[T]:
         return Ev(self.arc.shift(delta), self.val)
 
-    def scale(self, factor: Factor) -> Ev[_T]:
+    def scale(self, factor: Factor) -> Ev[T]:
         return Ev(self.arc.scale(factor), self.val)
 
-    def clip(self, factor: Factor) -> Ev[_T]:
+    def clip(self, factor: Factor) -> Ev[T]:
         return Ev(self.arc.clip(factor), self.val)
 
 
-class Pat(Generic[_T], metaclass=ABCMeta):
-    @classmethod
-    def empty(cls) -> Pat[_T]:
-        return PatEmpty()
+type EvHeap[T] = PMinHeap[Arc, Ev[T]]
 
-    @classmethod
-    def pure(cls, val: _T) -> Pat[_T]:
-        return PatPure(val)
 
-    @abstractmethod
-    def active(self, bounds: Arc) -> Arc:
-        raise NotImplementedError()
+def ev_heap_empty[T]() -> EvHeap[T]:
+    return pminheap()
 
-    @abstractmethod
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        raise NotImplementedError()
 
-    def shift(self, delta: Delta) -> Pat[_T]:
+def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
+    raise NotImplementedError()
+
+
+# sealed
+class PatF[T, R]:
+    pass
+
+
+@dataclass(frozen=True)
+class Pat[T]:
+    unwrap: PatF[T, Pat[T]]
+
+    @staticmethod
+    def empty() -> Pat[T]:
+        return _PAT_EMPTY
+
+    @staticmethod
+    def pure(val: T) -> Pat[T]:
+        return Pat(PatPure(val))
+
+    @staticmethod
+    def seq(pats: Iterable[Pat[T]]) -> Pat[T]:
+        return Pat(PatSeq(pvector(pats)))
+
+    @staticmethod
+    def par(pats: Iterable[Pat[T]]) -> Pat[T]:
+        return Pat(PatPar(pvector(pats)))
+
+    def mask(self, arc: Arc) -> Pat[T]:
+        if arc.null():
+            return Pat.empty()
+        else:
+            match self.unwrap:
+                case PatMask(a, p):
+                    return p.mask(a.intersect(arc))
+                case _:
+                    return Pat(PatMask(arc, self))
+
+    def shift(self, delta: Delta) -> Pat[T]:
         if delta == 0:
             return self
         else:
-            match self:
+            match self.unwrap:
                 case PatShift(d, p):
                     return p.shift(d + delta)
                 case _:
-                    return PatShift(delta, self)
+                    return Pat(PatShift(delta, self))
 
-    def scale(self, factor: Factor) -> Pat[_T]:
+    def scale(self, factor: Factor) -> Pat[T]:
         if factor <= 0:
-            return PatEmpty()
+            return Pat.empty()
         elif factor == 1:
             return self
         else:
-            match self:
+            match self.unwrap:
                 case PatScale(f, p):
                     return p.scale(f * factor)
                 case _:
-                    return PatScale(factor, self)
+                    return Pat(PatScale(factor, self))
 
-
-@dataclass(frozen=True)
-class PatEmpty(Pat[_T]):
-    @override
-    def active(self, bounds: Arc) -> Arc:
-        return Arc.empty()
-
-    @override
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        yield from ()
-
-
-@dataclass(frozen=True)
-class PatPure(Pat[_T]):
-    val: _T
-
-    @override
-    def active(self, bounds: Arc) -> Arc:
-        return bounds
-
-    @override
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        for _, sub_arc in bounds.split_cycles():
-            yield Ev(sub_arc, self.val)
-
-
-@dataclass(frozen=True)
-class PatMask(Pat[_T]):
-    mask: Arc
-    sub_pat: Pat[_T]
-
-    @override
-    def active(self, bounds: Arc) -> Arc:
-        sub_bounds = bounds.intersect(self.mask)
-        if sub_bounds.null():
-            return sub_bounds
+    def clip(self, factor: Factor) -> Pat[T]:
+        if factor <= 0:
+            return Pat.empty()
+        elif factor == 1:
+            return self
         else:
-            return self.sub_pat.active(sub_bounds)
+            match self.unwrap:
+                case PatClip(f, p):
+                    return p.clip(f * factor)
+                case _:
+                    return Pat(PatClip(factor, self))
 
-    @override
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        sub_bounds = bounds.intersect(self.mask)
-        if sub_bounds.null():
-            return
-        else:
-            yield from self.sub_pat.rep(sub_bounds)
+    def map[U](self, fn: Callable[[T], U]) -> Pat[U]:
+        return pat_map(fn)(self)
+
+    def fold[Z](self, start: Z, fn: Callable[[Box[Z], T], None]) -> Z:
+        return pat_fold(fn)(start, self)
+
+    def cata[Z](self, fn: Callable[[PatF[T, Z]], Z]) -> Z:
+        return pat_cata(fn)(self)
+
+    def cata_state[S, Z](
+        self, start: S, fn: Callable[[Box[S], PatF[T, Z]], Z]
+    ) -> Tuple[S, Z]:
+        return pat_cata_state(fn)(start, self)
 
 
 @dataclass(frozen=True)
-class PatShift(Pat[_T]):
+class PatEmpty(PatF[Any, Any]):
+    pass
+
+
+_PAT_EMPTY = Pat(PatEmpty())
+
+
+@dataclass(frozen=True)
+class PatPure[T](PatF[T, Any]):
+    val: T
+
+
+@dataclass(frozen=True)
+class PatMask[T, R](PatF[T, R]):
+    arc: Arc
+    child: R
+
+    # @override
+    # def active(self, bounds: Arc) -> Arc:
+    #     sub_bounds = bounds.intersect(self.mask)
+    #     if sub_bounds.null():
+    #         return sub_bounds
+    #     else:
+    #         return self.sub_pat.active(sub_bounds)
+    #
+    # @override
+    # def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    #     sub_bounds = bounds.intersect(self.mask)
+    #     if sub_bounds.null():
+    #         return
+    #     else:
+    #         yield from self.sub_pat.rep(sub_bounds)
+
+
+@dataclass(frozen=True)
+class PatShift[T, R](PatF[T, R]):
     delta: Delta
-    sub_pat: Pat[_T]
+    child: R
 
-    @override
-    def active(self, bounds: Arc) -> Arc:
-        return self.sub_pat.active(bounds.shift(self.delta)).shift(-self.delta)
-
-    @override
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        yield from map(
-            lambda ev: ev.shift(-self.delta), self.sub_pat.rep(bounds.shift(self.delta))
-        )
+    # @override
+    # def active(self, bounds: Arc) -> Arc:
+    #     return self.sub_pat.active(bounds.shift(self.delta)).shift(-self.delta)
+    #
+    # @override
+    # def rep(self, bounds: Arc) -> Generator[Ev[T]]:
+    #     yield from map(
+    #         lambda ev: ev.shift(-self.delta), self.sub_pat.rep(bounds.shift(self.delta))
+    #     )
 
 
 @dataclass(frozen=True)
-class PatScale(Pat[_T]):
+class PatScale[T, R](PatF[T, R]):
     factor: Factor
-    sub_pat: Pat[_T]
-
-    @override
-    def active(self, bounds: Arc) -> Arc:
-        raise NotImplementedError()
-
-    @override
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        raise NotImplementedError()
+    child: R
 
 
 @dataclass(frozen=True)
-class PatSeq(Pat[_T]):
-    sub_pats: PVector[Pat[_T]]
+class PatClip[T, R](PatF[T, R]):
+    factor: Factor
+    child: R
 
-    @override
-    def active(self, bounds: Arc) -> Arc:
-        raise NotImplementedError()
 
-    @override
-    def rep(self, bounds: Arc) -> Generator[Ev[_T]]:
-        raise NotImplementedError()
+@dataclass(frozen=True)
+class PatSeq[T, R](PatF[T, R]):
+    children: PVector[R]
+
+
+@dataclass(frozen=True)
+class PatPar[T, R](PatF[T, R]):
+    children: PVector[R]
+
+
+class PartialMatchException(Exception):
+    def __init__(self, val: Any):
+        super().__init__(f"Unmatched type: {type(val)}")
+
+
+def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[T]], Z]:
+    def wrapper(env: V, pat: Pat[T]) -> Z:
+        pf = pat.unwrap
+        match pf:
+            case PatEmpty():
+                return fn(env, pf)
+            case PatPure(_):
+                return fn(env, pf)
+            case PatClip(f, c):
+                cz = wrapper(env, c)
+                return fn(env, PatClip(f, cz))
+            case PatMask(a, c):
+                cz = wrapper(env, c)
+                return fn(env, PatMask(a, cz))
+            case PatScale(f, c):
+                cz = wrapper(env, c)
+                return fn(env, PatScale(f, cz))
+            case PatSeq(cs):
+                czs = pvector(wrapper(env, c) for c in cs)
+                return fn(env, PatSeq(czs))
+            case PatPar(cs):
+                czs = pvector(wrapper(env, c) for c in cs)
+                return fn(env, PatPar(czs))
+            case _:
+                raise PartialMatchException(pf)
+
+    return wrapper
+
+
+def pat_cata_state[S, T, Z](
+    fn: Callable[[Box[S], PatF[T, Z]], Z],
+) -> Callable[[S, Pat[T]], Tuple[S, Z]]:
+    k: Callable[[Box[S], Pat[T]], Z] = pat_cata_env(fn)
+
+    def unwrap(start: S, pat: Pat[T]) -> Tuple[S, Z]:
+        box = Box(start)
+        out = k(box, pat)
+        return (box.unwrap, out)
+
+    return unwrap
+
+
+def pat_cata[T, Z](fn: Callable[[PatF[T, Z]], Z]) -> Callable[[Pat[T]], Z]:
+    k: Callable[[None, Pat[T]], Z] = pat_cata_env(ignore_arg(fn))
+    return partial(k, None)
+
+
+def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
+    def elim(pf: PatF[T, Pat[U]]) -> Pat[U]:
+        match pf:
+            case PatEmpty():
+                return Pat.empty()
+            case PatPure(val):
+                return Pat(PatPure(fn(val)))
+            case PatClip(f, c):
+                return Pat(PatClip(f, c))
+            case PatMask(a, c):
+                return Pat(PatMask(a, c))
+            case PatScale(f, c):
+                return Pat(PatScale(f, c))
+            case PatSeq(cs):
+                return Pat(PatSeq(cs))
+            case PatPar(cs):
+                return Pat(PatPar(cs))
+            case _:
+                raise PartialMatchException(pf)
+
+    return pat_cata(elim)
+
+
+def pat_fold[T, Z](fn: Callable[[Box[Z], T], None]) -> Callable[[Z, Pat[T]], Z]:
+    def visit(box: Box[Z], pf: PatF[T, None]) -> None:
+        match pf:
+            case PatPure(val):
+                fn(box, val)
+            case _:
+                pass
+
+    k: Callable[[Box[Z], Pat[T]], None] = pat_cata_env(visit)
+
+    def wrapper(start: Z, pat: Pat[T]) -> Z:
+        box = Box(start)
+        k(box, pat)
+        return box.unwrap
+
+    return wrapper
+
+
+# # @dataclass(frozen=True)
+# # class CellKey[K]:
+# #     row: K
+# #     col: K
+# #
+# #
+# # @dataclass(frozen=True)
+# # class CellIx:
+# #     row: int
+# #     col: int
+# #
+# #
+# # def trim_entries[V](rows: int, cols: int, entries: PMap[CellIx, V]) -> PMap[CellIx, V]:
+# #     ev = entries.evolver()
+# #     for ix in entries:
+# #         if ix.row >= rows or ix.col >= cols:
+# #             del ev[ix]
+# #     return ev.persistent()
+# #
+# #
+# # @dataclass(frozen=True)
+# # class Table[K, V]:
+# #     rows: int
+# #     col_lookup: PMap[K, int]
+# #     entries: PMap[CellIx, V]
+# #
+# #     @property
+# #     def cols(self) -> int:
+# #         return len(self.col_lookup)
+# #
+# #     # def append_row(self) -> Table[K, V]:
+# #     #     return self.set_size(rows=self.rows + 1, cols=self.cols)
+# #     #
+# #     # def add_col(self) -> Table[K, V]:
+# #     #     return self.set_size(rows=self.rows, cols=self.cols + 1)
+# #     #
+# #     # def del_row(self) -> Table[K, V]:
+# #     #     return self.set_size(rows=self.rows - 1, cols=self.cols)
+# #     #
+# #     # def del_col(self) -> Table[K, V]:
+# #     #     return self.set_size(rows=self.rows, cols=self.cols - 1)
+# #     #
+# #     # def set_size(self, rows: int, cols: int) -> Table[K, V]:
+# #     #     if rows >= self.rows and cols >= self.cols:
+# #     #         return replace(self, rows=rows, cols=cols)
+# #     #     else:
+# #     #         entries = trim_entries(rows=rows, cols=cols, entries=self.entries)
+# #     #         return Table(rows=rows, cols=cols, entries=entries)
 
 
 def main():

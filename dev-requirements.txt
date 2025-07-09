@@ -24,6 +24,7 @@ pure-eval==0.2.3
 pygame==2.6.1
 pygments==2.19.2
 pyrsistent==0.20.0
+pyrsistent-extras==0.1.1
 pytest==8.4.1
 ruff==0.12.1
 stack-data==0.6.3
