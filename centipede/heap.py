@@ -1,9 +1,9 @@
-"""A Brodal-Okasaki persistent min-heap"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, Tuple
+from typing import Any, Optional, Protocol, Tuple, Union
+
+# ===== Preamble =====
 
 
 class Irrelevant(NotImplementedError):
@@ -32,17 +32,31 @@ class Comparable(Protocol):
         raise Irrelevant
 
 
+# ===== Seq =====
+
+
+type OuterNode[T] = Union[Tuple[T], Tuple[T, T], Tuple[T, T, T], Tuple[T, T, T, T]]
+type InnerNode[T] = Union[Tuple[int, T, T], Tuple[int, T, T, T]]
+
+
+# sealed
 class Seq[T]:
+    """A Hinze-Patterson finger tree as persistent catenable sequence"""
+
     @staticmethod
     def empty() -> Seq[T]:
-        raise Todo
+        return _SEQ_EMPTY
 
     @staticmethod
-    def singleton(val: T) -> Seq[T]:
-        raise Todo
+    def singleton(value: T) -> Seq[T]:
+        return SeqSingle(value)
 
     def null(self) -> bool:
-        raise Todo
+        match self:
+            case SeqEmpty():
+                return True
+            case _:
+                return False
 
     def uncons(self) -> Optional[Tuple[T, Seq[T]]]:
         raise Todo
@@ -50,8 +64,38 @@ class Seq[T]:
     def cons(self, val: T) -> Seq[T]:
         raise Todo
 
+    def unsnoc(self) -> Optional[Tuple[Seq[T], T]]:
+        raise Todo
+
+    def snoc(self, val: T) -> Seq[T]:
+        raise Todo
+
     def concat(self, other: Seq[T]):
         raise Todo
+
+
+@dataclass(frozen=True)
+class SeqEmpty[T](Seq[T]):
+    pass
+
+
+_SEQ_EMPTY: Seq[Any] = SeqEmpty()
+
+
+@dataclass(frozen=True)
+class SeqSingle[T](Seq[T]):
+    value: T
+
+
+@dataclass(frozen=True)
+class SeqDeep[T](Seq[T]):
+    size: int
+    front: OuterNode[T]
+    between: Seq[InnerNode[T]]
+    back: OuterNode[T]
+
+
+# ===== Heap =====
 
 
 @dataclass(frozen=True, eq=False)
@@ -64,6 +108,8 @@ class HeapNode[K: Comparable, V]:
 
 @dataclass(frozen=True, eq=False)
 class Heap[K: Comparable, V]:
+    """A Brodal-Okasaki persistent min-heap"""
+
     _unwrap: Seq[HeapNode[K, V]]
 
     @staticmethod
