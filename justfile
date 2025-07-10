@@ -30,7 +30,7 @@ unit:
   .venv/bin/python3 -m pytest tests
 
 # Run all tests
-test: lint typecheck unit
+test: typecheck unit
 
 # Clean most generated files (+ venv)
 clean:

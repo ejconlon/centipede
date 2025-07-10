@@ -173,8 +173,83 @@ class Seq[T]:
                 return None
             case SeqSingle(value):
                 return (Seq.empty(), value)
-            case SeqDeep(_, front, between, back):
-                raise Todo
+            case SeqDeep(size, front, between, back):
+                match back:
+                    case (a,):
+                        if between.null():
+                            match front:
+                                case (b,):
+                                    return (SeqSingle(b), a)
+                                case (b, c):
+                                    return (
+                                        SeqDeep(size - 1, (b,), Seq.empty(), (c,)),
+                                        a,
+                                    )
+                                case (b, c, d):
+                                    return (
+                                        SeqDeep(size - 1, (b,), Seq.empty(), (c, d)),
+                                        a,
+                                    )
+                                case (b, c, d, e):
+                                    return (
+                                        SeqDeep(size - 1, (b,), Seq.empty(), (c, d, e)),
+                                        a,
+                                    )
+                                case _:
+                                    raise Impossible
+                        else:
+                            between_unsnoc = between.unsnoc()
+                            if between_unsnoc is None:
+                                match front:
+                                    case (b,):
+                                        return (SeqSingle(b), a)
+                                    case (b, c):
+                                        return (
+                                            SeqDeep(size - 1, (b,), Seq.empty(), (c,)),
+                                            a,
+                                        )
+                                    case (b, c, d):
+                                        return (
+                                            SeqDeep(
+                                                size - 1, (b,), Seq.empty(), (c, d)
+                                            ),
+                                            a,
+                                        )
+                                    case (b, c, d, e):
+                                        return (
+                                            SeqDeep(
+                                                size - 1, (b,), Seq.empty(), (c, d, e)
+                                            ),
+                                            a,
+                                        )
+                                    case _:
+                                        raise Impossible
+                            else:
+                                between_init, inner_last = between_unsnoc
+                                if len(inner_last) == 3:
+                                    _, b, c = inner_last
+                                    return (
+                                        SeqDeep(size - 1, front, between_init, (b, c)),
+                                        a,
+                                    )
+                                elif len(inner_last) == 4:
+                                    _, b, c, d = inner_last
+                                    return (
+                                        SeqDeep(
+                                            size - 1, front, between_init, (b, c, d)
+                                        ),
+                                        a,
+                                    )
+                                else:
+                                    raise Impossible
+                    case (a, b):
+                        return (SeqDeep(size - 1, front, between, (a,)), b)
+                    case (a, b, c):
+                        return (SeqDeep(size - 1, front, between, (a, b)), c)
+                    case (a, b, c, d):
+                        return (SeqDeep(size - 1, front, between, (a, b, c)), d)
+                    case _:
+                        raise Impossible
             case _:
                 raise Impossible
 
@@ -182,10 +257,22 @@ class Seq[T]:
         match self:
             case SeqEmpty():
                 return SeqSingle(value)
-            case SeqSingle(value):
-                raise Todo
-            case SeqDeep(_, front, between, back):
-                raise Todo
+            case SeqSingle(existing_value):
+                return SeqDeep(2, (existing_value,), Seq.empty(), (value,))
+            case SeqDeep(size, front, between, back):
+                match back:
+                    case (a,):
+                        return SeqDeep(size + 1, front, between, (a, value))
+                    case (a, b):
+                        return SeqDeep(size + 1, front, between, (a, b, value))
+                    case (a, b, c):
+                        return SeqDeep(size + 1, front, between, (a, b, c, value))
+                    case (a, b, c, d):
+                        new_inner = (2, c, d)
+                        new_between = between.snoc(new_inner)
+                        return SeqDeep(size + 1, front, new_between, (a, b, value))
+                    case _:
+                        raise Impossible
             case _:
                 raise Impossible
 

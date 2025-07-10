@@ -1,3 +1,5 @@
+from typing import Optional, Tuple
+
 from centipede.heap import Seq
 
 
@@ -40,5 +42,42 @@ def test_cons_uncons():
     assert tail3.null()
 
     # Test empty seq returns None
-    empty_result = Seq.empty().uncons()
+    empty_result: Optional[Tuple[int, Seq[int]]] = Seq.empty().uncons()
+    assert empty_result is None
+
+
+def test_snoc_unsnoc():
+    """Test that unsnoc returns what was snoced"""
+    seq: Seq[int] = Seq.empty()
+
+    # Test with single element
+    seq_with_one = seq.snoc(42)
+    result = seq_with_one.unsnoc()
+    assert result is not None
+    init, last = result
+    assert last == 42
+    assert init.null()
+
+    # Test with multiple elements
+    seq_with_many = seq.snoc(1).snoc(2).snoc(3)
+    result = seq_with_many.unsnoc()
+    assert result is not None
+    init, last = result
+    assert last == 3
+
+    # Verify we can unsnoc the init
+    result2 = init.unsnoc()
+    assert result2 is not None
+    init2, last2 = result2
+    assert last2 == 2
+
+    # And the init of that
+    result3 = init2.unsnoc()
+    assert result3 is not None
+    init3, last3 = result3
+    assert last3 == 1
+    assert init3.null()
+
+    # Test empty seq returns None
+    empty_result: Optional[Tuple[Seq[int], int]] = Seq.empty().unsnoc()
     assert empty_result is None
