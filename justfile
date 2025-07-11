@@ -9,7 +9,7 @@ freeze:
 # Create the virtual environment
 venv:
   python3.13 -m venv --upgrade-deps .venv
-  .venv/bin/python3 -m pip install wheel -r dev-requirements.txt
+  .venv/bin/python3 -m pip install -r dev-requirements.txt
 
 # Format - sort with isort and format with ruff
 format:
