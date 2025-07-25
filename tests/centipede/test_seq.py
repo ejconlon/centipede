@@ -81,3 +81,58 @@ def test_snoc_unsnoc():
     # Test empty seq returns None
     empty_result: Optional[Tuple[Seq[int], int]] = Seq.empty().unsnoc()
     assert empty_result is None
+
+
+def test_cons_snoc_uncons_unsnoc_combination():
+    """Test combining cons, snoc, uncons, and unsnoc operations"""
+    seq: Seq[int] = Seq.empty()
+
+    # Build a sequence using both cons and snoc: [10, 5, 1, 2, 3, 20]
+    # Start with [1, 2, 3] using snoc
+    seq = seq.snoc(1).snoc(2).snoc(3)
+
+    # Add to front using cons: [5, 1, 2, 3]
+    seq = seq.cons(5)
+
+    # Add to front again: [10, 5, 1, 2, 3]
+    seq = seq.cons(10)
+
+    # Add to end using snoc: [10, 5, 1, 2, 3, 20]
+    seq = seq.snoc(20)
+
+    # Now test uncons - should get 10 and [5, 1, 2, 3, 20]
+    uncons_result = seq.uncons()
+    assert uncons_result is not None
+    head, tail = uncons_result
+    assert head == 10
+
+    # Test unsnoc on the tail - should get [5, 1, 2, 3] and 20
+    unsnoc_result = tail.unsnoc()
+    assert unsnoc_result is not None
+    init, last = unsnoc_result
+    assert last == 20
+
+    # Test uncons on the remaining sequence - should get 5 and [1, 2, 3]
+    uncons_result2 = init.uncons()
+    assert uncons_result2 is not None
+    head2, tail2 = uncons_result2
+    assert head2 == 5
+
+    # Test unsnoc on what remains - should get [1, 2] and 3
+    unsnoc_result2 = tail2.unsnoc()
+    assert unsnoc_result2 is not None
+    init2, last2 = unsnoc_result2
+    assert last2 == 3
+
+    # Verify the middle sequence [1, 2] by uncons
+    uncons_result3 = init2.uncons()
+    assert uncons_result3 is not None
+    head3, tail3 = uncons_result3
+    assert head3 == 1
+
+    # Final uncons should give us 2 and empty
+    uncons_result4 = tail3.uncons()
+    assert uncons_result4 is not None
+    head4, tail4 = uncons_result4
+    assert head4 == 2
+    assert tail4.null()
