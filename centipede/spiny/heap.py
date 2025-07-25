@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from centipede.spiny.common import Comparable, Impossible
 from centipede.spiny.seq import Seq
@@ -32,7 +32,7 @@ class Heap[K: Comparable, V]:
     def null(self) -> bool:
         return bool(self._unwrap)
 
-    def find_min(self) -> Optional[HeapNode[K, V]]:
+    def find_min(self) -> Optional[Tuple[K, V, Heap[K, V]]]:
         return _heap_find_min(self)
 
     def insert(self, key: K, value: V) -> Heap[K, V]:
@@ -109,21 +109,23 @@ def _heap_meld[K: Comparable, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[
             raise Impossible
 
 
-def _heap_find_min[K: Comparable, V](heap: Heap[K, V]) -> Optional[HeapNode[K, V]]:
+def _heap_find_min[K: Comparable, V](
+    heap: Heap[K, V],
+) -> Optional[Tuple[K, V, Heap[K, V]]]:
     match heap._unwrap.uncons():
         case None:
             return None
         case (head, tail):
             if tail.null():
-                return head
+                return (head.key, head.value, Heap.empty())
             else:
                 cand = _heap_find_min(Heap(tail))
-                if cand is None or head.key <= cand.key:
+                if cand is None or head.key <= cand[0]:
                     rest = _heap_meld(head.rest, Heap(tail))
-                    return HeapNode(head.key, head.value, 0, rest)
+                    return (head.key, head.value, rest)
                 else:
-                    rest = _heap_meld(Heap(tail), cand.rest)
-                    return HeapNode(cand.key, cand.value, 0, rest)
+                    rest = _heap_meld(Heap(tail), cand[2])
+                    return (cand[0], cand[1], rest)
         case _:
             raise Impossible
 
@@ -137,9 +139,9 @@ def _heap_delete_min[K: Comparable, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]
                 return Heap.empty()
             else:
                 cand = _heap_find_min(Heap(tail))
-                if cand is None or head.key <= cand.key:
+                if cand is None or head.key <= cand[0]:
                     return _heap_meld(head.rest, Heap(tail))
                 else:
-                    return _heap_meld(Heap(tail), cand.rest)
+                    return _heap_meld(Heap(tail), cand[2])
         case _:
             raise Impossible

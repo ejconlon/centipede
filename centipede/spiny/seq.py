@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Generator, List, Optional, Tuple, Union
 
-from centipede.spiny.common import Impossible, Todo
+from centipede.spiny.common import Impossible
 
 type OuterNode[T] = Union[Tuple[T], Tuple[T, T], Tuple[T, T, T], Tuple[T, T, T, T]]
 type InnerNode[T] = Union[Tuple[int, T, T], Tuple[int, T, T, T]]
@@ -43,7 +43,7 @@ class Seq[T]:
         return _seq_uncons(self)
 
     def cons(self, value: T) -> Seq[T]:
-        return _seq_cons(self, value)
+        return _seq_cons(value, self)
 
     def unsnoc(self) -> Optional[Tuple[Seq[T], T]]:
         return _seq_unsnoc(self)
@@ -163,7 +163,7 @@ def _seq_uncons[T](seq: Seq[T]) -> Optional[Tuple[T, Seq[T]]]:
             raise Impossible
 
 
-def _seq_cons[T](seq: Seq[T], value: T) -> Seq[T]:
+def _seq_cons[T](value: T, seq: Seq[T]) -> Seq[T]:
     match seq:
         case SeqEmpty():
             return SeqSingle(value)
@@ -179,7 +179,7 @@ def _seq_cons[T](seq: Seq[T], value: T) -> Seq[T]:
                     return SeqDeep(size + 1, (value, a, b, c), between, back)
                 case (a, b, c, d):
                     new_inner = (2, a, b)
-                    new_between = _seq_cons(between, new_inner)
+                    new_between = _seq_cons(new_inner, between)
                     return SeqDeep(size + 1, (value, c, d), new_between, back)
                 case _:
                     raise Impossible
@@ -301,9 +301,9 @@ def _seq_concat[T](seq: Seq[T], other: Seq[T]) -> Seq[T]:
                 case SeqEmpty():
                     return seq
                 case SeqSingle(other_value):
-                    raise Todo
+                    return SeqDeep(2, (value,), Seq.empty(), (other_value,))
                 case SeqDeep(_, _, _, _):
-                    raise Todo
+                    return _seq_cons(value, other)
                 case _:
                     raise Impossible
         case SeqDeep(_, _, _, _):
@@ -311,13 +311,72 @@ def _seq_concat[T](seq: Seq[T], other: Seq[T]) -> Seq[T]:
                 case SeqEmpty():
                     return seq
                 case SeqSingle(other_value):
-                    raise Todo
+                    return _seq_snoc(seq, other_value)
                 case SeqDeep(_, _, _, _):
-                    raise Todo
+                    return _seq_concat_deep(seq, other)
                 case _:
                     raise Impossible
         case _:
             raise Impossible
+
+
+def _seq_concat_deep[T](left: Seq[T], right: Seq[T]) -> Seq[T]:
+    match (left, right):
+        case (
+            SeqDeep(left_size, left_front, left_between, left_back),
+            SeqDeep(right_size, right_front, right_between, right_back),
+        ):
+            middle_nodes = _nodes_from_touching_ends(left_back, right_front)
+            new_between = _seq_concat_middle(left_between, middle_nodes, right_between)
+            return SeqDeep(left_size + right_size, left_front, new_between, right_back)
+        case _:
+            raise Impossible
+
+
+def _nodes_from_touching_ends[T](
+    left_back: OuterNode[T], right_front: OuterNode[T]
+) -> List[InnerNode[T]]:
+    combined = list(left_back)
+    combined.extend(right_front)
+    nodes: List[InnerNode[T]] = []
+
+    i = 0
+    while i < len(combined):
+        remaining = len(combined) - i
+        if remaining == 1:
+            if nodes and len(nodes[-1]) == 3:
+                prev_node = nodes.pop()
+                _, a, b = prev_node  # type: ignore
+                nodes.append((3, a, b, combined[i]))
+            else:
+                raise Impossible
+            i += 1
+        elif remaining == 2:
+            nodes.append((2, combined[i], combined[i + 1]))
+            i += 2
+        elif remaining == 3:
+            nodes.append((3, combined[i], combined[i + 1], combined[i + 2]))
+            i += 3
+        elif remaining == 4:
+            nodes.append((2, combined[i], combined[i + 1]))
+            nodes.append((2, combined[i + 2], combined[i + 3]))
+            i += 4
+        else:
+            nodes.append((3, combined[i], combined[i + 1], combined[i + 2]))
+            i += 3
+
+    return nodes
+
+
+def _seq_concat_middle[T](
+    left_between: Seq[InnerNode[T]],
+    middle_nodes: List[InnerNode[T]],
+    right_between: Seq[InnerNode[T]],
+) -> Seq[InnerNode[T]]:
+    result = left_between
+    for node in middle_nodes:
+        result = _seq_snoc(result, node)
+    return _seq_concat(result, right_between)
 
 
 def _seq_to_iter[T](seq: Seq[T]) -> Generator[T]:
@@ -328,7 +387,7 @@ def _seq_to_iter[T](seq: Seq[T]) -> Generator[T]:
             yield value
         case SeqDeep(_, front, between, back):
             yield from front
-            for inner_node in between.to_list():
+            for inner_node in _seq_to_iter(between):
                 if len(inner_node) == 3:
                     _, a, b = inner_node
                     yield a
