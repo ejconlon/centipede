@@ -55,9 +55,7 @@ class Seq[T]:
         return _seq_concat(self, other)
 
     def to_list(self) -> List[T]:
-        acc: List[T] = []
-        _seq_to_list(acc, self)
-        return acc
+        return _seq_to_list(self)
 
 
 @dataclass(frozen=True)
@@ -319,7 +317,13 @@ def _seq_concat[T](seq: Seq[T], other: Seq[T]) -> Seq[T]:
             raise Impossible
 
 
-def _seq_to_list[T](acc: List[T], seq: Seq[T]) -> None:
+def _seq_to_list[T](seq: Seq[T]) -> List[T]:
+    acc: List[T] = []
+    _seq_to_list_sub(acc, seq)
+    return acc
+
+
+def _seq_to_list_sub[T](acc: List[T], seq: Seq[T]) -> None:
     match seq:
         case SeqEmpty():
             pass
