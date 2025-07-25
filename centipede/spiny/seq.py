@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Generator, List, Optional, Tuple, Union
 
 from centipede.spiny.common import Impossible, Todo
 
@@ -54,8 +54,11 @@ class Seq[T]:
     def concat(self, other: Seq[T]) -> Seq[T]:
         return _seq_concat(self, other)
 
+    def to_iter(self) -> Generator[T]:
+        return _seq_to_iter(self)
+
     def to_list(self) -> List[T]:
-        return _seq_to_list(self)
+        return list(self.to_iter())
 
 
 @dataclass(frozen=True)
@@ -317,21 +320,24 @@ def _seq_concat[T](seq: Seq[T], other: Seq[T]) -> Seq[T]:
             raise Impossible
 
 
-def _seq_to_list[T](seq: Seq[T]) -> List[T]:
-    acc: List[T] = []
-    _seq_to_list_sub(acc, seq)
-    return acc
-
-
-def _seq_to_list_sub[T](acc: List[T], seq: Seq[T]) -> None:
+def _seq_to_iter[T](seq: Seq[T]) -> Generator[T]:
     match seq:
         case SeqEmpty():
             pass
         case SeqSingle(value):
-            acc.append(value)
+            yield value
         case SeqDeep(_, front, between, back):
-            acc.extend(front)
-            raise Todo
-            acc.extend(back)
+            yield from front
+            for inner_node in between.to_list():
+                if len(inner_node) == 3:
+                    _, a, b = inner_node
+                    yield a
+                    yield b
+                elif len(inner_node) == 4:
+                    _, a, b, c = inner_node
+                    yield a
+                    yield b
+                    yield c
+            yield from back
         case _:
             raise Impossible

@@ -51,8 +51,7 @@ def test_cons_uncons():
 
     # Test derived properties
     assert seq_with_many.size() == 3
-    # TODO fix
-    # assert seq_with_many.to_list() == [1, 2, 3]
+    assert seq_with_many.to_list() == [3, 2, 1]
 
     # Test empty seq returns None
     empty_result: Optional[Tuple[int, Seq[int]]] = Seq.empty().uncons()
@@ -97,8 +96,7 @@ def test_snoc_unsnoc():
 
     # Test derived properties
     assert seq_with_many.size() == 3
-    # TODO fix
-    # assert seq_with_many.to_list() == [3, 2, 1]
+    assert seq_with_many.to_list() == [1, 2, 3]
 
     # Test empty seq returns None
     empty_result: Optional[Tuple[Seq[int], int]] = Seq.empty().unsnoc()
