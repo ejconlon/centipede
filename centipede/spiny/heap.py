@@ -30,7 +30,7 @@ class Heap[K: Comparable, V]:
         return Heap(Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
 
     def null(self) -> bool:
-        return bool(self._unwrap)
+        return self._unwrap.null()
 
     def find_min(self) -> Optional[Tuple[K, V, Heap[K, V]]]:
         return _heap_find_min(self)
@@ -117,7 +117,7 @@ def _heap_find_min[K: Comparable, V](
             return None
         case (head, tail):
             if tail.null():
-                return (head.key, head.value, Heap.empty())
+                return (head.key, head.value, head.rest)
             else:
                 cand = _heap_find_min(Heap(tail))
                 if cand is None or head.key <= cand[0]:
@@ -136,7 +136,7 @@ def _heap_delete_min[K: Comparable, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]
             return None
         case (head, tail):
             if tail.null():
-                return Heap.empty()
+                return head.rest
             else:
                 cand = _heap_find_min(Heap(tail))
                 if cand is None or head.key <= cand[0]:
