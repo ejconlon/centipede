@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 from centipede.spiny.common import Impossible, Todo
 
@@ -28,6 +28,17 @@ class Seq[T]:
             case _:
                 return False
 
+    def size(self) -> int:
+        match self:
+            case SeqEmpty():
+                return 0
+            case SeqSingle(_):
+                return 1
+            case SeqDeep(size, _, _, _):
+                return size
+            case _:
+                raise Impossible
+
     def uncons(self) -> Optional[Tuple[T, Seq[T]]]:
         return _seq_uncons(self)
 
@@ -43,6 +54,11 @@ class Seq[T]:
     def concat(self, other: Seq[T]) -> Seq[T]:
         return _seq_concat(self, other)
 
+    def to_list(self) -> List[T]:
+        acc: List[T] = []
+        _seq_to_list(acc, self)
+        return acc
+
 
 @dataclass(frozen=True)
 class SeqEmpty[T](Seq[T]):
@@ -54,15 +70,15 @@ _SEQ_EMPTY: Seq[Any] = SeqEmpty()
 
 @dataclass(frozen=True)
 class SeqSingle[T](Seq[T]):
-    value: T
+    _value: T
 
 
 @dataclass(frozen=True)
 class SeqDeep[T](Seq[T]):
-    size: int
-    front: OuterNode[T]
-    between: Seq[InnerNode[T]]
-    back: OuterNode[T]
+    _size: int
+    _front: OuterNode[T]
+    _between: Seq[InnerNode[T]]
+    _back: OuterNode[T]
 
 
 def _seq_uncons[T](seq: Seq[T]) -> Optional[Tuple[T, Seq[T]]]:
@@ -162,7 +178,7 @@ def _seq_cons[T](seq: Seq[T], value: T) -> Seq[T]:
                     return SeqDeep(size + 1, (value, a, b, c), between, back)
                 case (a, b, c, d):
                     new_inner = (2, a, b)
-                    new_between = between.cons(new_inner)
+                    new_between = _seq_cons(between, new_inner)
                     return SeqDeep(size + 1, (value, c, d), new_between, back)
                 case _:
                     raise Impossible
@@ -186,7 +202,7 @@ def _seq_snoc[T](seq: Seq[T], value: T) -> Seq[T]:
                     return SeqDeep(size + 1, front, between, (a, b, c, value))
                 case (a, b, c, d):
                     new_inner = (2, c, d)
-                    new_between = between.snoc(new_inner)
+                    new_between = _seq_snoc(between, new_inner)
                     return SeqDeep(size + 1, front, new_between, (a, b, value))
                 case _:
                     raise Impossible
@@ -225,7 +241,7 @@ def _seq_unsnoc[T](seq: Seq[T]) -> Optional[Tuple[Seq[T], T]]:
                             case _:
                                 raise Impossible
                     else:
-                        between_unsnoc = between.unsnoc()
+                        between_unsnoc = _seq_unsnoc(between)
                         if between_unsnoc is None:
                             match front:
                                 case (b,):
@@ -299,5 +315,19 @@ def _seq_concat[T](seq: Seq[T], other: Seq[T]) -> Seq[T]:
                     raise Todo
                 case _:
                     raise Impossible
+        case _:
+            raise Impossible
+
+
+def _seq_to_list[T](acc: List[T], seq: Seq[T]) -> None:
+    match seq:
+        case SeqEmpty():
+            pass
+        case SeqSingle(value):
+            acc.append(value)
+        case SeqDeep(_, front, between, back):
+            acc.extend(front)
+            raise Todo
+            acc.extend(back)
         case _:
             raise Impossible
