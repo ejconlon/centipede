@@ -84,6 +84,12 @@ class Seq[T]:
     def __getitem__(self, ix: int) -> T:
         return self.get(ix)
 
+    def __rshift__(self, value: T) -> Seq[T]:
+        return self.snoc(value)
+
+    def __rlshift__(self, value: T) -> Seq[T]:
+        return self.cons(value)
+
     def __add__(self, other: Seq[T]) -> Seq[T]:
         return self.concat(other)
 
