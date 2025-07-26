@@ -277,18 +277,18 @@ def test_iter_single_element():
     assert items == [(5, "five")]
 
 
-# def test_iter_multiple_elements():
-#     """Test iter method returns elements in ascending order"""
-#     heap = Heap.empty(int, str)
-#     heap = heap.insert(5, "five")
-#     heap = heap.insert(2, "two")
-#     heap = heap.insert(8, "eight")
-#     heap = heap.insert(1, "one")
-#     heap = heap.insert(3, "three")
-#
-#     items = list(heap.iter())
-#     keys = [key for key, _ in items]
-#
-#     # Keys should be in ascending order
-#     assert keys == sorted(keys)
-#     assert keys[0] == 1  # First element should be minimum
+def test_iter_multiple_elements():
+    """Test iter method returns elements in ascending order"""
+    heap = Heap.empty(int, str)
+    heap = heap.insert(5, "five")
+    heap = heap.insert(2, "two")
+    heap = heap.insert(8, "eight")
+    heap = heap.insert(1, "one")
+    heap = heap.insert(3, "three")
+
+    items = list(heap.iter())
+    keys = [key for key, _ in items]
+
+    # Keys should be in ascending order
+    assert keys == sorted(keys)
+    assert keys[0] == 1  # First element should be minimum

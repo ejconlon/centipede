@@ -248,7 +248,7 @@ def _heap_find_min[K, V](
                     rest = _heap_meld(head.rest, Heap(tail))
                     return (head.key, head.value, rest)
                 else:
-                    rest = _heap_meld(Heap(tail), cand[2])
+                    rest = _heap_meld(head.rest, cand[2])
                     return (cand[0], cand[1], rest)
         case _:
             raise Impossible
