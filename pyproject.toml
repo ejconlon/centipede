@@ -1,5 +1,6 @@
 [project]
-name = "hello-world"
+name = "centipede"
+authors = [{name = "Eric Conlon"}]
 version = "0.1.0"
 description = "a python synth/tracker"
 readme = "README.md"
@@ -19,6 +20,7 @@ dev = [
     "ipython>=9.3.0",
     "isort>=6.0.1",
     "mypy>=1.16.1",
+    "pdoc>=15.0.4",
     "pytest>=8.4.1",
     "ruff>=0.12.1",
 ]

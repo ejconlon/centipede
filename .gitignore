@@ -3,6 +3,7 @@
 .ruff_cache
 .venv
 .claude
+docs
 __pycache__
 *.swo
 *.swp

@@ -43,3 +43,8 @@ repl:
 # Run the main entrypoint
 main ARGS="":
   .venv/bin/python3 -m centipede.main {{ARGS}}
+
+# Generate HTML documentation
+docs:
+  rm -rf docs
+  .venv/bin/python3 -m pdoc -o docs -d markdown --no-include-undocumented centipede
