@@ -1,9 +1,9 @@
-""" Persistent set implementation based on weight-balanced trees """
+"""Persistent set implementation based on weight-balanced trees"""
 
 from dataclasses import dataclass
 
 
-#sealed
+# sealed
 class Set[T]:
     pass
 

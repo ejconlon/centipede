@@ -6,11 +6,21 @@ the persistent data structures implementation.
 
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Generator
+from typing import Any, Generator, cast
 
-__all__ = ["Box", "Impossible", "Ordering", "Unit", "compare", "compare_lex"]
+__all__ = [
+    "Box",
+    "Comparable",
+    "Entry",
+    "Impossible",
+    "Ordering",
+    "Unit",
+    "compare",
+    "compare_lex",
+]
 
 
 class Impossible(Exception):
@@ -52,6 +62,41 @@ class Unit:
 
 
 _UNIT = Unit()
+
+
+class Comparable[T](metaclass=ABCMeta):
+    @abstractmethod
+    def compare(self, other: T) -> Ordering: ...
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, type(self)):
+            return self.compare(cast(T, other)) == Ordering.Eq
+        else:
+            return False
+
+    def __ne__(self, other: Any) -> bool:
+        return not self.__eq__(other)
+
+    def __lt__(self, other: T) -> bool:
+        return self.compare(other) == Ordering.Lt
+
+    def __le__(self, other: T) -> bool:
+        return not self.__gt__(other)
+
+    def __gt__(self, other: T) -> bool:
+        return self.compare(other) == Ordering.Gt
+
+    def __ge__(self, other: T) -> bool:
+        return not self.__lt__(other)
+
+
+@dataclass(frozen=True, eq=False)
+class Entry[K, V](Comparable["Entry[K, V]"]):
+    key: K
+    value: V
+
+    def compare(self, other: Entry[K, V]) -> Ordering:
+        return compare(self.key, other.key)
 
 
 class Ordering(Enum):
