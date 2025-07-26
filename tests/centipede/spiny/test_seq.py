@@ -1,11 +1,13 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
 
 from centipede.spiny.seq import Seq
+
+_EMPTY_INT_SEQ: Seq[int] = Seq.empty()
 
 
 def test_empty_seq():
     """Test creating an empty Seq and asserting it is empty"""
-    seq: Seq[int] = Seq.empty()
+    seq = _EMPTY_INT_SEQ
     assert seq.null()
 
     # Test derived properties
@@ -15,7 +17,7 @@ def test_empty_seq():
 
 def test_cons_uncons():
     """Test that uncons returns what was consed"""
-    seq: Seq[int] = Seq.empty()
+    seq = _EMPTY_INT_SEQ
 
     # Test with single element
     seq_with_one = seq.cons(42)
@@ -54,13 +56,13 @@ def test_cons_uncons():
     assert seq_with_many.to_list() == [3, 2, 1]
 
     # Test empty seq returns None
-    empty_result: Optional[Tuple[int, Seq[int]]] = Seq.empty().uncons()
+    empty_result: Optional[Tuple[int, Seq[int]]] = _EMPTY_INT_SEQ.uncons()
     assert empty_result is None
 
 
 def test_snoc_unsnoc():
     """Test that unsnoc returns what was snoced"""
-    seq: Seq[int] = Seq.empty()
+    seq: Seq[int] = _EMPTY_INT_SEQ
 
     # Test with single element
     seq_with_one = seq.snoc(42)
@@ -99,13 +101,13 @@ def test_snoc_unsnoc():
     assert seq_with_many.to_list() == [1, 2, 3]
 
     # Test empty seq returns None
-    empty_result: Optional[Tuple[Seq[int], int]] = Seq.empty().unsnoc()
+    empty_result: Optional[Tuple[Seq[int], int]] = _EMPTY_INT_SEQ.unsnoc()
     assert empty_result is None
 
 
 def test_concat():
     """Test concatenating sequences"""
-    empty: Seq[int] = Seq.empty()
+    empty: Seq[int] = _EMPTY_INT_SEQ
     single1 = Seq.singleton(1)
     single2 = Seq.singleton(2)
 
@@ -139,3 +141,102 @@ def test_concat():
     deep_seq2 = empty.snoc(6).snoc(7)
     result7 = deep_seq.concat(deep_seq2)
     assert result7.to_list() == [3, 4, 5, 6, 7]
+
+
+def test_lookup_empty():
+    """Test lookup on empty sequence"""
+    empty: Seq[int] = _EMPTY_INT_SEQ
+
+    # Any index should return None
+    assert empty.lookup(0) is None
+    assert empty.lookup(1) is None
+    assert empty.lookup(-1) is None
+
+
+def test_lookup_single():
+    """Test lookup on single element sequence"""
+    single = Seq.singleton(42)
+
+    # Index 0 should return the element
+    assert single.lookup(0) == 42
+
+    # Any other index should return None
+    assert single.lookup(1) is None
+    assert single.lookup(-1) is None
+    assert single.lookup(100) is None
+
+
+def test_lookup_multiple():
+    """Test lookup on sequences with multiple elements"""
+    # Test with cons operations
+    seq_cons = _EMPTY_INT_SEQ.cons(1).cons(2).cons(3)  # [3, 2, 1]
+    assert seq_cons.lookup(0) == 3
+    assert seq_cons.lookup(1) == 2
+    assert seq_cons.lookup(2) == 1
+    assert seq_cons.lookup(3) is None
+    assert seq_cons.lookup(-1) is None
+
+    # Test with snoc operations
+    seq_snoc: Seq[int] = _EMPTY_INT_SEQ.snoc(1).snoc(2).snoc(3)  # [1, 2, 3]
+    assert seq_snoc.lookup(0) == 1
+    assert seq_snoc.lookup(1) == 2
+    assert seq_snoc.lookup(2) == 3
+    assert seq_snoc.lookup(3) is None
+    assert seq_snoc.lookup(-1) is None
+
+
+def test_lookup_deep_sequence():
+    """Test lookup on deep sequences that trigger complex finger tree structure"""
+    # Create a larger sequence to test deep structure
+    seq: Seq[int] = _EMPTY_INT_SEQ
+    values = list(range(20))  # [0, 1, 2, ..., 19]
+
+    # Build sequence with snoc
+    for val in values:
+        seq = seq.snoc(val)
+
+    # Get the actual sequence order (finger tree may rebalance elements)
+    actual_list = seq.to_list()
+
+    # Test all valid indices against the actual list representation
+    for i, expected in enumerate(actual_list):
+        assert seq.lookup(i) == expected
+
+    # Test out of bounds
+    assert seq.lookup(len(actual_list)) is None
+    assert seq.lookup(100) is None
+    assert seq.lookup(-1) is None
+
+
+def test_lookup_mixed_operations():
+    """Test lookup on sequences built with mixed cons/snoc operations"""
+    seq: Seq[int] = _EMPTY_INT_SEQ.snoc(5).snoc(6).cons(4).cons(3)  # [3, 4, 5, 6]
+
+    assert seq.lookup(0) == 3
+    assert seq.lookup(1) == 4
+    assert seq.lookup(2) == 5
+    assert seq.lookup(3) == 6
+    assert seq.lookup(4) is None
+
+    # Verify against to_list for consistency
+    list_repr = seq.to_list()
+    for i in range(len(list_repr)):
+        assert seq.lookup(i) == list_repr[i]
+
+
+def test_lookup_after_concat():
+    """Test lookup on sequences after concatenation"""
+    seq1: Seq[int] = _EMPTY_INT_SEQ.snoc(1).snoc(2)  # [1, 2]
+    seq2: Seq[int] = _EMPTY_INT_SEQ.snoc(3).snoc(4)  # [3, 4]
+    concat_seq = seq1.concat(seq2)  # [1, 2, 3, 4]
+
+    assert concat_seq.lookup(0) == 1
+    assert concat_seq.lookup(1) == 2
+    assert concat_seq.lookup(2) == 3
+    assert concat_seq.lookup(3) == 4
+    assert concat_seq.lookup(4) is None
+
+    # Verify against to_list for consistency
+    list_repr = concat_seq.to_list()
+    for i in range(len(list_repr)):
+        assert concat_seq.lookup(i) == list_repr[i]

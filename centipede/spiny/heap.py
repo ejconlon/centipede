@@ -6,6 +6,8 @@ from typing import Any, Optional, Tuple
 from centipede.spiny.common import Comparable, Impossible
 from centipede.spiny.seq import Seq
 
+__all__ = ["Heap"]
+
 
 @dataclass(frozen=True, eq=False)
 class HeapNode[K: Comparable, V]:

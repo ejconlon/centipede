@@ -65,7 +65,7 @@ def test_insert_multiple():
     # Should find minimum element (1)
     result = heap.find_min()
     assert result is not None
-    key, value, rest = result
+    key, value, _ = result
     assert key == 1
     assert value == "one"
 
@@ -156,7 +156,7 @@ def test_delete_min_sequence():
         min_result = current_heap.find_min()
         if min_result is None:
             break
-        key, value, _ = min_result
+        key, _, _ = min_result
         extracted_keys.append(key)
 
         delete_result = current_heap.delete_min()
