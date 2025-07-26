@@ -10,7 +10,8 @@ from typing import Any, Callable, Generator, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 import plotext as plt
-from pyrsistent import PVector, pvector
+
+from centipede.spiny import Box, Seq
 
 
 def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
@@ -18,11 +19,6 @@ def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
         return fn(arg)
 
     return wrapper
-
-
-@dataclass
-class Box[Z]:
-    unwrap: Z
 
 
 type Time = Fraction
@@ -235,11 +231,11 @@ class Pat[T]:
 
     @staticmethod
     def seq(pats: Iterable[Pat[T]]) -> Pat[T]:
-        return Pat(PatSeq(pvector(pats)))
+        return Pat(PatSeq(Seq.mk(pats)))
 
     @staticmethod
     def par(pats: Iterable[Pat[T]]) -> Pat[T]:
-        return Pat(PatPar(pvector(pats)))
+        return Pat(PatPar(Seq.mk(pats)))
 
     def mask(self, arc: Arc) -> Pat[T]:
         if arc.null():
@@ -365,12 +361,12 @@ class PatClip[T, R](PatF[T, R]):
 
 @dataclass(frozen=True)
 class PatSeq[T, R](PatF[T, R]):
-    children: PVector[R]
+    children: Seq[R]
 
 
 @dataclass(frozen=True)
 class PatPar[T, R](PatF[T, R]):
-    children: PVector[R]
+    children: Seq[R]
 
 
 class PartialMatchException(Exception):
@@ -396,10 +392,10 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
                 cz = wrapper(env, c)
                 return fn(env, PatScale(f, cz))
             case PatSeq(cs):
-                czs = pvector(wrapper(env, c) for c in cs)
+                czs = Seq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatSeq(czs))
             case PatPar(cs):
-                czs = pvector(wrapper(env, c) for c in cs)
+                czs = Seq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatPar(czs))
             case _:
                 raise PartialMatchException(pf)
@@ -415,7 +411,7 @@ def pat_cata_state[S, T, Z](
     def unwrap(start: S, pat: Pat[T]) -> Tuple[S, Z]:
         box = Box(start)
         out = k(box, pat)
-        return (box.unwrap, out)
+        return (box.value, out)
 
     return unwrap
 
@@ -461,7 +457,7 @@ def pat_fold[T, Z](fn: Callable[[Box[Z], T], None]) -> Callable[[Z, Pat[T]], Z]:
     def wrapper(start: Z, pat: Pat[T]) -> Z:
         box = Box(start)
         k(box, pat)
-        return box.unwrap
+        return box.value
 
     return wrapper
 
