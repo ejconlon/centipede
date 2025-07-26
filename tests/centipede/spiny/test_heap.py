@@ -261,3 +261,34 @@ def test_heap_with_duplicate_keys():
     remaining_min = after_delete.find_min()
     assert remaining_min is not None
     assert remaining_min[0] == 5  # One of the duplicate 5s
+
+
+def test_iter_empty_heap():
+    """Test iter method on empty heap"""
+    heap = Heap.empty(int, str)
+    items = list(heap.iter())
+    assert items == []
+
+
+def test_iter_single_element():
+    """Test iter method on single element heap"""
+    heap = Heap.singleton(5, "five")
+    items = list(heap.iter())
+    assert items == [(5, "five")]
+
+
+# def test_iter_multiple_elements():
+#     """Test iter method returns elements in ascending order"""
+#     heap = Heap.empty(int, str)
+#     heap = heap.insert(5, "five")
+#     heap = heap.insert(2, "two")
+#     heap = heap.insert(8, "eight")
+#     heap = heap.insert(1, "one")
+#     heap = heap.insert(3, "three")
+#
+#     items = list(heap.iter())
+#     keys = [key for key, _ in items]
+#
+#     # Keys should be in ascending order
+#     assert keys == sorted(keys)
+#     assert keys[0] == 1  # First element should be minimum

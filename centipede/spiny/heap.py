@@ -8,7 +8,7 @@ persistence (immutability).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional, Tuple, Type
+from typing import Any, Generator, Iterable, List, Optional, Tuple, Type
 
 from centipede.spiny.common import Impossible, Ordering, compare
 from centipede.spiny.seq import Seq
@@ -137,6 +137,22 @@ class Heap[K, V]:
         """
         return _heap_delete_min(self)
 
+    def iter(self) -> Generator[Tuple[K, V]]:
+        """Iterate through the heap in ascending order.
+
+        Yields:
+            Tuples of (key, value) pairs in ascending order by key.
+        """
+        return _heap_iter(self)
+
+    def list(self) -> List[Tuple[K, V]]:
+        """Convert the heap to a list of key-value pairs in ascending order.
+
+        Returns:
+            A list of (key, value) tuples sorted in ascending order by key.
+        """
+        return list(self.iter())
+
     def __add__(self, other: Heap[K, V]) -> Heap[K, V]:
         """Merge heaps using the + operator.
 
@@ -149,21 +165,13 @@ class Heap[K, V]:
         return self.meld(other)
 
     def __bool__(self) -> bool:
-        """Check if the heap is non-empty for boolean contexts.
-
-        Returns:
-            True if the heap contains elements, False if empty.
-        """
         return not self.null()
 
-    # def __list__(self) -> List[T]:
-    #     return self.list()
-    #
-    # def __iter__(self) -> Generator[T]:
-    #     return self.iter()
-    #
-    # def __reversed__(self) -> Generator[T]:
-    #     return self.reversed()
+    def __iter__(self) -> Generator[Tuple[K, V]]:
+        return self.iter()
+
+    def __list__(self) -> List[Tuple[K, V]]:
+        return self.list()
 
 
 _HEAP_EMPTY: Heap[Any, Any] = Heap(Seq.empty())
@@ -261,3 +269,13 @@ def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
                     return _heap_meld(Heap(tail), cand[2])
         case _:
             raise Impossible
+
+
+def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, V]]:
+    while not heap.null():
+        min_result = heap.find_min()
+        if min_result is None:
+            break
+        key, value, remaining = min_result
+        yield (key, value)
+        heap = remaining
