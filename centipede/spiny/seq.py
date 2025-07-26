@@ -89,7 +89,7 @@ class Seq[T]:
         return compare_lex(self.iter(), other.iter())
 
     def __eq__(self, other: Any) -> bool:
-        if issubclass(other, Seq):
+        if isinstance(other, Seq):
             return self.compare(cast(Seq[T], other)) == Ordering.Eq
         else:
             return False
@@ -477,8 +477,117 @@ def _seq_get_between[T](between: Seq[InnerNode[T]], ix: int) -> T:
     raise Impossible
 
 
-def _seq_update[T](_seq: Seq[T], _ix: int, _value: T) -> Seq[T]:
-    raise Exception("TODO")
+def _seq_update[T](seq: Seq[T], ix: int, value: T) -> Seq[T]:
+    if ix < 0:
+        return seq
+    match seq:
+        case SeqEmpty():
+            return seq
+        case SeqSingle(_):
+            if ix == 0:
+                return SeqSingle(value)
+            else:
+                return seq
+        case SeqDeep(size, front, between, back):
+            if ix >= size:
+                return seq
+            front_size = len(front)
+            if ix < front_size:
+                new_front = _update_outer_node(front, ix, value)
+                return SeqDeep(size, new_front, between, back)
+            ix -= front_size
+            back_size = len(back)
+            between_total_size = size - front_size - back_size
+            if ix < between_total_size:
+                new_between = _seq_update_between(between, ix, value)
+                return SeqDeep(size, front, new_between, back)
+            ix -= between_total_size
+            if ix < back_size:
+                new_back = _update_outer_node(back, ix, value)
+                return SeqDeep(size, front, between, new_back)
+            return seq
+        case _:
+            raise Impossible
+
+
+def _update_outer_node[T](node: OuterNode[T], ix: int, value: T) -> OuterNode[T]:
+    match node:
+        case (a,):
+            if ix == 0:
+                return (value,)
+            else:
+                return node
+        case (a, b):
+            if ix == 0:
+                return (value, b)
+            elif ix == 1:
+                return (a, value)
+            else:
+                return node
+        case (a, b, c):
+            if ix == 0:
+                return (value, b, c)
+            elif ix == 1:
+                return (a, value, c)
+            elif ix == 2:
+                return (a, b, value)
+            else:
+                return node
+        case (a, b, c, d):
+            if ix == 0:
+                return (value, b, c, d)
+            elif ix == 1:
+                return (a, value, c, d)
+            elif ix == 2:
+                return (a, b, value, d)
+            elif ix == 3:
+                return (a, b, c, value)
+            else:
+                return node
+        case _:
+            raise Impossible
+
+
+def _update_inner_node[T](node: InnerNode[T], ix: int, value: T) -> InnerNode[T]:
+    match node:
+        case (a, b):
+            if ix == 0:
+                return (value, b)
+            elif ix == 1:
+                return (a, value)
+            else:
+                return node
+        case (a, b, c):
+            if ix == 0:
+                return (value, b, c)
+            elif ix == 1:
+                return (a, value, c)
+            elif ix == 2:
+                return (a, b, value)
+            else:
+                return node
+        case _:
+            raise Impossible
+
+
+def _seq_update_between[T](
+    between: Seq[InnerNode[T]], ix: int, value: T
+) -> Seq[InnerNode[T]]:
+    current_offset = 0
+    between_list = list(_seq_iter(between))
+
+    for i, inner_node in enumerate(between_list):
+        node_size = len(inner_node)
+        if ix < current_offset + node_size:
+            node_ix = ix - current_offset
+            if node_ix < len(inner_node):
+                new_inner_node = _update_inner_node(inner_node, node_ix, value)
+                new_between_list = between_list.copy()
+                new_between_list[i] = new_inner_node
+                return Seq.mk(new_between_list)
+        current_offset += node_size
+
+    return between
 
 
 def _seq_iter[T](seq: Seq[T]) -> Generator[T]:

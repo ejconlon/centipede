@@ -241,4 +241,185 @@ def test_lookup_after_concat():
 
 
 def test_mk():
+    """Test creating a sequence from an Iterable"""
     assert Seq.mk(range(10)).list() == list(range(10))
+
+
+def test_update_empty():
+    """Test updating an empty sequence"""
+    empty: Seq[int] = Seq.empty(int)
+
+    # Updating any index should return the same empty sequence
+    assert empty.update(0, 42) == empty
+    assert empty.update(1, 42) == empty
+    assert empty.update(-1, 42) == empty
+
+
+def test_update_single():
+    """Test updating a single element sequence"""
+    single = Seq.singleton(42)
+
+    # Valid update at index 0
+    updated = single.update(0, 100)
+    assert updated.lookup(0) == 100
+    assert updated.size() == 1
+    assert updated.list() == [100]
+
+    # Invalid indices should return unchanged sequence
+    assert single.update(1, 999) == single
+    assert single.update(-1, 999) == single
+    assert single.update(10, 999) == single
+
+
+def test_update_multiple():
+    """Test updating sequences with multiple elements"""
+    # Test with snoc operations: [1, 2, 3]
+    seq: Seq[int] = Seq.empty(int).snoc(1).snoc(2).snoc(3)
+
+    # Update each valid index
+    updated0 = seq.update(0, 10)
+    assert updated0.list() == [10, 2, 3]
+    assert updated0.size() == 3
+
+    updated1 = seq.update(1, 20)
+    assert updated1.list() == [1, 20, 3]
+    assert updated1.size() == 3
+
+    updated2 = seq.update(2, 30)
+    assert updated2.list() == [1, 2, 30]
+    assert updated2.size() == 3
+
+    # Invalid indices should return unchanged sequence
+    assert seq.update(3, 999) == seq
+    assert seq.update(-1, 999) == seq
+    assert seq.update(100, 999) == seq
+
+    # Original sequence should be unchanged (immutable)
+    assert seq.list() == [1, 2, 3]
+
+
+def test_update_cons_sequence():
+    """Test updating a sequence built with cons operations"""
+    # [3, 2, 1] from cons operations
+    seq = Seq.empty(int).cons(1).cons(2).cons(3)
+
+    # Update each valid index
+    updated0 = seq.update(0, 30)
+    assert updated0.list() == [30, 2, 1]
+
+    updated1 = seq.update(1, 20)
+    assert updated1.list() == [3, 20, 1]
+
+    updated2 = seq.update(2, 10)
+    assert updated2.list() == [3, 2, 10]
+
+    # Original sequence unchanged
+    assert seq.list() == [3, 2, 1]
+
+
+def test_update_deep_sequence():
+    """Test updating deep sequences that trigger complex finger tree structure"""
+    # Create a larger sequence to test deep structure
+    seq: Seq[int] = Seq.empty(int)
+    values = list(range(20))  # [0, 1, 2, ..., 19]
+
+    # Build sequence with snoc
+    for val in values:
+        seq = seq.snoc(val)
+
+    original_list = seq.list()
+
+    # Test updating various indices
+    for i in range(len(original_list)):
+        new_value = original_list[i] + 100
+        updated = seq.update(i, new_value)
+
+        # Check the updated value
+        assert updated.lookup(i) == new_value
+        assert updated.size() == seq.size()
+
+        # Check that other values are unchanged
+        updated_list = updated.list()
+        for j in range(len(updated_list)):
+            if j == i:
+                assert updated_list[j] == new_value
+            else:
+                assert updated_list[j] == original_list[j]
+
+    # Test out of bounds updates
+    assert seq.update(len(original_list), 999) == seq
+    assert seq.update(-1, 999) == seq
+
+    # Original sequence should be unchanged
+    assert seq.list() == original_list
+
+
+def test_update_mixed_operations():
+    """Test updating sequences built with mixed cons/snoc operations"""
+    # [3, 4, 5, 6] from mixed operations
+    seq: Seq[int] = Seq.empty(int).snoc(5).snoc(6).cons(4).cons(3)
+
+    # Update each position
+    updated0 = seq.update(0, 30)
+    assert updated0.list() == [30, 4, 5, 6]
+
+    updated1 = seq.update(1, 40)
+    assert updated1.list() == [3, 40, 5, 6]
+
+    updated2 = seq.update(2, 50)
+    assert updated2.list() == [3, 4, 50, 6]
+
+    updated3 = seq.update(3, 60)
+    assert updated3.list() == [3, 4, 5, 60]
+
+    # Original unchanged
+    assert seq.list() == [3, 4, 5, 6]
+
+
+def test_update_after_concat():
+    """Test updating sequences after concatenation"""
+    seq1: Seq[int] = Seq.empty(int).snoc(1).snoc(2)  # [1, 2]
+    seq2: Seq[int] = Seq.empty(int).snoc(3).snoc(4)  # [3, 4]
+    concat_seq = seq1.concat(seq2)  # [1, 2, 3, 4]
+
+    # Update each position in concatenated sequence
+    updated0 = concat_seq.update(0, 10)
+    assert updated0.list() == [10, 2, 3, 4]
+
+    updated1 = concat_seq.update(1, 20)
+    assert updated1.list() == [1, 20, 3, 4]
+
+    updated2 = concat_seq.update(2, 30)
+    assert updated2.list() == [1, 2, 30, 4]
+
+    updated3 = concat_seq.update(3, 40)
+    assert updated3.list() == [1, 2, 3, 40]
+
+    # Out of bounds
+    assert concat_seq.update(4, 999) == concat_seq
+
+    # Original sequences and concatenated sequence unchanged
+    assert seq1.list() == [1, 2]
+    assert seq2.list() == [3, 4]
+    assert concat_seq.list() == [1, 2, 3, 4]
+
+
+def test_update_persistence():
+    """Test that updates create new sequences without modifying originals"""
+    original: Seq[int] = Seq.empty(int).snoc(1).snoc(2).snoc(3)
+
+    # Multiple updates creating different sequences
+    updated1 = original.update(0, 100)
+    updated2 = original.update(1, 200)
+    updated3 = original.update(2, 300)
+
+    # All sequences should be different
+    assert original.list() == [1, 2, 3]
+    assert updated1.list() == [100, 2, 3]
+    assert updated2.list() == [1, 200, 3]
+    assert updated3.list() == [1, 2, 300]
+
+    # Chain updates
+    chained = original.update(0, 10).update(1, 20).update(2, 30)
+    assert chained.list() == [10, 20, 30]
+    assert original.list() == [1, 2, 3]  # Still unchanged
