@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, List, Optional, Tuple, Union
+from typing import Any, Generator, Iterable, List, Optional, Tuple, Union, cast
 
-from centipede.spiny.common import Impossible
+from centipede.spiny.common import Box, Impossible, Ordering, compare_lex
 
 __all__ = ["Seq"]
 
@@ -23,6 +23,13 @@ class Seq[T]:
     @staticmethod
     def singleton(value: T) -> Seq[T]:
         return SeqSingle(value)
+
+    @staticmethod
+    def mk(values: Iterable[T]) -> Seq[T]:
+        box: Box[Seq[T]] = Box(Seq.empty())
+        for value in values:
+            box.value = box.value.snoc(value)
+        return box.value
 
     def null(self) -> bool:
         match self:
@@ -78,6 +85,30 @@ class Seq[T]:
     def list(self) -> List[T]:
         return list(self.iter())
 
+    def compare(self, other: Seq[T]) -> Ordering:
+        return compare_lex(self.iter(), other.iter())
+
+    def __eq__(self, other: Any) -> bool:
+        if issubclass(other, Seq):
+            return self.compare(cast(Seq[T], other)) == Ordering.Eq
+        else:
+            return False
+
+    def __ne__(self, other: Any) -> bool:
+        return not self.__eq__(other)
+
+    def __lt__(self, other: Seq[T]) -> bool:
+        return self.compare(other) == Ordering.Lt
+
+    def __le__(self, other: Seq[T]) -> bool:
+        return not self.__gt__(other)
+
+    def __gt__(self, other: Seq[T]) -> bool:
+        return self.compare(other) == Ordering.Gt
+
+    def __ge__(self, other: Seq[T]) -> bool:
+        return not self.__lt__(other)
+
     def __len__(self) -> int:
         return self.size()
 
@@ -106,7 +137,7 @@ class Seq[T]:
         return self.reversed()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SeqEmpty[T](Seq[T]):
     pass
 
@@ -114,12 +145,12 @@ class SeqEmpty[T](Seq[T]):
 _SEQ_EMPTY: Seq[Any] = SeqEmpty()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SeqSingle[T](Seq[T]):
     _value: T
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SeqDeep[T](Seq[T]):
     _size: int
     _front: OuterNode[T]
@@ -237,9 +268,9 @@ def _seq_snoc[T](seq: Seq[T], value: T) -> Seq[T]:
                 case (a, b, c):
                     return SeqDeep(size + 1, front, between, (a, b, c, value))
                 case (a, b, c, d):
-                    new_inner = (c, d)
+                    new_inner = (a, b)
                     new_between = _seq_snoc(between, new_inner)
-                    return SeqDeep(size + 1, front, new_between, (a, b, value))
+                    return SeqDeep(size + 1, front, new_between, (c, d, value))
                 case _:
                     raise Impossible
         case _:

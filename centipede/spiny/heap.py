@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Iterable, Optional, Tuple
 
-from centipede.spiny.common import Comparable, Impossible
+from centipede.spiny.common import Impossible, Ordering, compare
 from centipede.spiny.seq import Seq
 
 __all__ = ["Heap"]
 
 
 @dataclass(frozen=True, eq=False)
-class HeapNode[K: Comparable, V]:
+class HeapNode[K, V]:
     key: K
     value: V
     rank: int
@@ -18,7 +18,7 @@ class HeapNode[K: Comparable, V]:
 
 
 @dataclass(frozen=True, eq=False)
-class Heap[K: Comparable, V]:
+class Heap[K, V]:
     """A Brodal-Okasaki persistent min-heap"""
 
     _unwrap: Seq[HeapNode[K, V]]
@@ -30,6 +30,13 @@ class Heap[K: Comparable, V]:
     @staticmethod
     def singleton(key: K, value: V) -> Heap[K, V]:
         return Heap(Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
+
+    @staticmethod
+    def mk(entries: Iterable[Tuple[K, V]]) -> Heap[K, V]:
+        heap: Heap[K, V] = Heap.empty()
+        for key, value in entries:
+            heap = heap.insert(key, value)
+        return heap
 
     def null(self) -> bool:
         return self._unwrap.null()
@@ -47,13 +54,26 @@ class Heap[K: Comparable, V]:
     def delete_min(self) -> Optional[Heap[K, V]]:
         return _heap_delete_min(self)
 
+    def __add__(self, other: Heap[K, V]) -> Heap[K, V]:
+        return self.meld(other)
+
+    def __bool__(self) -> bool:
+        return not self.null()
+
+    # def __list__(self) -> List[T]:
+    #     return self.list()
+    #
+    # def __iter__(self) -> Generator[T]:
+    #     return self.iter()
+    #
+    # def __reversed__(self) -> Generator[T]:
+    #     return self.reversed()
+
 
 _HEAP_EMPTY: Heap[Any, Any] = Heap(Seq.empty())
 
 
-def _heap_insert[K: Comparable, V](
-    cand: HeapNode[K, V], heap: Heap[K, V]
-) -> Heap[K, V]:
+def _heap_insert[K, V](cand: HeapNode[K, V], heap: Heap[K, V]) -> Heap[K, V]:
     match heap._unwrap.uncons():
         case None:
             return Heap(Seq.singleton(cand))
@@ -67,10 +87,8 @@ def _heap_insert[K: Comparable, V](
             raise Impossible
 
 
-def _heap_link[K: Comparable, V](
-    first: HeapNode[K, V], second: HeapNode[K, V]
-) -> HeapNode[K, V]:
-    if first.key <= second.key:
+def _heap_link[K, V](first: HeapNode[K, V], second: HeapNode[K, V]) -> HeapNode[K, V]:
+    if compare(second.key, first.key) == Ordering.Gt:
         return HeapNode(
             first.key,
             first.value,
@@ -86,7 +104,7 @@ def _heap_link[K: Comparable, V](
         )
 
 
-def _heap_meld[K: Comparable, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
+def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
     match first._unwrap.uncons():
         case None:
             return second
@@ -111,7 +129,7 @@ def _heap_meld[K: Comparable, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[
             raise Impossible
 
 
-def _heap_find_min[K: Comparable, V](
+def _heap_find_min[K, V](
     heap: Heap[K, V],
 ) -> Optional[Tuple[K, V, Heap[K, V]]]:
     match heap._unwrap.uncons():
@@ -122,7 +140,7 @@ def _heap_find_min[K: Comparable, V](
                 return (head.key, head.value, head.rest)
             else:
                 cand = _heap_find_min(Heap(tail))
-                if cand is None or head.key <= cand[0]:
+                if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
                     rest = _heap_meld(head.rest, Heap(tail))
                     return (head.key, head.value, rest)
                 else:
@@ -132,7 +150,7 @@ def _heap_find_min[K: Comparable, V](
             raise Impossible
 
 
-def _heap_delete_min[K: Comparable, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
+def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
     match heap._unwrap.uncons():
         case None:
             return None
@@ -141,7 +159,7 @@ def _heap_delete_min[K: Comparable, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]
                 return head.rest
             else:
                 cand = _heap_find_min(Heap(tail))
-                if cand is None or head.key <= cand[0]:
+                if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
                     return _heap_meld(head.rest, Heap(tail))
                 else:
                     return _heap_meld(Heap(tail), cand[2])

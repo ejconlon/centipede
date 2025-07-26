@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from enum import Enum
+from typing import Generator
 
-__all__ = ["Comparable", "Impossible", "Unit"]
+__all__ = ["Box", "Impossible", "Ordering", "Unit", "compare", "compare_lex"]
+
+
+class Impossible(Exception):
+    pass
+
+
+@dataclass
+class Box[T]:
+    value: T
 
 
 @dataclass(frozen=True)
@@ -17,19 +26,36 @@ class Unit:
 _UNIT = Unit()
 
 
-class Impossible(Exception):
-    pass
+class Ordering(Enum):
+    Lt = -1
+    Eq = 0
+    Gt = 1
 
 
-_T = TypeVar("_T", contravariant=True)
+def compare[T](a: T, b: T) -> Ordering:
+    # Unsafe eq/lt because generic protocols are half-baked
+    if getattr(a, "__eq__")(b):
+        return Ordering.Eq
+    elif getattr(a, "__lt__")(b):
+        return Ordering.Lt
+    else:
+        return Ordering.Gt
 
 
-class Comparable(Protocol[_T]):
-    @abstractmethod
-    def __lt__(self, other: _T) -> bool: ...
-    @abstractmethod
-    def __le__(self, other: _T) -> bool: ...
-    @abstractmethod
-    def __gt__(self, other: _T) -> bool: ...
-    @abstractmethod
-    def __ge__(self, other: _T) -> bool: ...
+def compare_lex[T](agen: Generator[T], bgen: Generator[T]) -> Ordering:
+    while True:
+        try:
+            a = next(agen)
+        except StopIteration:
+            try:
+                _ = next(bgen)
+                return Ordering.Lt
+            except StopIteration:
+                return Ordering.Eq
+        try:
+            b = next(bgen)
+            r = compare(a, b)
+            if r != Ordering.Eq:
+                return r
+        except StopIteration:
+            return Ordering.Gt

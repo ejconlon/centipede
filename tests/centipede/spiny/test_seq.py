@@ -240,3 +240,7 @@ def test_lookup_after_concat():
     list_repr = concat_seq.list()
     for i in range(len(list_repr)):
         assert concat_seq.lookup(i) == list_repr[i]
+
+
+def test_mk():
+    assert list(Seq.mk(range(10))) == list(range(10))
