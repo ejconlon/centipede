@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, cast
+from typing import Optional, Tuple
 
 from centipede.spiny.seq import Seq
 
@@ -12,7 +12,7 @@ def test_empty_seq():
 
     # Test derived properties
     assert seq.size() == 0
-    assert seq.to_list() == []
+    assert seq.list() == []
 
 
 def test_cons_uncons():
@@ -29,7 +29,7 @@ def test_cons_uncons():
 
     # Test derived properties
     assert seq_with_one.size() == 1
-    assert seq_with_one.to_list() == [42]
+    assert seq_with_one.list() == [42]
 
     # Test with multiple elements
     seq_with_many = seq.cons(1).cons(2).cons(3)
@@ -53,7 +53,7 @@ def test_cons_uncons():
 
     # Test derived properties
     assert seq_with_many.size() == 3
-    assert seq_with_many.to_list() == [3, 2, 1]
+    assert seq_with_many.list() == [3, 2, 1]
 
     # Test empty seq returns None
     empty_result: Optional[Tuple[int, Seq[int]]] = _EMPTY_INT_SEQ.uncons()
@@ -74,7 +74,7 @@ def test_snoc_unsnoc():
 
     # Test derived properties
     assert seq_with_one.size() == 1
-    assert seq_with_one.to_list() == [42]
+    assert seq_with_one.list() == [42]
 
     # Test with multiple elements
     seq_with_many = seq.snoc(1).snoc(2).snoc(3)
@@ -98,7 +98,7 @@ def test_snoc_unsnoc():
 
     # Test derived properties
     assert seq_with_many.size() == 3
-    assert seq_with_many.to_list() == [1, 2, 3]
+    assert seq_with_many.list() == [1, 2, 3]
 
     # Test empty seq returns None
     empty_result: Optional[Tuple[Seq[int], int]] = _EMPTY_INT_SEQ.unsnoc()
@@ -114,33 +114,33 @@ def test_concat():
     # Test empty + empty = empty
     result1 = empty.concat(empty)
     assert result1.null()
-    assert result1.to_list() == []
+    assert result1.list() == []
 
     # Test empty + single = single
     result2 = empty.concat(single1)
-    assert result2.to_list() == [1]
+    assert result2.list() == [1]
 
     # Test single + empty = single
     result3 = single1.concat(empty)
-    assert result3.to_list() == [1]
+    assert result3.list() == [1]
 
     # Test single + single = deep with 2 elements
     result4 = single1.concat(single2)
-    assert result4.to_list() == [1, 2]
+    assert result4.list() == [1, 2]
 
     # Test single + deep sequence
     deep_seq = empty.snoc(3).snoc(4).snoc(5)
     result5 = single1.concat(deep_seq)
-    assert result5.to_list() == [1, 3, 4, 5]
+    assert result5.list() == [1, 3, 4, 5]
 
     # Test deep + single
     result6 = deep_seq.concat(single2)
-    assert result6.to_list() == [3, 4, 5, 2]
+    assert result6.list() == [3, 4, 5, 2]
 
     # Test deep + deep
     deep_seq2 = empty.snoc(6).snoc(7)
     result7 = deep_seq.concat(deep_seq2)
-    assert result7.to_list() == [3, 4, 5, 6, 7]
+    assert result7.list() == [3, 4, 5, 6, 7]
 
 
 def test_lookup_empty():
@@ -196,7 +196,7 @@ def test_lookup_deep_sequence():
         seq = seq.snoc(val)
 
     # Get the actual sequence order (finger tree may rebalance elements)
-    actual_list = seq.to_list()
+    actual_list = seq.list()
 
     # Test all valid indices against the actual list representation
     for i, expected in enumerate(actual_list):
@@ -218,8 +218,8 @@ def test_lookup_mixed_operations():
     assert seq.lookup(3) == 6
     assert seq.lookup(4) is None
 
-    # Verify against to_list for consistency
-    list_repr = seq.to_list()
+    # Verify against list for consistency
+    list_repr = seq.list()
     for i in range(len(list_repr)):
         assert seq.lookup(i) == list_repr[i]
 
@@ -236,7 +236,7 @@ def test_lookup_after_concat():
     assert concat_seq.lookup(3) == 4
     assert concat_seq.lookup(4) is None
 
-    # Verify against to_list for consistency
-    list_repr = concat_seq.to_list()
+    # Verify against list for consistency
+    list_repr = concat_seq.list()
     for i in range(len(list_repr)):
         assert concat_seq.lookup(i) == list_repr[i]

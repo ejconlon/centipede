@@ -57,17 +57,47 @@ class Seq[T]:
     def concat(self, other: Seq[T]) -> Seq[T]:
         return _seq_concat(self, other)
 
-    def lookup(self, ix: int) -> Optional[T]:
-        return _seq_lookup(self, ix)
+    def get(self, ix: int) -> T:
+        return _seq_get(self, ix)
 
-    def update(self, ix: int, value: T) -> Optional[Seq[T]]:
+    def lookup(self, ix: int) -> Optional[T]:
+        try:
+            return _seq_get(self, ix)
+        except KeyError:
+            return None
+
+    def update(self, ix: int, value: T) -> Seq[T]:
         return _seq_update(self, ix, value)
 
-    def to_iter(self) -> Generator[T]:
-        return _seq_to_iter(self)
+    def iter(self) -> Generator[T]:
+        return _seq_iter(self)
 
-    def to_list(self) -> List[T]:
-        return list(self.to_iter())
+    def reversed(self) -> Generator[T]:
+        return _seq_reversed(self)
+
+    def list(self) -> List[T]:
+        return list(self.iter())
+
+    def __len__(self) -> int:
+        return self.size()
+
+    def __getitem__(self, ix: int) -> T:
+        return self.get(ix)
+
+    def __add__(self, other: Seq[T]) -> Seq[T]:
+        return self.concat(other)
+
+    def __bool__(self) -> bool:
+        return not self.null()
+
+    def __list__(self) -> List[T]:
+        return self.list()
+
+    def __iter__(self) -> Generator[T]:
+        return self.iter()
+
+    def __reversed__(self) -> Generator[T]:
+        return self.reversed()
 
 
 @dataclass(frozen=True)
@@ -368,17 +398,20 @@ def _seq_concat_middle[T](
     return _seq_concat(result, right_between)
 
 
-def _seq_lookup[T](seq: Seq[T], ix: int) -> Optional[T]:
+def _seq_get[T](seq: Seq[T], ix: int) -> T:
     if ix < 0:
-        return None
+        raise KeyError(ix)
     match seq:
         case SeqEmpty():
-            return None
+            raise KeyError(ix)
         case SeqSingle(value):
-            return value if ix == 0 else None
+            if ix == 0:
+                return value
+            else:
+                raise KeyError(ix)
         case SeqDeep(size, front, between, back):
             if ix >= size:
-                return None
+                raise KeyError(ix)
             front_size = len(front)
             if ix < front_size:
                 return front[ix]
@@ -386,32 +419,32 @@ def _seq_lookup[T](seq: Seq[T], ix: int) -> Optional[T]:
             back_size = len(back)
             between_total_size = size - front_size - back_size
             if ix < between_total_size:
-                return _seq_lookup_between(between, ix)
+                return _seq_get_between(between, ix)
             ix -= between_total_size
             if ix < back_size:
                 return back[ix]
-            return None
+            raise KeyError(ix)
         case _:
             raise Impossible
 
 
-def _seq_lookup_between[T](between: Seq[InnerNode[T]], ix: int) -> Optional[T]:
+def _seq_get_between[T](between: Seq[InnerNode[T]], ix: int) -> T:
     current_offset = 0
-    for inner_node in _seq_to_iter(between):
+    for inner_node in _seq_iter(between):
         node_size = len(inner_node)
         if ix < current_offset + node_size:
             node_ix = ix - current_offset
             if node_ix < len(inner_node):
                 return inner_node[node_ix]
         current_offset += node_size
-    return None
+    raise Impossible
 
 
-def _seq_update[T](_seq: Seq[T], _ix: int, _value: T) -> Optional[Seq[T]]:
+def _seq_update[T](_seq: Seq[T], _ix: int, _value: T) -> Seq[T]:
     raise Exception("TODO")
 
 
-def _seq_to_iter[T](seq: Seq[T]) -> Generator[T]:
+def _seq_iter[T](seq: Seq[T]) -> Generator[T]:
     match seq:
         case SeqEmpty():
             pass
@@ -419,8 +452,23 @@ def _seq_to_iter[T](seq: Seq[T]) -> Generator[T]:
             yield value
         case SeqDeep(_, front, between, back):
             yield from front
-            for inner_node in _seq_to_iter(between):
+            for inner_node in _seq_iter(between):
                 yield from inner_node
             yield from back
+        case _:
+            raise Impossible
+
+
+def _seq_reversed[T](seq: Seq[T]) -> Generator[T]:
+    match seq:
+        case SeqEmpty():
+            pass
+        case SeqSingle(value):
+            yield value
+        case SeqDeep(_, front, between, back):
+            yield from reversed(back)
+            for inner_node in _seq_reversed(between):
+                yield from reversed(inner_node)
+            yield from reversed(front)
         case _:
             raise Impossible
