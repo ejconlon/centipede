@@ -3,7 +3,7 @@ from centipede.spiny.heap import Heap
 
 def test_empty_heap():
     """Test creating an empty Heap and asserting it is empty"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     assert heap.null()
 
     # Test find_min returns None for empty heap
@@ -31,7 +31,7 @@ def test_singleton():
 
 def test_null_method():
     """Test the null() method on empty and non-empty heaps"""
-    empty_heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    empty_heap = Heap.empty(int, str)
     assert empty_heap.null()
 
     non_empty_heap = Heap.singleton(1, "one")
@@ -40,7 +40,7 @@ def test_null_method():
 
 def test_insert_single():
     """Test inserting a single element into an empty heap"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     heap_with_one = heap.insert(10, "ten")
 
     assert not heap_with_one.null()
@@ -55,7 +55,7 @@ def test_insert_single():
 
 def test_insert_multiple():
     """Test inserting multiple elements maintains min-heap property"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     heap = heap.insert(5, "five")
     heap = heap.insert(2, "two")
     heap = heap.insert(8, "eight")
@@ -72,7 +72,7 @@ def test_insert_multiple():
 
 def test_find_min_empty():
     """Test find_min on empty heap returns None"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     result = heap.find_min()
     assert result is None
 
@@ -90,7 +90,7 @@ def test_find_min_single():
 
 def test_find_min_multiple():
     """Test find_min returns minimum element with multiple elements"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     heap = heap.insert(10, "ten")
     heap = heap.insert(3, "three")
     heap = heap.insert(15, "fifteen")
@@ -105,7 +105,7 @@ def test_find_min_multiple():
 
 def test_delete_min_empty():
     """Test delete_min on empty heap returns None"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     result = heap.delete_min()
     assert result is None
 
@@ -120,7 +120,7 @@ def test_delete_min_single():
 
 def test_delete_min_multiple():
     """Test delete_min removes minimum element and maintains heap property"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     heap = heap.insert(5, "five")
     heap = heap.insert(2, "two")
     heap = heap.insert(8, "eight")
@@ -144,7 +144,7 @@ def test_delete_min_multiple():
 def test_delete_min_sequence():
     """Test deleting all elements in order maintains heap property"""
     # Use simpler test case that works with current heap implementation
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     heap = heap.insert(3, "three")
     heap = heap.insert(1, "one")
     heap = heap.insert(2, "two")
@@ -171,8 +171,8 @@ def test_delete_min_sequence():
 
 def test_meld_empty_heaps():
     """Test melding two empty heaps"""
-    heap1: Heap[int, str] = Heap.empty()  # pyright: ignore
-    heap2: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap1 = Heap.empty(int, str)
+    heap2 = Heap.empty(int, str)
 
     result = heap1.meld(heap2)
     assert result.null()
@@ -180,7 +180,7 @@ def test_meld_empty_heaps():
 
 def test_meld_empty_with_non_empty():
     """Test melding empty heap with non-empty heap"""
-    empty_heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    empty_heap = Heap.empty(int, str)
     non_empty_heap = Heap.singleton(5, "five").insert(3, "three")
 
     # Empty + non-empty = non-empty
@@ -198,11 +198,11 @@ def test_meld_empty_with_non_empty():
 
 def test_meld_non_empty_heaps():
     """Test melding two non-empty heaps"""
-    heap1: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap1 = Heap.empty(int, str)
     heap1 = heap1.insert(5, "five")
     heap1 = heap1.insert(2, "two")
 
-    heap2: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap2 = Heap.empty(int, str)
     heap2 = heap2.insert(3, "three")
     heap2 = heap2.insert(1, "one")
 
@@ -243,7 +243,7 @@ def test_meld_maintains_all_elements():
 
 def test_heap_with_duplicate_keys():
     """Test heap behavior with duplicate keys"""
-    heap: Heap[int, str] = Heap.empty()  # pyright: ignore
+    heap = Heap.empty(int, str)
     heap = heap.insert(5, "first_five")
     heap = heap.insert(5, "second_five")
     heap = heap.insert(1, "one")

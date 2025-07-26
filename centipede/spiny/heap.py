@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional, Tuple
+from typing import Any, Iterable, Optional, Tuple, Type
 
 from centipede.spiny.common import Impossible, Ordering, compare
 from centipede.spiny.seq import Seq
@@ -24,7 +24,9 @@ class Heap[K, V]:
     _unwrap: Seq[HeapNode[K, V]]
 
     @staticmethod
-    def empty() -> Heap[K, V]:
+    def empty(
+        _kty: Optional[Type[K]] = None, _vty: Optional[Type[V]] = None
+    ) -> Heap[K, V]:
         return _HEAP_EMPTY
 
     @staticmethod

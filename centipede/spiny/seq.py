@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, Generator, Iterable, List, Optional, Tuple, Type, Union, cast
 
 from centipede.spiny.common import Box, Impossible, Ordering, compare_lex
 
@@ -17,7 +17,7 @@ class Seq[T]:
     """A Hinze-Patterson finger tree as persistent catenable sequence"""
 
     @staticmethod
-    def empty() -> Seq[T]:
+    def empty(_ty: Optional[Type[T]] = None) -> Seq[T]:
         return _SEQ_EMPTY
 
     @staticmethod
@@ -400,7 +400,7 @@ def _nodes_from_touching_ends[T](
     while i < len(combined):
         remaining = len(combined) - i
         if remaining == 1:
-            if nodes and len(nodes[-1]) == 3:
+            if nodes and len(nodes[-1]) == 2:
                 prev_node = nodes.pop()
                 a, b = prev_node  # type: ignore
                 nodes.append((a, b, combined[i]))

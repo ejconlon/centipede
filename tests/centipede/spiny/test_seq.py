@@ -2,12 +2,10 @@ from typing import Optional, Tuple
 
 from centipede.spiny.seq import Seq
 
-_EMPTY_INT_SEQ: Seq[int] = Seq.empty()
-
 
 def test_empty_seq():
     """Test creating an empty Seq and asserting it is empty"""
-    seq = _EMPTY_INT_SEQ
+    seq = Seq.empty(int)
     assert seq.null()
 
     # Test derived properties
@@ -17,7 +15,7 @@ def test_empty_seq():
 
 def test_cons_uncons():
     """Test that uncons returns what was consed"""
-    seq = _EMPTY_INT_SEQ
+    seq = Seq.empty(int)
 
     # Test with single element
     seq_with_one = seq.cons(42)
@@ -56,13 +54,13 @@ def test_cons_uncons():
     assert seq_with_many.list() == [3, 2, 1]
 
     # Test empty seq returns None
-    empty_result: Optional[Tuple[int, Seq[int]]] = _EMPTY_INT_SEQ.uncons()
+    empty_result: Optional[Tuple[int, Seq[int]]] = Seq.empty(int).uncons()
     assert empty_result is None
 
 
 def test_snoc_unsnoc():
     """Test that unsnoc returns what was snoced"""
-    seq: Seq[int] = _EMPTY_INT_SEQ
+    seq: Seq[int] = Seq.empty(int)
 
     # Test with single element
     seq_with_one = seq.snoc(42)
@@ -101,13 +99,13 @@ def test_snoc_unsnoc():
     assert seq_with_many.list() == [1, 2, 3]
 
     # Test empty seq returns None
-    empty_result: Optional[Tuple[Seq[int], int]] = _EMPTY_INT_SEQ.unsnoc()
+    empty_result: Optional[Tuple[Seq[int], int]] = Seq.empty(int).unsnoc()
     assert empty_result is None
 
 
 def test_concat():
     """Test concatenating sequences"""
-    empty: Seq[int] = _EMPTY_INT_SEQ
+    empty: Seq[int] = Seq.empty(int)
     single1 = Seq.singleton(1)
     single2 = Seq.singleton(2)
 
@@ -145,7 +143,7 @@ def test_concat():
 
 def test_lookup_empty():
     """Test lookup on empty sequence"""
-    empty: Seq[int] = _EMPTY_INT_SEQ
+    empty: Seq[int] = Seq.empty(int)
 
     # Any index should return None
     assert empty.lookup(0) is None
@@ -169,7 +167,7 @@ def test_lookup_single():
 def test_lookup_multiple():
     """Test lookup on sequences with multiple elements"""
     # Test with cons operations
-    seq_cons = _EMPTY_INT_SEQ.cons(1).cons(2).cons(3)  # [3, 2, 1]
+    seq_cons = Seq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
     assert seq_cons.lookup(0) == 3
     assert seq_cons.lookup(1) == 2
     assert seq_cons.lookup(2) == 1
@@ -177,7 +175,7 @@ def test_lookup_multiple():
     assert seq_cons.lookup(-1) is None
 
     # Test with snoc operations
-    seq_snoc: Seq[int] = _EMPTY_INT_SEQ.snoc(1).snoc(2).snoc(3)  # [1, 2, 3]
+    seq_snoc: Seq[int] = Seq.empty(int).snoc(1).snoc(2).snoc(3)  # [1, 2, 3]
     assert seq_snoc.lookup(0) == 1
     assert seq_snoc.lookup(1) == 2
     assert seq_snoc.lookup(2) == 3
@@ -188,7 +186,7 @@ def test_lookup_multiple():
 def test_lookup_deep_sequence():
     """Test lookup on deep sequences that trigger complex finger tree structure"""
     # Create a larger sequence to test deep structure
-    seq: Seq[int] = _EMPTY_INT_SEQ
+    seq: Seq[int] = Seq.empty(int)
     values = list(range(20))  # [0, 1, 2, ..., 19]
 
     # Build sequence with snoc
@@ -210,7 +208,7 @@ def test_lookup_deep_sequence():
 
 def test_lookup_mixed_operations():
     """Test lookup on sequences built with mixed cons/snoc operations"""
-    seq: Seq[int] = _EMPTY_INT_SEQ.snoc(5).snoc(6).cons(4).cons(3)  # [3, 4, 5, 6]
+    seq: Seq[int] = Seq.empty(int).snoc(5).snoc(6).cons(4).cons(3)  # [3, 4, 5, 6]
 
     assert seq.lookup(0) == 3
     assert seq.lookup(1) == 4
@@ -226,8 +224,8 @@ def test_lookup_mixed_operations():
 
 def test_lookup_after_concat():
     """Test lookup on sequences after concatenation"""
-    seq1: Seq[int] = _EMPTY_INT_SEQ.snoc(1).snoc(2)  # [1, 2]
-    seq2: Seq[int] = _EMPTY_INT_SEQ.snoc(3).snoc(4)  # [3, 4]
+    seq1: Seq[int] = Seq.empty(int).snoc(1).snoc(2)  # [1, 2]
+    seq2: Seq[int] = Seq.empty(int).snoc(3).snoc(4)  # [3, 4]
     concat_seq = seq1.concat(seq2)  # [1, 2, 3, 4]
 
     assert concat_seq.lookup(0) == 1
@@ -243,4 +241,4 @@ def test_lookup_after_concat():
 
 
 def test_mk():
-    assert list(Seq.mk(range(10))) == list(range(10))
+    assert Seq.mk(range(10)).list() == list(range(10))
