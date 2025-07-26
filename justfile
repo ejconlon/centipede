@@ -47,4 +47,4 @@ main ARGS="":
 # Generate HTML documentation
 docs:
   rm -rf docs
-  .venv/bin/python3 -m pdoc -o docs -d markdown --no-include-undocumented centipede
+  .venv/bin/python3 -m pdoc -o docs -d markdown --include-undocumented centipede

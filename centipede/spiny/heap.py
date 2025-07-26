@@ -1,3 +1,10 @@
+"""Persistent min-heap implementation using Brodal-Okasaki binomial heaps.
+
+This module provides a functional min-heap data structure that supports
+efficient insertion, deletion, and melding operations while maintaining
+persistence (immutability).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +18,18 @@ __all__ = ["Heap"]
 
 @dataclass(frozen=True, eq=False)
 class HeapNode[K, V]:
+    """Internal node representation for the binomial heap.
+
+    Each node contains a key-value pair, a rank indicating the size of the
+    subtree, and a reference to child heaps.
+
+    Attributes:
+        key: The key used for heap ordering.
+        value: The value associated with the key.
+        rank: The rank (size) of this heap node.
+        rest: Child heap containing remaining elements.
+    """
+
     key: K
     value: V
     rank: int
@@ -27,39 +46,114 @@ class Heap[K, V]:
     def empty(
         _kty: Optional[Type[K]] = None, _vty: Optional[Type[V]] = None
     ) -> Heap[K, V]:
+        """Create an empty heap.
+
+        Args:
+            _kty: Optional type hint for keys (unused).
+            _vty: Optional type hint for values (unused).
+
+        Returns:
+            An empty heap instance.
+        """
         return _HEAP_EMPTY
 
     @staticmethod
     def singleton(key: K, value: V) -> Heap[K, V]:
+        """Create a heap containing a single key-value pair.
+
+        Args:
+            key: The key for the single element.
+            value: The value for the single element.
+
+        Returns:
+            A heap containing only the given key-value pair.
+        """
         return Heap(Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
 
     @staticmethod
     def mk(entries: Iterable[Tuple[K, V]]) -> Heap[K, V]:
+        """Create a heap from an iterable of key-value pairs.
+
+        Args:
+            entries: Iterable of (key, value) tuples to insert into the heap.
+
+        Returns:
+            A heap containing all the given entries.
+        """
         heap: Heap[K, V] = Heap.empty()
         for key, value in entries:
             heap = heap.insert(key, value)
         return heap
 
     def null(self) -> bool:
+        """Check if the heap is empty.
+
+        Returns:
+            True if the heap contains no elements, False otherwise.
+        """
         return self._unwrap.null()
 
     def find_min(self) -> Optional[Tuple[K, V, Heap[K, V]]]:
+        """Find the minimum element in the heap.
+
+        Returns:
+            None if the heap is empty, otherwise a tuple containing:
+            - The minimum key
+            - The corresponding value
+            - A new heap with the minimum element removed
+        """
         return _heap_find_min(self)
 
     def insert(self, key: K, value: V) -> Heap[K, V]:
+        """Insert a new key-value pair into the heap.
+
+        Args:
+            key: The key to insert.
+            value: The value associated with the key.
+
+        Returns:
+            A new heap containing the inserted element.
+        """
         cand = HeapNode(key, value, 0, Heap.empty())
         return _heap_insert(cand, self)
 
     def meld(self, other: Heap[K, V]) -> Heap[K, V]:
+        """Merge this heap with another heap.
+
+        Args:
+            other: The heap to merge with this one.
+
+        Returns:
+            A new heap containing all elements from both heaps.
+        """
         return _heap_meld(self, other)
 
     def delete_min(self) -> Optional[Heap[K, V]]:
+        """Remove the minimum element from the heap.
+
+        Returns:
+            None if the heap is empty, otherwise a new heap with the
+            minimum element removed.
+        """
         return _heap_delete_min(self)
 
     def __add__(self, other: Heap[K, V]) -> Heap[K, V]:
+        """Merge heaps using the + operator.
+
+        Args:
+            other: The heap to merge with this one.
+
+        Returns:
+            A new heap containing all elements from both heaps.
+        """
         return self.meld(other)
 
     def __bool__(self) -> bool:
+        """Check if the heap is non-empty for boolean contexts.
+
+        Returns:
+            True if the heap contains elements, False if empty.
+        """
         return not self.null()
 
     # def __list__(self) -> List[T]:

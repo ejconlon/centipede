@@ -1,3 +1,10 @@
+"""Persistent sequence implementation using Hinze-Patterson finger trees.
+
+This module provides a functional sequence data structure that supports
+efficient access to both ends, concatenation, splitting, and random access
+while maintaining persistence (immutability).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,7 +16,10 @@ __all__ = ["Seq"]
 
 
 type OuterNode[T] = Union[Tuple[T], Tuple[T, T], Tuple[T, T, T], Tuple[T, T, T, T]]
+"""Type alias for nodes at the outer edges of the finger tree (1-4 elements)."""
+
 type InnerNode[T] = Union[Tuple[T, T], Tuple[T, T, T]]
+"""Type alias for internal nodes in the finger tree (2-3 elements)."""
 
 
 # sealed
@@ -18,20 +28,49 @@ class Seq[T]:
 
     @staticmethod
     def empty(_ty: Optional[Type[T]] = None) -> Seq[T]:
+        """Create an empty sequence.
+
+        Args:
+            _ty: Optional type hint (unused).
+
+        Returns:
+            An empty sequence instance.
+        """
         return _SEQ_EMPTY
 
     @staticmethod
     def singleton(value: T) -> Seq[T]:
+        """Create a sequence containing a single element.
+
+        Args:
+            value: The single element for the sequence.
+
+        Returns:
+            A sequence containing only the given element.
+        """
         return SeqSingle(value)
 
     @staticmethod
     def mk(values: Iterable[T]) -> Seq[T]:
+        """Create a sequence from an iterable of values.
+
+        Args:
+            values: Iterable of values to include in the sequence.
+
+        Returns:
+            A sequence containing all the given values in order.
+        """
         box: Box[Seq[T]] = Box(Seq.empty())
         for value in values:
             box.value = box.value.snoc(value)
         return box.value
 
     def null(self) -> bool:
+        """Check if the sequence is empty.
+
+        Returns:
+            True if the sequence contains no elements, False otherwise.
+        """
         match self:
             case SeqEmpty():
                 return True
@@ -39,6 +78,11 @@ class Seq[T]:
                 return False
 
     def size(self) -> int:
+        """Get the number of elements in the sequence.
+
+        Returns:
+            The number of elements in the sequence.
+        """
         match self:
             case SeqEmpty():
                 return 0
@@ -50,42 +94,127 @@ class Seq[T]:
                 raise Impossible
 
     def uncons(self) -> Optional[Tuple[T, Seq[T]]]:
+        """Remove and return the first element and remaining sequence.
+
+        Returns:
+            None if sequence is empty, otherwise (first_element, rest_of_sequence).
+        """
         return _seq_uncons(self)
 
     def cons(self, value: T) -> Seq[T]:
+        """Add an element to the front of the sequence.
+
+        Args:
+            value: The element to add.
+
+        Returns:
+            A new sequence with the element prepended.
+        """
         return _seq_cons(value, self)
 
     def unsnoc(self) -> Optional[Tuple[Seq[T], T]]:
+        """Remove and return the last element and remaining sequence.
+
+        Returns:
+            None if sequence is empty, otherwise (rest_of_sequence, last_element).
+        """
         return _seq_unsnoc(self)
 
     def snoc(self, value: T) -> Seq[T]:
+        """Add an element to the end of the sequence.
+
+        Args:
+            value: The element to add.
+
+        Returns:
+            A new sequence with the element appended.
+        """
         return _seq_snoc(self, value)
 
     def concat(self, other: Seq[T]) -> Seq[T]:
+        """Concatenate this sequence with another sequence.
+
+        Args:
+            other: The sequence to concatenate with this one.
+
+        Returns:
+            A new sequence containing elements from both sequences.
+        """
         return _seq_concat(self, other)
 
     def get(self, ix: int) -> T:
+        """Get the element at the specified index.
+
+        Args:
+            ix: The index of the element to retrieve.
+
+        Returns:
+            The element at the given index.
+
+        Raises:
+            KeyError: If the index is out of bounds.
+        """
         return _seq_get(self, ix)
 
     def lookup(self, ix: int) -> Optional[T]:
+        """Get the element at the specified index, returning None if out of bounds.
+
+        Args:
+            ix: The index of the element to retrieve.
+
+        Returns:
+            The element at the given index, or None if index is out of bounds.
+        """
         try:
             return _seq_get(self, ix)
         except KeyError:
             return None
 
     def update(self, ix: int, value: T) -> Seq[T]:
+        """Return a new sequence with the element at the given index updated.
+
+        Args:
+            ix: The index of the element to update.
+            value: The new value for the element.
+
+        Returns:
+            A new sequence with the specified element updated.
+        """
         return _seq_update(self, ix, value)
 
     def iter(self) -> Generator[T]:
+        """Return a generator that yields elements in order.
+
+        Returns:
+            A generator yielding elements from first to last.
+        """
         return _seq_iter(self)
 
     def reversed(self) -> Generator[T]:
+        """Return a generator that yields elements in reverse order.
+
+        Returns:
+            A generator yielding elements from last to first.
+        """
         return _seq_reversed(self)
 
     def list(self) -> List[T]:
+        """Convert the sequence to a Python list.
+
+        Returns:
+            A list containing all elements in order.
+        """
         return list(self.iter())
 
     def compare(self, other: Seq[T]) -> Ordering:
+        """Compare this sequence with another lexicographically.
+
+        Args:
+            other: The sequence to compare with.
+
+        Returns:
+            Ordering indicating the relationship between the sequences.
+        """
         return compare_lex(self.iter(), other.iter())
 
     def __eq__(self, other: Any) -> bool:
@@ -116,12 +245,36 @@ class Seq[T]:
         return self.get(ix)
 
     def __rshift__(self, value: T) -> Seq[T]:
+        """Append element using >> operator.
+
+        Args:
+            value: The element to append.
+
+        Returns:
+            A new sequence with the element appended.
+        """
         return self.snoc(value)
 
     def __rlshift__(self, value: T) -> Seq[T]:
+        """Prepend element using << operator (right-to-left).
+
+        Args:
+            value: The element to prepend.
+
+        Returns:
+            A new sequence with the element prepended.
+        """
         return self.cons(value)
 
     def __add__(self, other: Seq[T]) -> Seq[T]:
+        """Concatenate sequences using + operator.
+
+        Args:
+            other: The sequence to concatenate with this one.
+
+        Returns:
+            A new sequence containing elements from both sequences.
+        """
         return self.concat(other)
 
     def __bool__(self) -> bool:
@@ -139,6 +292,11 @@ class Seq[T]:
 
 @dataclass(frozen=True, eq=False)
 class SeqEmpty[T](Seq[T]):
+    """Internal representation of an empty sequence.
+
+    This class represents the base case in the finger tree structure.
+    """
+
     pass
 
 
@@ -147,11 +305,29 @@ _SEQ_EMPTY: Seq[Any] = SeqEmpty()
 
 @dataclass(frozen=True, eq=False)
 class SeqSingle[T](Seq[T]):
+    """Internal representation of a single-element sequence.
+
+    Attributes:
+        _value: The single element contained in this sequence.
+    """
+
     _value: T
 
 
 @dataclass(frozen=True, eq=False)
 class SeqDeep[T](Seq[T]):
+    """Internal representation of a multi-element sequence using finger trees.
+
+    This represents the main structure with front and back digits and
+    a recursive sequence of internal nodes in between.
+
+    Attributes:
+        _size: Total number of elements in the sequence.
+        _front: Elements at the front (1-4 items).
+        _between: Recursive sequence of internal nodes.
+        _back: Elements at the back (1-4 items).
+    """
+
     _size: int
     _front: OuterNode[T]
     _between: Seq[InnerNode[T]]
