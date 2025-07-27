@@ -17,7 +17,8 @@ __all__ = [
     "LexComparable",
     "Impossible",
     "Ordering",
-    "SizedComparable",
+    "Iterating",
+    "Sized",
     "Unit",
     "compare",
     "compare_lex",
@@ -66,6 +67,34 @@ class Unit:
 _UNIT = Unit()
 
 
+class Sized(metaclass=ABCMeta):
+    @abstractmethod
+    def size(self) -> int: ...
+
+    def null(self) -> bool:
+        return self.size() == 0
+
+    def __bool__(self) -> bool:
+        return not self.null()
+
+    def __len__(self) -> int:
+        return self.size()
+
+
+class Iterating[U](metaclass=ABCMeta):
+    @abstractmethod
+    def iter(self) -> Generator[U]: ...
+
+    def list(self) -> List[U]:
+        return list(self.iter())
+
+    def __iter__(self) -> Generator[U]:
+        return self.iter()
+
+    def __list__(self) -> List[U]:
+        return self.list()
+
+
 class Comparable[T](metaclass=ABCMeta):
     @abstractmethod
     def compare(self, other: T) -> Ordering: ...
@@ -92,50 +121,14 @@ class Comparable[T](metaclass=ABCMeta):
         return not self.__lt__(other)
 
 
-class LexComparable[U, T](Comparable[T]):
-    @abstractmethod
-    def null(self) -> bool: ...
-
-    @abstractmethod
-    def iter(self) -> Generator[U]: ...
-
+class LexComparable[U, T](Iterating[U], Comparable[T]):
     @override
     def compare(self, other: T) -> Ordering:
         return compare_lex(self.iter(), getattr(other, "iter")())
 
-    def list(self) -> List[U]:
-        return list(self.iter())
-
-    def __bool__(self) -> bool:
-        return not self.null()
-
-    def __iter__(self) -> Generator[U]:
-        return self.iter()
-
-    def __list__(self) -> List[U]:
-        return self.list()
-
-
-class SizedComparable[U, T](LexComparable[U, T]):
-    @abstractmethod
-    def size(self) -> int: ...
-
-    @override
-    def null(self) -> bool:
-        return self.size() == 0
-
-    def __len__(self) -> int:
-        return self.size()
-
 
 class Ordering(Enum):
-    """Enumeration representing the result of a comparison operation.
-
-    Values correspond to standard comparison semantics:
-    - Lt: left operand is less than right operand
-    - Eq: operands are equal
-    - Gt: left operand is greater than right operand
-    """
+    """Enumeration representing the result of a comparison operation."""
 
     Lt = -1
     Eq = 0
@@ -146,7 +139,6 @@ def compare[T](a: T, b: T) -> Ordering:
     """Compare two values and return their ordering relationship.
 
     Uses the objects' __eq__ and __lt__ methods to determine the comparison result.
-    Note: Uses getattr for method access due to limitations in generic protocols.
 
     Args:
         a: First value to compare.

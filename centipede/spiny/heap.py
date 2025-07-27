@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
 
-from centipede.spiny.common import Impossible, Ordering, SizedComparable, compare
+from centipede.spiny.common import Impossible, Iterating, Ordering, Sized, compare
 from centipede.spiny.seq import Seq
 
 __all__ = ["Heap"]
@@ -39,10 +39,11 @@ class HeapNode[K, V]:
 
 
 @dataclass(frozen=True, eq=False)
-class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
+class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
     """A Brodal-Okasaki persistent min-heap"""
 
-    _unwrap: Seq[HeapNode[K, V]]
+    _size: int
+    _children: Seq[HeapNode[K, V]]
 
     @staticmethod
     def empty(
@@ -70,7 +71,7 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
         Returns:
             A heap containing only the given key-value pair.
         """
-        return Heap(Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
+        return Heap(1, Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
 
     @staticmethod
     def mk(entries: Iterable[Tuple[K, V]]) -> Heap[K, V]:
@@ -94,7 +95,7 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
         Returns:
             True if the heap contains no elements, False otherwise.
         """
-        return self._unwrap.null()
+        return self._children.null()
 
     def find_min(self) -> Optional[Tuple[K, V, Heap[K, V]]]:
         """Find the minimum element in the heap.
@@ -105,7 +106,11 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
             - The corresponding value
             - A new heap with the minimum element removed
         """
-        return _heap_find_min(self)
+        result = _heap_find_min(self)
+        if result is None:
+            return None
+        key, value, remaining = result
+        return (key, value, Heap(self._size - 1, remaining._children))
 
     def insert(self, key: K, value: V) -> Heap[K, V]:
         """Insert a new key-value pair into the heap.
@@ -118,7 +123,8 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
             A new heap containing the inserted element.
         """
         cand = HeapNode(key, value, 0, Heap.empty())
-        return _heap_insert(cand, self)
+        new_heap = _heap_insert(cand, self)
+        return Heap(self._size + 1, new_heap._children)
 
     def meld(self, other: Heap[K, V]) -> Heap[K, V]:
         """Merge this heap with another heap.
@@ -129,7 +135,8 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
         Returns:
             A new heap containing all elements from both heaps.
         """
-        return _heap_meld(self, other)
+        new_heap = _heap_meld(self, other)
+        return Heap(self._size + other._size, new_heap._children)
 
     def delete_min(self) -> Optional[Heap[K, V]]:
         """Remove the minimum element from the heap.
@@ -138,7 +145,10 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
             None if the heap is empty, otherwise a new heap with the
             minimum element removed.
         """
-        return _heap_delete_min(self)
+        result = _heap_delete_min(self)
+        if result is None:
+            return None
+        return Heap(self._size - 1, result._children)
 
     @override
     def size(self) -> int:
@@ -147,7 +157,7 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
         Returns:
             The total number of key-value pairs in the heap.
         """
-        return _heap_size(self)
+        return self._size
 
     @override
     def iter(self) -> Generator[Tuple[K, V]]:
@@ -170,68 +180,59 @@ class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
         return self.meld(other)
 
 
-_HEAP_EMPTY: Heap[Any, Any] = Heap(Seq.empty())
+_HEAP_EMPTY: Heap[Any, Any] = Heap(0, Seq.empty())
 
 
 def _heap_insert[K, V](cand: HeapNode[K, V], heap: Heap[K, V]) -> Heap[K, V]:
-    match heap._unwrap.uncons():
+    match heap._children.uncons():
         case None:
-            return Heap(Seq.singleton(cand))
+            return Heap(0, Seq.singleton(cand))
         case (head, tail):
             if cand.rank < head.rank:
-                return Heap(heap._unwrap.cons(cand))
+                return Heap(0, heap._children.cons(cand))
             else:
                 new_node = _heap_link(cand, head)
-                return _heap_insert(new_node, Heap(tail))
+                return _heap_insert(new_node, Heap(0, tail))
         case _:
             raise Impossible
 
 
 def _heap_link[K, V](first: HeapNode[K, V], second: HeapNode[K, V]) -> HeapNode[K, V]:
     match compare(first.key, second.key):
-        case Ordering.Lt:
-            return HeapNode(
-                first.key,
-                first.value,
-                first.rank + 1,
-                Heap(first.rest._unwrap.cons(second)),
-            )
-        case Ordering.Eq:
-            return HeapNode(
-                first.key,
-                first.value,
-                first.rank + 1,
-                Heap(first.rest._unwrap.cons(second)),
-            )
         case Ordering.Gt:
             return HeapNode(
                 second.key,
                 second.value,
                 second.rank + 1,
-                Heap(second.rest._unwrap.cons(first)),
+                Heap(0, second.rest._children.cons(first)),
             )
         case _:
-            raise Impossible
+            return HeapNode(
+                first.key,
+                first.value,
+                first.rank + 1,
+                Heap(0, first.rest._children.cons(second)),
+            )
 
 
 def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
-    match first._unwrap.uncons():
+    match first._children.uncons():
         case None:
             return second
         case (first_head, first_tail):
-            match second._unwrap.uncons():
+            match second._children.uncons():
                 case None:
                     return first
                 case (second_head, second_tail):
                     if first_head.rank < second_head.rank:
-                        tail = _heap_meld(Heap(first_tail), second)
-                        return Heap(tail._unwrap.cons(first_head))
+                        tail = _heap_meld(Heap(0, first_tail), second)
+                        return Heap(0, tail._children.cons(first_head))
                     elif second_head.rank < first_head.rank:
-                        tail = _heap_meld(first, Heap(second_tail))
-                        return Heap(tail._unwrap.cons(second_head))
+                        tail = _heap_meld(first, Heap(0, second_tail))
+                        return Heap(0, tail._children.cons(second_head))
                     else:
                         head = _heap_link(first_head, second_head)
-                        tail = _heap_meld(Heap(first_tail), Heap(second_tail))
+                        tail = _heap_meld(Heap(0, first_tail), Heap(0, second_tail))
                         return _heap_insert(head, tail)
                 case _:
                     raise Impossible
@@ -242,16 +243,16 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
 def _heap_find_min[K, V](
     heap: Heap[K, V],
 ) -> Optional[Tuple[K, V, Heap[K, V]]]:
-    match heap._unwrap.uncons():
+    match heap._children.uncons():
         case None:
             return None
         case (head, tail):
             if tail.null():
                 return (head.key, head.value, head.rest)
             else:
-                cand = _heap_find_min(Heap(tail))
+                cand = _heap_find_min(Heap(0, tail))
                 if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
-                    rest = _heap_meld(head.rest, Heap(tail))
+                    rest = _heap_meld(head.rest, Heap(0, tail))
                     return (head.key, head.value, rest)
                 else:
                     rest = _heap_meld(head.rest, cand[2])
@@ -261,32 +262,20 @@ def _heap_find_min[K, V](
 
 
 def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
-    match heap._unwrap.uncons():
+    match heap._children.uncons():
         case None:
             return None
         case (head, tail):
             if tail.null():
                 return head.rest
             else:
-                cand = _heap_find_min(Heap(tail))
+                cand = _heap_find_min(Heap(0, tail))
                 if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
-                    return _heap_meld(head.rest, Heap(tail))
+                    return _heap_meld(head.rest, Heap(0, tail))
                 else:
                     return _heap_meld(head.rest, cand[2])
         case _:
             raise Impossible
-
-
-def _heap_size[K, V](heap: Heap[K, V]) -> int:
-    """Calculate the total number of elements in the heap."""
-    if heap.null():
-        return 0
-
-    total = 0
-    for node in heap._unwrap.iter():
-        total += 1 + _heap_size(node.rest)
-
-    return total
 
 
 def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, V]]:
