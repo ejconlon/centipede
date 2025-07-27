@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, Optional, Type, override
+from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Box,
@@ -99,8 +99,56 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         """
         return _pset_insert(self, value)
 
-    def merge(self, _other: PSet[T]) -> PSet[T]:
-        raise Exception("TODO")
+    def merge(self, other: PSet[T]) -> PSet[T]:
+        """Merge this set with another set, returning a new set containing all elements.
+
+        Args:
+            other: The set to merge with this one.
+
+        Returns:
+            A new set containing elements from both sets.
+        """
+        return _pset_merge(self, other)
+
+    def find_min(self) -> Optional[Tuple[T, PSet[T]]]:
+        """Find the minimum element in the set.
+
+        Returns:
+            None if the set is empty, otherwise a tuple containing:
+            - The minimum element
+            - A new set with the minimum element removed
+        """
+        return _pset_find_min(self)
+
+    def delete_min(self) -> Optional[PSet[T]]:
+        """Remove the minimum element from the set.
+
+        Returns:
+            None if the set is empty, otherwise a new set with the
+            minimum element removed.
+        """
+        result = self.find_min()
+        return None if result is None else result[1]
+
+    def find_max(self) -> Optional[Tuple[T, PSet[T]]]:
+        """Find the maximum element in the set.
+
+        Returns:
+            None if the set is empty, otherwise a tuple containing:
+            - The maximum element
+            - A new set with the maximum element removed
+        """
+        return _pset_find_max(self)
+
+    def delete_max(self) -> Optional[PSet[T]]:
+        """Remove the maximum element from the set.
+
+        Returns:
+            None if the set is empty, otherwise a new set with the
+            maximum element removed.
+        """
+        result = self.find_max()
+        return None if result is None else result[1]
 
     def __rshift__(self, value: T) -> PSet[T]:
         """Insert element using >> operator (element on right).
@@ -168,6 +216,94 @@ def _pset_insert[T](pset: PSet[T], value: T) -> PSet[T]:
             else:
                 # Value already exists, return unchanged
                 return pset
+        case _:
+            raise Impossible
+
+
+def _pset_merge[T](left_set: PSet[T], right_set: PSet[T]) -> PSet[T]:
+    """Merge two sets efficiently using tree structure."""
+    match (left_set, right_set):
+        case (PSetEmpty(), _):
+            return right_set
+        case (_, PSetEmpty()):
+            return left_set
+        case (PSetBranch(_, left_left, left_value, left_right), _):
+            # Split right_set around left_value and merge recursively
+            smaller, larger = _pset_split(right_set, left_value)
+            merged_left = _pset_merge(left_left, smaller)
+            merged_right = _pset_merge(left_right, larger)
+            return _pset_balance(merged_left, left_value, merged_right)
+        case _:
+            raise Impossible
+
+
+def _pset_split[T](pset: PSet[T], pivot: T) -> tuple[PSet[T], PSet[T]]:
+    """Split a set into elements smaller and larger than the pivot.
+
+    Returns:
+        A tuple (smaller, larger) where smaller contains elements < pivot
+        and larger contains elements > pivot. The pivot itself is excluded.
+    """
+    match pset:
+        case PSetEmpty():
+            return (_PSET_EMPTY, _PSET_EMPTY)
+        case PSetBranch(_, left, value, right):
+            cmp = compare(pivot, value)
+            if cmp == Ordering.Lt:
+                # pivot < value, so value goes to larger side
+                left_smaller, left_larger = _pset_split(left, pivot)
+                larger = _pset_balance(left_larger, value, right)
+                return (left_smaller, larger)
+            elif cmp == Ordering.Gt:
+                # pivot > value, so value goes to smaller side
+                right_smaller, right_larger = _pset_split(right, pivot)
+                smaller = _pset_balance(left, value, right_smaller)
+                return (smaller, right_larger)
+            else:
+                # pivot == value, exclude the value
+                return (left, right)
+        case _:
+            raise Impossible
+
+
+def _pset_find_min[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
+    """Find the minimum element in the set and return it with the remaining set."""
+    match pset:
+        case PSetEmpty():
+            return None
+        case PSetBranch(_, left, value, right):
+            if left.null():
+                # This node contains the minimum value
+                return (value, right)
+            else:
+                # Minimum is in the left subtree
+                min_result = _pset_find_min(left)
+                if min_result is None:
+                    raise Impossible
+                min_value, new_left = min_result
+                new_tree = _pset_balance(new_left, value, right)
+                return (min_value, new_tree)
+        case _:
+            raise Impossible
+
+
+def _pset_find_max[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
+    """Find the maximum element in the set and return it with the remaining set."""
+    match pset:
+        case PSetEmpty():
+            return None
+        case PSetBranch(_, left, value, right):
+            if right.null():
+                # This node contains the maximum value
+                return (value, left)
+            else:
+                # Maximum is in the right subtree
+                max_result = _pset_find_max(right)
+                if max_result is None:
+                    raise Impossible
+                max_value, new_right = max_result
+                new_tree = _pset_balance(left, value, new_right)
+                return (max_value, new_tree)
         case _:
             raise Impossible
 
