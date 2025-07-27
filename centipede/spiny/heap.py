@@ -145,8 +145,8 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
             None if the heap is empty, otherwise a new heap with the
             minimum element removed.
         """
-        result = _heap_delete_min(self)
-        return result
+        result = self.find_min()
+        return None if result is None else result[2]
 
     @override
     def size(self) -> int:
@@ -285,27 +285,6 @@ def _heap_find_min[K, V](
                     head_as_heap = Heap(_calculate_node_size(head), Seq.singleton(head))
                     rest = _heap_meld(head_as_heap, cand[2])
                     return (cand[0], cand[1], rest)
-        case _:
-            raise Impossible
-
-
-def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
-    match heap._children.uncons():
-        case None:
-            return None
-        case (head, tail):
-            if tail.null():
-                return head.rest
-            else:
-                tail_size = heap._size - _calculate_node_size(head)
-                cand = _heap_find_min(Heap(tail_size, tail))
-                if cand is None or compare(head.key, cand[0]) != Ordering.Gt:
-                    # Choose head when it's smaller or equal (prefer head for ties)
-                    return _heap_meld(head.rest, Heap(tail_size, tail))
-                else:
-                    # Only choose candidate when head is strictly greater
-                    head_as_heap = Heap(_calculate_node_size(head), Seq.singleton(head))
-                    return _heap_meld(head_as_heap, cand[2])
         case _:
             raise Impossible
 
