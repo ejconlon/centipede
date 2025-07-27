@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generator, cast
+from typing import Any, Generator, List, cast, override
 
 __all__ = [
     "Box",
@@ -17,6 +17,7 @@ __all__ = [
     "Entry",
     "Impossible",
     "Ordering",
+    "Sequential",
     "Unit",
     "compare",
     "compare_lex",
@@ -88,6 +89,36 @@ class Comparable[T](metaclass=ABCMeta):
 
     def __ge__(self, other: T) -> bool:
         return not self.__lt__(other)
+
+
+class Sequential[U, T](Comparable[T]):
+    @abstractmethod
+    def size(self) -> int: ...
+
+    @abstractmethod
+    def iter(self) -> Generator[U]: ...
+
+    @override
+    def compare(self, other: T) -> Ordering:
+        return compare_lex(self.iter(), getattr(other, "iter")())
+
+    def null(self) -> bool:
+        return self.size() == 0
+
+    def list(self) -> List[U]:
+        return list(self.iter())
+
+    def __len__(self) -> int:
+        return self.size()
+
+    def __bool__(self) -> bool:
+        return not self.null()
+
+    def __iter__(self) -> Generator[U]:
+        return self.iter()
+
+    def __list__(self) -> List[U]:
+        return self.list()
 
 
 @dataclass(frozen=True, eq=False)

@@ -8,9 +8,19 @@ while maintaining persistence (immutability).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, List, Optional, Tuple, Type, Union, cast
+from typing import (
+    Any,
+    Generator,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    override,
+)
 
-from centipede.spiny.common import Box, Impossible, Ordering, compare_lex
+from centipede.spiny.common import Box, Impossible, Sequential
 
 __all__ = ["Seq"]
 
@@ -23,7 +33,7 @@ type InnerNode[T] = Union[Tuple[T, T], Tuple[T, T, T]]
 
 
 # sealed
-class Seq[T]:
+class Seq[T](Sequential[T, "Seq[T]"]):
     """A Hinze-Patterson finger tree as persistent catenable sequence"""
 
     @staticmethod
@@ -65,6 +75,7 @@ class Seq[T]:
             box.value = box.value.snoc(value)
         return box.value
 
+    @override
     def null(self) -> bool:
         """Check if the sequence is empty.
 
@@ -77,6 +88,7 @@ class Seq[T]:
             case _:
                 return False
 
+    @override
     def size(self) -> int:
         """Get the number of elements in the sequence.
 
@@ -182,6 +194,7 @@ class Seq[T]:
         """
         return _seq_update(self, ix, value)
 
+    @override
     def iter(self) -> Generator[T]:
         """Return a generator that yields elements in order.
 
@@ -197,49 +210,6 @@ class Seq[T]:
             A generator yielding elements from last to first.
         """
         return _seq_reversed(self)
-
-    def list(self) -> List[T]:
-        """Convert the sequence to a Python list.
-
-        Returns:
-            A list containing all elements in order.
-        """
-        return list(self.iter())
-
-    def compare(self, other: Seq[T]) -> Ordering:
-        """Compare this sequence with another lexicographically.
-
-        Args:
-            other: The sequence to compare with.
-
-        Returns:
-            Ordering indicating the relationship between the sequences.
-        """
-        return compare_lex(self.iter(), other.iter())
-
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Seq):
-            return self.compare(cast(Seq[T], other)) == Ordering.Eq
-        else:
-            return False
-
-    def __ne__(self, other: Any) -> bool:
-        return not self.__eq__(other)
-
-    def __lt__(self, other: Seq[T]) -> bool:
-        return self.compare(other) == Ordering.Lt
-
-    def __le__(self, other: Seq[T]) -> bool:
-        return not self.__gt__(other)
-
-    def __gt__(self, other: Seq[T]) -> bool:
-        return self.compare(other) == Ordering.Gt
-
-    def __ge__(self, other: Seq[T]) -> bool:
-        return not self.__lt__(other)
-
-    def __len__(self) -> int:
-        return self.size()
 
     def __getitem__(self, ix: int) -> T:
         return self.get(ix)
@@ -276,15 +246,6 @@ class Seq[T]:
             A new sequence containing elements from both sequences.
         """
         return self.concat(other)
-
-    def __bool__(self) -> bool:
-        return not self.null()
-
-    def __list__(self) -> List[T]:
-        return self.list()
-
-    def __iter__(self) -> Generator[T]:
-        return self.iter()
 
     def __reversed__(self) -> Generator[T]:
         return self.reversed()
