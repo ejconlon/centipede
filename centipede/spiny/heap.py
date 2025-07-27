@@ -13,13 +13,13 @@ from dataclasses import dataclass
 from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
 
 from centipede.spiny.common import Impossible, Iterating, Ordering, Sized, compare
-from centipede.spiny.seq import Seq
+from centipede.spiny.seq import PSeq
 
-__all__ = ["Heap"]
+__all__ = ["PHeap"]
 
 
 @dataclass(frozen=True, eq=False)
-class HeapNode[K, V]:
+class PHeapNode[K, V]:
     """Internal node representation for the binomial heap.
 
     Each node contains a key-values pair, a rank indicating the size of the
@@ -35,20 +35,20 @@ class HeapNode[K, V]:
     key: K
     value: V
     rank: int
-    rest: Heap[K, V]
+    rest: PHeap[K, V]
 
 
 @dataclass(frozen=True, eq=False)
-class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
+class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
     """A Brodal-Okasaki persistent min-heap"""
 
     _size: int
-    _children: Seq[HeapNode[K, V]]
+    _children: PSeq[PHeapNode[K, V]]
 
     @staticmethod
     def empty(
         _kty: Optional[Type[K]] = None, _vty: Optional[Type[V]] = None
-    ) -> Heap[K, V]:
+    ) -> PHeap[K, V]:
         """Create an empty heap.
 
         Args:
@@ -61,7 +61,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         return _HEAP_EMPTY
 
     @staticmethod
-    def singleton(key: K, value: V) -> Heap[K, V]:
+    def singleton(key: K, value: V) -> PHeap[K, V]:
         """Create a heap containing a single key-value pair.
 
         Args:
@@ -71,10 +71,10 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         Returns:
             A heap containing only the given key-value pair.
         """
-        return Heap(1, Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
+        return PHeap(1, PSeq.singleton(PHeapNode(key, value, 0, PHeap.empty())))
 
     @staticmethod
-    def mk(entries: Iterable[Tuple[K, V]]) -> Heap[K, V]:
+    def mk(entries: Iterable[Tuple[K, V]]) -> PHeap[K, V]:
         """Create a heap from an iterable of key-value pairs.
 
         Args:
@@ -83,7 +83,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         Returns:
             A heap containing all the given entries.
         """
-        heap: Heap[K, V] = Heap.empty()
+        heap: PHeap[K, V] = PHeap.empty()
         for key, value in entries:
             heap = heap.insert(key, value)
         return heap
@@ -97,7 +97,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         """
         return self._children.null()
 
-    def find_min(self) -> Optional[Tuple[K, V, Heap[K, V]]]:
+    def find_min(self) -> Optional[Tuple[K, V, PHeap[K, V]]]:
         """Find the minimum element in the heap.
 
         Returns:
@@ -112,7 +112,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         key, value, remaining = result
         return (key, value, remaining)
 
-    def insert(self, key: K, value: V) -> Heap[K, V]:
+    def insert(self, key: K, value: V) -> PHeap[K, V]:
         """Insert a new key-value pair into the heap.
 
         Args:
@@ -122,11 +122,11 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         Returns:
             A new heap containing the inserted element.
         """
-        cand = HeapNode(key, value, 0, Heap.empty())
+        cand = PHeapNode(key, value, 0, PHeap.empty())
         new_heap = _heap_insert(cand, self)
-        return Heap(self._size + 1, new_heap._children)
+        return PHeap(self._size + 1, new_heap._children)
 
-    def meld(self, other: Heap[K, V]) -> Heap[K, V]:
+    def meld(self, other: PHeap[K, V]) -> PHeap[K, V]:
         """Merge this heap with another heap.
 
         Args:
@@ -136,9 +136,9 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
             A new heap containing all elements from both heaps.
         """
         new_heap = _heap_meld(self, other)
-        return Heap(self._size + other._size, new_heap._children)
+        return PHeap(self._size + other._size, new_heap._children)
 
-    def delete_min(self) -> Optional[Heap[K, V]]:
+    def delete_min(self) -> Optional[PHeap[K, V]]:
         """Remove the minimum element from the heap.
 
         Returns:
@@ -166,7 +166,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         """
         return _heap_iter(self)
 
-    def __add__(self, other: Heap[K, V]) -> Heap[K, V]:
+    def __add__(self, other: PHeap[K, V]) -> PHeap[K, V]:
         """Merge heaps using the + operator.
 
         Args:
@@ -178,51 +178,53 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         return self.meld(other)
 
 
-_HEAP_EMPTY: Heap[Any, Any] = Heap(0, Seq.empty())
+_HEAP_EMPTY: PHeap[Any, Any] = PHeap(0, PSeq.empty())
 
 
-def _calculate_node_size[K, V](node: HeapNode[K, V]) -> int:
+def _calculate_node_size[K, V](node: PHeapNode[K, V]) -> int:
     """Calculate the size of a heap node (1 + size of its rest heap)."""
     return 1 + node.rest._size
 
 
-def _heap_insert[K, V](cand: HeapNode[K, V], heap: Heap[K, V]) -> Heap[K, V]:
+def _heap_insert[K, V](cand: PHeapNode[K, V], heap: PHeap[K, V]) -> PHeap[K, V]:
     cand_size = _calculate_node_size(cand)
     match heap._children.uncons():
         case None:
-            return Heap(cand_size, Seq.singleton(cand))
+            return PHeap(cand_size, PSeq.singleton(cand))
         case (head, tail):
             if cand.rank < head.rank:
-                return Heap(heap._size + cand_size, heap._children.cons(cand))
+                return PHeap(heap._size + cand_size, heap._children.cons(cand))
             else:
                 new_node = _heap_link(cand, head)
                 tail_size = heap._size - _calculate_node_size(head)
-                return _heap_insert(new_node, Heap(tail_size, tail))
+                return _heap_insert(new_node, PHeap(tail_size, tail))
         case _:
             raise Impossible
 
 
-def _heap_link[K, V](first: HeapNode[K, V], second: HeapNode[K, V]) -> HeapNode[K, V]:
+def _heap_link[K, V](
+    first: PHeapNode[K, V], second: PHeapNode[K, V]
+) -> PHeapNode[K, V]:
     match compare(first.key, second.key):
         case Ordering.Gt:
             new_rest_size = second.rest._size + _calculate_node_size(first)
-            return HeapNode(
+            return PHeapNode(
                 second.key,
                 second.value,
                 second.rank + 1,
-                Heap(new_rest_size, second.rest._children.cons(first)),
+                PHeap(new_rest_size, second.rest._children.cons(first)),
             )
         case _:
             new_rest_size = first.rest._size + _calculate_node_size(second)
-            return HeapNode(
+            return PHeapNode(
                 first.key,
                 first.value,
                 first.rank + 1,
-                Heap(new_rest_size, first.rest._children.cons(second)),
+                PHeap(new_rest_size, first.rest._children.cons(second)),
             )
 
 
-def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
+def _heap_meld[K, V](first: PHeap[K, V], second: PHeap[K, V]) -> PHeap[K, V]:
     match first._children.uncons():
         case None:
             return second
@@ -233,8 +235,8 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
                 case (second_head, second_tail):
                     if first_head.rank < second_head.rank:
                         first_tail_size = first._size - _calculate_node_size(first_head)
-                        tail = _heap_meld(Heap(first_tail_size, first_tail), second)
-                        return Heap(
+                        tail = _heap_meld(PHeap(first_tail_size, first_tail), second)
+                        return PHeap(
                             tail._size + _calculate_node_size(first_head),
                             tail._children.cons(first_head),
                         )
@@ -242,8 +244,8 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
                         second_tail_size = second._size - _calculate_node_size(
                             second_head
                         )
-                        tail = _heap_meld(first, Heap(second_tail_size, second_tail))
-                        return Heap(
+                        tail = _heap_meld(first, PHeap(second_tail_size, second_tail))
+                        return PHeap(
                             tail._size + _calculate_node_size(second_head),
                             tail._children.cons(second_head),
                         )
@@ -254,8 +256,8 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
                             second_head
                         )
                         tail = _heap_meld(
-                            Heap(first_tail_size, first_tail),
-                            Heap(second_tail_size, second_tail),
+                            PHeap(first_tail_size, first_tail),
+                            PHeap(second_tail_size, second_tail),
                         )
                         return _heap_insert(head, tail)
                 case _:
@@ -265,8 +267,8 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
 
 
 def _heap_find_min[K, V](
-    heap: Heap[K, V],
-) -> Optional[Tuple[K, V, Heap[K, V]]]:
+    heap: PHeap[K, V],
+) -> Optional[Tuple[K, V, PHeap[K, V]]]:
     match heap._children.uncons():
         case None:
             return None
@@ -275,21 +277,23 @@ def _heap_find_min[K, V](
                 return (head.key, head.value, head.rest)
             else:
                 tail_size = heap._size - _calculate_node_size(head)
-                cand = _heap_find_min(Heap(tail_size, tail))
+                cand = _heap_find_min(PHeap(tail_size, tail))
                 if cand is None or compare(head.key, cand[0]) != Ordering.Gt:
                     # Choose head when it's smaller or equal (prefer head for ties)
-                    rest = _heap_meld(head.rest, Heap(tail_size, tail))
+                    rest = _heap_meld(head.rest, PHeap(tail_size, tail))
                     return (head.key, head.value, rest)
                 else:
                     # Only choose candidate when head is strictly greater
-                    head_as_heap = Heap(_calculate_node_size(head), Seq.singleton(head))
+                    head_as_heap = PHeap(
+                        _calculate_node_size(head), PSeq.singleton(head)
+                    )
                     rest = _heap_meld(head_as_heap, cand[2])
                     return (cand[0], cand[1], rest)
         case _:
             raise Impossible
 
 
-def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, V]]:
+def _heap_iter[K, V](heap: PHeap[K, V]) -> Generator[Tuple[K, V]]:
     while not heap.null():
         min_result = heap.find_min()
         if min_result is None:

@@ -11,7 +11,7 @@ import numpy as np
 import numpy.typing as npt
 import plotext as plt
 
-from centipede.spiny import Box, Seq
+from centipede.spiny import Box, PSeq
 
 
 def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
@@ -201,11 +201,11 @@ class Ev[T]:
         return Ev(self.arc.clip(factor), self.val)
 
 
-# type EvHeap[T] = Heap[Arc, Ev[T]]
+# type EvHeap[T] = PHeap[Arc, Ev[T]]
 #
 #
 # def ev_heap_empty[T]() -> EvHeap[T]:
-#     return Heap.empty()
+#     return PHeap.empty()
 #
 #
 # def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
@@ -231,11 +231,11 @@ class Pat[T]:
 
     @staticmethod
     def seq(pats: Iterable[Pat[T]]) -> Pat[T]:
-        return Pat(PatSeq(Seq.mk(pats)))
+        return Pat(PatSeq(PSeq.mk(pats)))
 
     @staticmethod
     def par(pats: Iterable[Pat[T]]) -> Pat[T]:
-        return Pat(PatPar(Seq.mk(pats)))
+        return Pat(PatPar(PSeq.mk(pats)))
 
     def mask(self, arc: Arc) -> Pat[T]:
         if arc.null():
@@ -361,12 +361,12 @@ class PatClip[T, R](PatF[T, R]):
 
 @dataclass(frozen=True)
 class PatSeq[T, R](PatF[T, R]):
-    children: Seq[R]
+    children: PSeq[R]
 
 
 @dataclass(frozen=True)
 class PatPar[T, R](PatF[T, R]):
-    children: Seq[R]
+    children: PSeq[R]
 
 
 class PartialMatchException(Exception):
@@ -392,10 +392,10 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
                 cz = wrapper(env, c)
                 return fn(env, PatScale(f, cz))
             case PatSeq(cs):
-                czs = Seq.mk(wrapper(env, c) for c in cs)
+                czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatSeq(czs))
             case PatPar(cs):
-                czs = Seq.mk(wrapper(env, c) for c in cs)
+                czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatPar(czs))
             case _:
                 raise PartialMatchException(pf)

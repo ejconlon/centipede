@@ -1,25 +1,25 @@
-"""Property-based tests for Seq using Hypothesis."""
+"""Property-based tests for PSeq using Hypothesis."""
 
 from typing import List
 
 from hypothesis import given
 from hypothesis import strategies as st
 
-from centipede.spiny.seq import Seq
+from centipede.spiny.seq import PSeq
 from tests.centipede.spiny.hypo import configure_hypo
 
 configure_hypo()
 
 
 @st.composite
-def seq_strategy(draw, element_strategy=st.integers()) -> Seq[int]:
-    return Seq.mk(draw(st.lists(element_strategy, min_size=0, max_size=20)))
+def seq_strategy(draw, element_strategy=st.integers()) -> PSeq[int]:
+    return PSeq.mk(draw(st.lists(element_strategy, min_size=0, max_size=20)))
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=50))
 def test_seq_mk_equals_list(elements: List[int]):
-    """Creating a Seq from elements should preserve order and size."""
-    seq = Seq.mk(elements)
+    """Creating a PSeq from elements should preserve order and size."""
+    seq = PSeq.mk(elements)
     assert seq.list() == elements
     assert seq.size() == len(elements)
     assert seq.null() == (len(elements) == 0)
@@ -34,7 +34,7 @@ def test_cons_uncons_inverse(seq):
     result = new_seq.uncons()
 
     if seq.null():
-        assert result == (element, Seq.empty(int))
+        assert result == (element, PSeq.empty(int))
     else:
         assert result is not None
         head, tail = result
@@ -51,7 +51,7 @@ def test_snoc_unsnoc_inverse(seq):
     result = new_seq.unsnoc()
 
     if seq.null():
-        assert result == (Seq.empty(int), element)
+        assert result == (PSeq.empty(int), element)
     else:
         assert result is not None
         init, last = result
@@ -62,7 +62,7 @@ def test_snoc_unsnoc_inverse(seq):
 @given(seq_strategy(), seq_strategy())
 def test_concat_associative(seq1, seq2):
     """Concatenation should be associative: (a + b) + c == a + (b + c)."""
-    seq3 = Seq.mk([100, 200])
+    seq3 = PSeq.mk([100, 200])
 
     left_assoc = seq1.concat(seq2).concat(seq3)
     right_assoc = seq1.concat(seq2.concat(seq3))
@@ -73,7 +73,7 @@ def test_concat_associative(seq1, seq2):
 @given(seq_strategy())
 def test_concat_empty_identity(seq):
     """Concatenating with empty should be identity."""
-    empty = Seq.empty(int)
+    empty = PSeq.empty(int)
 
     assert seq.concat(empty).list() == seq.list()
     assert empty.concat(seq).list() == seq.list()
@@ -145,7 +145,7 @@ def test_reversed_iter_consistency(seq):
 @given(st.lists(st.integers(), min_size=1))
 def test_size_matches_operations(elements: List[int]):
     """Size should correctly track through various operations."""
-    seq = Seq.empty(int)
+    seq = PSeq.empty(int)
     expected_size = 0
 
     for elem in elements:
@@ -173,7 +173,7 @@ def test_concat_size_additive(seq1, seq2):
 @given(st.lists(st.integers(), min_size=0, max_size=20))
 def test_cons_snoc_operations_preserve_elements(elements: List[int]):
     """Mixed cons and snoc operations should preserve all elements."""
-    seq = Seq.empty(int)
+    seq = PSeq.empty(int)
     all_elements = []
 
     for i, elem in enumerate(elements):
@@ -225,8 +225,8 @@ def test_multiple_unsnoc_exhaustion(seq):
 @given(st.lists(st.integers(), min_size=0, max_size=10))
 def test_operators_consistency(elements: List[int]):
     """>> and << operators should match snoc and cons methods."""
-    seq1 = Seq.mk(elements)
-    seq2 = Seq.mk(elements)
+    seq1 = PSeq.mk(elements)
+    seq2 = PSeq.mk(elements)
 
     test_elem = 999
 
@@ -254,7 +254,7 @@ def test_addition_operator_concat(seq1, seq2):
 @given(st.integers())
 def test_singleton_properties(value: int):
     """Singleton sequence should have expected properties."""
-    seq = Seq.singleton(value)
+    seq = PSeq.singleton(value)
 
     assert not seq.null()
     assert seq.size() == 1

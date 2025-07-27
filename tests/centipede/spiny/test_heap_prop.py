@@ -1,11 +1,11 @@
-"""Property-based tests for Heap using Hypothesis."""
+"""Property-based tests for PHeap using Hypothesis."""
 
 from typing import List, Tuple
 
 from hypothesis import given
 from hypothesis import strategies as st
 
-from centipede.spiny.heap import Heap
+from centipede.spiny.heap import PHeap
 from tests.centipede.spiny.hypo import configure_hypo
 
 configure_hypo()
@@ -13,28 +13,28 @@ configure_hypo()
 
 @st.composite
 def heap_strategy(draw, key_strategy=st.integers(), value_strategy=st.text()):
-    """Generate a Heap with random key-value pairs."""
+    """Generate a PHeap with random key-value pairs."""
     entries = draw(
         st.lists(st.tuples(key_strategy, value_strategy), min_size=0, max_size=20)
     )
-    return Heap.mk(entries)
+    return PHeap.mk(entries)
 
 
 @st.composite
 def heap_with_entries_strategy(
     draw, key_strategy=st.integers(), value_strategy=st.text()
 ):
-    """Generate a Heap along with the entries used to create it."""
+    """Generate a PHeap along with the entries used to create it."""
     entries = draw(
         st.lists(st.tuples(key_strategy, value_strategy), min_size=0, max_size=20)
     )
-    return Heap.mk(entries), entries
+    return PHeap.mk(entries), entries
 
 
 @given(st.lists(st.tuples(st.integers(), st.text()), min_size=0, max_size=50))
 def test_heap_mk_size_consistency(entries: List[Tuple[int, str]]):
-    """Creating a Heap from entries should have correct size."""
-    heap = Heap.mk(entries)
+    """Creating a PHeap from entries should have correct size."""
+    heap = PHeap.mk(entries)
     assert heap.size() == len(entries)
     assert heap.null() == (len(entries) == 0)
 
@@ -158,7 +158,7 @@ def test_meld_size_additive(heap1, heap2):
 @given(heap_strategy())
 def test_meld_empty_identity(heap1):
     """Melding with empty heap should be identity."""
-    empty = Heap.empty(int, str)
+    empty = PHeap.empty(int, str)
 
     assert heap1.meld(empty).size() == heap1.size()
     assert empty.meld(heap1).size() == heap1.size()
@@ -192,7 +192,7 @@ def test_meld_preserves_min_heap_property(heap1, heap2):
 @given(heap_strategy(), heap_strategy())
 def test_meld_associative(heap1, heap2):
     """Meld should be associative: (a + b) + c == a + (b + c)."""
-    heap3 = Heap.mk([(100, "hundred"), (200, "two_hundred")])
+    heap3 = PHeap.mk([(100, "hundred"), (200, "two_hundred")])
 
     left_assoc = heap1.meld(heap2).meld(heap3)
     right_assoc = heap1.meld(heap2.meld(heap3))
@@ -255,7 +255,7 @@ def test_iter_contains_all_inserted_elements(heap_and_entries):
 @given(st.integers(), st.text())
 def test_singleton_properties(key, value):
     """Singleton heap should have expected properties."""
-    heap = Heap.singleton(key, value)
+    heap = PHeap.singleton(key, value)
 
     assert not heap.null()
     assert heap.size() == 1
@@ -323,7 +323,7 @@ def test_heap_immutability(heap):
 
     # Perform various operations
     heap.insert(999, "test")
-    heap.meld(Heap.singleton(1000, "another"))
+    heap.meld(PHeap.singleton(1000, "another"))
     heap.delete_min()
     heap.find_min()
     list(heap.iter())
@@ -356,7 +356,7 @@ def test_addition_operator_equals_meld(heap1, heap2):
 @given(st.lists(st.tuples(st.integers(), st.text()), min_size=1, max_size=10))
 def test_heap_sort_property(entries: List[Tuple[int, str]]):
     """Using heap as priority queue should sort elements by key."""
-    heap = Heap.mk(entries)
+    heap = PHeap.mk(entries)
 
     sorted_by_heap = list(heap.iter())
 
@@ -389,7 +389,7 @@ def test_find_min_idempotent(heap):
 
 @given(heap_with_entries_strategy())
 def test_size_matches_entry_count(heap_and_entries):
-    """Heap size should match the number of entries inserted."""
+    """PHeap size should match the number of entries inserted."""
     heap, entries = heap_and_entries
     assert heap.size() == len(entries)
 
@@ -397,7 +397,7 @@ def test_size_matches_entry_count(heap_and_entries):
 @given(st.lists(st.tuples(st.integers(), st.text()), min_size=0, max_size=15))
 def test_sequential_operations_maintain_invariants(entries: List[Tuple[int, str]]):
     """Sequential insert/delete operations should maintain heap invariants."""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
 
     # Insert all entries
     for key, value in entries:

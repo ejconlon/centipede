@@ -1,11 +1,11 @@
 from typing import Optional, Tuple
 
-from centipede.spiny.seq import Seq
+from centipede.spiny.seq import PSeq
 
 
 def test_empty_seq():
-    """Test creating an empty Seq and asserting it is empty"""
-    seq = Seq.empty(int)
+    """Test creating an empty PSeq and asserting it is empty"""
+    seq = PSeq.empty(int)
     assert seq.null()
 
     # Test derived properties
@@ -15,7 +15,7 @@ def test_empty_seq():
 
 def test_cons_uncons():
     """Test that uncons returns what was consed"""
-    seq = Seq.empty(int)
+    seq = PSeq.empty(int)
 
     # Test with single element
     seq_with_one = seq.cons(42)
@@ -54,13 +54,13 @@ def test_cons_uncons():
     assert seq_with_many.list() == [3, 2, 1]
 
     # Test empty seq returns None
-    empty_result: Optional[Tuple[int, Seq[int]]] = Seq.empty(int).uncons()
+    empty_result: Optional[Tuple[int, PSeq[int]]] = PSeq.empty(int).uncons()
     assert empty_result is None
 
 
 def test_snoc_unsnoc():
     """Test that unsnoc returns what was snoced"""
-    seq: Seq[int] = Seq.empty(int)
+    seq: PSeq[int] = PSeq.empty(int)
 
     # Test with single element
     seq_with_one = seq.snoc(42)
@@ -99,15 +99,15 @@ def test_snoc_unsnoc():
     assert seq_with_many.list() == [1, 2, 3]
 
     # Test empty seq returns None
-    empty_result: Optional[Tuple[Seq[int], int]] = Seq.empty(int).unsnoc()
+    empty_result: Optional[Tuple[PSeq[int], int]] = PSeq.empty(int).unsnoc()
     assert empty_result is None
 
 
 def test_concat():
     """Test concatenating sequences"""
-    empty: Seq[int] = Seq.empty(int)
-    single1 = Seq.singleton(1)
-    single2 = Seq.singleton(2)
+    empty: PSeq[int] = PSeq.empty(int)
+    single1 = PSeq.singleton(1)
+    single2 = PSeq.singleton(2)
 
     # Test empty + empty = empty
     result1 = empty.concat(empty)
@@ -143,7 +143,7 @@ def test_concat():
 
 def test_lookup_empty():
     """Test lookup on empty sequence"""
-    empty: Seq[int] = Seq.empty(int)
+    empty: PSeq[int] = PSeq.empty(int)
 
     # Any index should return None
     assert empty.lookup(0) is None
@@ -153,7 +153,7 @@ def test_lookup_empty():
 
 def test_lookup_single():
     """Test lookup on single element sequence"""
-    single = Seq.singleton(42)
+    single = PSeq.singleton(42)
 
     # Index 0 should return the element
     assert single.lookup(0) == 42
@@ -167,7 +167,7 @@ def test_lookup_single():
 def test_lookup_multiple():
     """Test lookup on sequences with multiple elements"""
     # Test with cons operations
-    seq_cons = Seq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
+    seq_cons = PSeq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
     assert seq_cons.lookup(0) == 3
     assert seq_cons.lookup(1) == 2
     assert seq_cons.lookup(2) == 1
@@ -175,7 +175,7 @@ def test_lookup_multiple():
     assert seq_cons.lookup(-1) is None
 
     # Test with snoc operations
-    seq_snoc: Seq[int] = Seq.empty(int).snoc(1).snoc(2).snoc(3)  # [1, 2, 3]
+    seq_snoc: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)  # [1, 2, 3]
     assert seq_snoc.lookup(0) == 1
     assert seq_snoc.lookup(1) == 2
     assert seq_snoc.lookup(2) == 3
@@ -186,7 +186,7 @@ def test_lookup_multiple():
 def test_lookup_deep_sequence():
     """Test lookup on deep sequences that trigger complex finger tree structure"""
     # Create a larger sequence to test deep structure
-    seq: Seq[int] = Seq.empty(int)
+    seq: PSeq[int] = PSeq.empty(int)
     values = list(range(20))  # [0, 1, 2, ..., 19]
 
     # Build sequence with snoc
@@ -208,7 +208,7 @@ def test_lookup_deep_sequence():
 
 def test_lookup_mixed_operations():
     """Test lookup on sequences built with mixed cons/snoc operations"""
-    seq: Seq[int] = Seq.empty(int).snoc(5).snoc(6).cons(4).cons(3)  # [3, 4, 5, 6]
+    seq: PSeq[int] = PSeq.empty(int).snoc(5).snoc(6).cons(4).cons(3)  # [3, 4, 5, 6]
 
     assert seq.lookup(0) == 3
     assert seq.lookup(1) == 4
@@ -224,8 +224,8 @@ def test_lookup_mixed_operations():
 
 def test_lookup_after_concat():
     """Test lookup on sequences after concatenation"""
-    seq1: Seq[int] = Seq.empty(int).snoc(1).snoc(2)  # [1, 2]
-    seq2: Seq[int] = Seq.empty(int).snoc(3).snoc(4)  # [3, 4]
+    seq1: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2)  # [1, 2]
+    seq2: PSeq[int] = PSeq.empty(int).snoc(3).snoc(4)  # [3, 4]
     concat_seq = seq1.concat(seq2)  # [1, 2, 3, 4]
 
     assert concat_seq.lookup(0) == 1
@@ -242,12 +242,12 @@ def test_lookup_after_concat():
 
 def test_mk():
     """Test creating a sequence from an Iterable"""
-    assert Seq.mk(range(10)).list() == list(range(10))
+    assert PSeq.mk(range(10)).list() == list(range(10))
 
 
 def test_update_empty():
     """Test updating an empty sequence"""
-    empty: Seq[int] = Seq.empty(int)
+    empty: PSeq[int] = PSeq.empty(int)
 
     # Updating any index should return the same empty sequence
     assert empty.update(0, 42) == empty
@@ -257,7 +257,7 @@ def test_update_empty():
 
 def test_update_single():
     """Test updating a single element sequence"""
-    single = Seq.singleton(42)
+    single = PSeq.singleton(42)
 
     # Valid update at index 0
     updated = single.update(0, 100)
@@ -274,7 +274,7 @@ def test_update_single():
 def test_update_multiple():
     """Test updating sequences with multiple elements"""
     # Test with snoc operations: [1, 2, 3]
-    seq: Seq[int] = Seq.empty(int).snoc(1).snoc(2).snoc(3)
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
 
     # Update each valid index
     updated0 = seq.update(0, 10)
@@ -301,7 +301,7 @@ def test_update_multiple():
 def test_update_cons_sequence():
     """Test updating a sequence built with cons operations"""
     # [3, 2, 1] from cons operations
-    seq = Seq.empty(int).cons(1).cons(2).cons(3)
+    seq = PSeq.empty(int).cons(1).cons(2).cons(3)
 
     # Update each valid index
     updated0 = seq.update(0, 30)
@@ -320,7 +320,7 @@ def test_update_cons_sequence():
 def test_update_deep_sequence():
     """Test updating deep sequences that trigger complex finger tree structure"""
     # Create a larger sequence to test deep structure
-    seq: Seq[int] = Seq.empty(int)
+    seq: PSeq[int] = PSeq.empty(int)
     values = list(range(20))  # [0, 1, 2, ..., 19]
 
     # Build sequence with snoc
@@ -357,7 +357,7 @@ def test_update_deep_sequence():
 def test_update_mixed_operations():
     """Test updating sequences built with mixed cons/snoc operations"""
     # [3, 4, 5, 6] from mixed operations
-    seq: Seq[int] = Seq.empty(int).snoc(5).snoc(6).cons(4).cons(3)
+    seq: PSeq[int] = PSeq.empty(int).snoc(5).snoc(6).cons(4).cons(3)
 
     # Update each position
     updated0 = seq.update(0, 30)
@@ -378,8 +378,8 @@ def test_update_mixed_operations():
 
 def test_update_after_concat():
     """Test updating sequences after concatenation"""
-    seq1: Seq[int] = Seq.empty(int).snoc(1).snoc(2)  # [1, 2]
-    seq2: Seq[int] = Seq.empty(int).snoc(3).snoc(4)  # [3, 4]
+    seq1: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2)  # [1, 2]
+    seq2: PSeq[int] = PSeq.empty(int).snoc(3).snoc(4)  # [3, 4]
     concat_seq = seq1.concat(seq2)  # [1, 2, 3, 4]
 
     # Update each position in concatenated sequence
@@ -406,7 +406,7 @@ def test_update_after_concat():
 
 def test_update_persistence():
     """Test that updates create new sequences without modifying originals"""
-    original: Seq[int] = Seq.empty(int).snoc(1).snoc(2).snoc(3)
+    original: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
 
     # Multiple updates creating different sequences
     updated1 = original.update(0, 100)

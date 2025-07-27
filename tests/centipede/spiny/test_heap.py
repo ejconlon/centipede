@@ -1,9 +1,9 @@
-from centipede.spiny.heap import Heap
+from centipede.spiny.heap import PHeap
 
 
 def test_empty_heap():
-    """Test creating an empty Heap and asserting it is empty"""
-    heap = Heap.empty(int, str)
+    """Test creating an empty PHeap and asserting it is empty"""
+    heap = PHeap.empty(int, str)
     assert heap.null()
 
     # Test find_min returns None for empty heap
@@ -17,7 +17,7 @@ def test_empty_heap():
 
 def test_singleton():
     """Test creating a singleton heap"""
-    heap = Heap.singleton(5, "five")
+    heap = PHeap.singleton(5, "five")
     assert not heap.null()
 
     # Test find_min returns the single element
@@ -31,16 +31,16 @@ def test_singleton():
 
 def test_null_method():
     """Test the null() method on empty and non-empty heaps"""
-    empty_heap = Heap.empty(int, str)
+    empty_heap = PHeap.empty(int, str)
     assert empty_heap.null()
 
-    non_empty_heap = Heap.singleton(1, "one")
+    non_empty_heap = PHeap.singleton(1, "one")
     assert not non_empty_heap.null()
 
 
 def test_insert_single():
     """Test inserting a single element into an empty heap"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap_with_one = heap.insert(10, "ten")
 
     assert not heap_with_one.null()
@@ -55,7 +55,7 @@ def test_insert_single():
 
 def test_insert_multiple():
     """Test inserting multiple elements maintains min-heap property"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(5, "five")
     heap = heap.insert(2, "two")
     heap = heap.insert(8, "eight")
@@ -72,14 +72,14 @@ def test_insert_multiple():
 
 def test_find_min_empty():
     """Test find_min on empty heap returns None"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     result = heap.find_min()
     assert result is None
 
 
 def test_find_min_single():
     """Test find_min on single element heap"""
-    heap = Heap.singleton(42, "answer")
+    heap = PHeap.singleton(42, "answer")
     result = heap.find_min()
     assert result is not None
     key, value, rest = result
@@ -90,7 +90,7 @@ def test_find_min_single():
 
 def test_find_min_multiple():
     """Test find_min returns minimum element with multiple elements"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(10, "ten")
     heap = heap.insert(3, "three")
     heap = heap.insert(15, "fifteen")
@@ -105,14 +105,14 @@ def test_find_min_multiple():
 
 def test_delete_min_empty():
     """Test delete_min on empty heap returns None"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     result = heap.delete_min()
     assert result is None
 
 
 def test_delete_min_single():
     """Test delete_min on single element heap returns empty heap"""
-    heap = Heap.singleton(5, "five")
+    heap = PHeap.singleton(5, "five")
     result = heap.delete_min()
     assert result is not None
     assert result.null()
@@ -120,7 +120,7 @@ def test_delete_min_single():
 
 def test_delete_min_multiple():
     """Test delete_min removes minimum element and maintains heap property"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(5, "five")
     heap = heap.insert(2, "two")
     heap = heap.insert(8, "eight")
@@ -142,7 +142,7 @@ def test_delete_min_multiple():
 
 def test_delete_min_sequence():
     """Test deleting all elements in order maintains heap property"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(3, "three")
     heap = heap.insert(1, "one")
     heap = heap.insert(2, "two")
@@ -169,8 +169,8 @@ def test_delete_min_sequence():
 
 def test_meld_empty_heaps():
     """Test melding two empty heaps"""
-    heap1 = Heap.empty(int, str)
-    heap2 = Heap.empty(int, str)
+    heap1 = PHeap.empty(int, str)
+    heap2 = PHeap.empty(int, str)
 
     result = heap1.meld(heap2)
     assert result.null()
@@ -178,8 +178,8 @@ def test_meld_empty_heaps():
 
 def test_meld_empty_with_non_empty():
     """Test melding empty heap with non-empty heap"""
-    empty_heap = Heap.empty(int, str)
-    non_empty_heap = Heap.singleton(5, "five").insert(3, "three")
+    empty_heap = PHeap.empty(int, str)
+    non_empty_heap = PHeap.singleton(5, "five").insert(3, "three")
 
     # Empty + non-empty = non-empty
     result1 = empty_heap.meld(non_empty_heap)
@@ -196,11 +196,11 @@ def test_meld_empty_with_non_empty():
 
 def test_meld_non_empty_heaps():
     """Test melding two non-empty heaps"""
-    heap1 = Heap.empty(int, str)
+    heap1 = PHeap.empty(int, str)
     heap1 = heap1.insert(5, "five")
     heap1 = heap1.insert(2, "two")
 
-    heap2 = Heap.empty(int, str)
+    heap2 = PHeap.empty(int, str)
     heap2 = heap2.insert(3, "three")
     heap2 = heap2.insert(1, "one")
 
@@ -219,8 +219,8 @@ def test_meld_non_empty_heaps():
 
 def test_meld_maintains_all_elements():
     """Test that meld preserves elements from both heaps"""
-    heap1 = Heap.singleton(2, "two")
-    heap2 = Heap.singleton(1, "one")
+    heap1 = PHeap.singleton(2, "two")
+    heap2 = PHeap.singleton(1, "one")
 
     melded = heap1.meld(heap2)
 
@@ -241,7 +241,7 @@ def test_meld_maintains_all_elements():
 
 def test_heap_with_duplicate_keys():
     """Test heap behavior with duplicate keys"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(5, "first_five")
     heap = heap.insert(5, "second_five")
     heap = heap.insert(1, "one")
@@ -263,21 +263,21 @@ def test_heap_with_duplicate_keys():
 
 def test_iter_empty_heap():
     """Test iter method on empty heap"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     items = list(heap.iter())
     assert items == []
 
 
 def test_iter_single_element():
     """Test iter method on single element heap"""
-    heap = Heap.singleton(5, "five")
+    heap = PHeap.singleton(5, "five")
     items = list(heap.iter())
     assert items == [(5, "five")]
 
 
 def test_iter_multiple_elements():
     """Test iter method returns elements in ascending order"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(5, "five")
     heap = heap.insert(2, "two")
     heap = heap.insert(8, "eight")
@@ -294,19 +294,19 @@ def test_iter_multiple_elements():
 
 def test_size_empty_heap():
     """Test size method on empty heap"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     assert heap.size() == 0
 
 
 def test_size_singleton():
     """Test size method on single element heap"""
-    heap = Heap.singleton(5, "five")
+    heap = PHeap.singleton(5, "five")
     assert heap.size() == 1
 
 
 def test_size_multiple_elements():
     """Test size method with multiple elements"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     assert heap.size() == 0
 
     heap = heap.insert(5, "five")
@@ -327,7 +327,7 @@ def test_size_multiple_elements():
 
 def test_size_after_delete_min():
     """Test size method after deleting minimum elements"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(5, "five")
     heap = heap.insert(2, "two")
     heap = heap.insert(8, "eight")
@@ -348,11 +348,11 @@ def test_size_after_delete_min():
 
 def test_size_after_meld():
     """Test size method after melding heaps"""
-    heap1 = Heap.empty(int, str)
+    heap1 = PHeap.empty(int, str)
     heap1 = heap1.insert(5, "five")
     heap1 = heap1.insert(2, "two")
 
-    heap2 = Heap.empty(int, str)
+    heap2 = PHeap.empty(int, str)
     heap2 = heap2.insert(3, "three")
     heap2 = heap2.insert(1, "one")
 
@@ -365,7 +365,7 @@ def test_size_after_meld():
 
 def test_size_with_duplicates():
     """Test size method with duplicate keys"""
-    heap = Heap.empty(int, str)
+    heap = PHeap.empty(int, str)
     heap = heap.insert(5, "first_five")
     heap = heap.insert(5, "second_five")
     heap = heap.insert(5, "third_five")
