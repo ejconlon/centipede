@@ -6,6 +6,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from centipede.spiny.heap import Heap
+from tests.centipede.spiny.hypo import configure_hypo
+
+configure_hypo()
 
 
 @st.composite
