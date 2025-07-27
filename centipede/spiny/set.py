@@ -5,7 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Generator, Iterable, Optional, Type, override
 
-from centipede.spiny.common import Box, LexComparable, Sized
+from centipede.spiny.common import (
+    Box,
+    Impossible,
+    LexComparable,
+    Ordering,
+    Sized,
+    compare,
+)
 
 __all__ = ["PSet"]
 
@@ -34,7 +41,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         Returns:
             A set containing only the given element.
         """
-        raise Exception("TODO")
+        return PSetBranch(1, _PSET_EMPTY, value, _PSET_EMPTY)
 
     @staticmethod
     def mk(values: Iterable[T]) -> PSet[T]:
@@ -53,20 +60,46 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
 
     @override
     def null(self) -> bool:
-        raise Exception("TODO")
+        match self:
+            case PSetEmpty():
+                return True
+            case PSetBranch():
+                return False
+            case _:
+                raise Impossible
 
     @override
     def size(self) -> int:
-        raise Exception("TODO")
+        match self:
+            case PSetEmpty():
+                return 0
+            case PSetBranch(_size, _, _, _):
+                return _size
+            case _:
+                raise Impossible
 
     @override
     def iter(self) -> Generator[T]:
-        raise Exception("TODO")
+        match self:
+            case PSetEmpty():
+                return
+            case PSetBranch(_, left, value, right):
+                yield from left.iter()
+                yield value
+                yield from right.iter()
 
     def insert(self, value: T) -> PSet[T]:
-        raise Exception("TODO")
+        """Insert a value into the set.
 
-    def merge(self, other: PSet[T]) -> PSet[T]:
+        Args:
+            value: The value to insert.
+
+        Returns:
+            A new set containing the inserted value.
+        """
+        return _pset_insert(self, value)
+
+    def merge(self, _other: PSet[T]) -> PSet[T]:
         raise Exception("TODO")
 
     def __rshift__(self, value: T) -> PSet[T]:
@@ -117,3 +150,112 @@ class PSetBranch[T](PSet[T]):
     _left: PSet[T]
     _value: T
     _right: PSet[T]
+
+
+def _pset_insert[T](pset: PSet[T], value: T) -> PSet[T]:
+    """Internal insert method using match blocks."""
+    match pset:
+        case PSetEmpty():
+            return PSetBranch(1, _PSET_EMPTY, value, _PSET_EMPTY)
+        case PSetBranch(_, left, branch_value, right):
+            cmp = compare(value, branch_value)
+            if cmp == Ordering.Lt:
+                new_left = _pset_insert(left, value)
+                return _pset_balance(new_left, branch_value, right)
+            elif cmp == Ordering.Gt:
+                new_right = _pset_insert(right, value)
+                return _pset_balance(left, branch_value, new_right)
+            else:
+                # Value already exists, return unchanged
+                return pset
+        case _:
+            raise Impossible
+
+
+def _pset_balance[T](left: PSet[T], value: T, right: PSet[T]) -> PSet[T]:
+    """Create a balanced tree from left subtree, value, and right subtree."""
+    left_size = left.size()
+    right_size = right.size()
+    total_size = left_size + 1 + right_size
+
+    # Weight-balanced tree invariant: neither subtree should be more than
+    # 3 times larger than the other
+    if left_size > 3 * right_size:
+        # Left is too heavy, need to rotate right
+        match left:
+            case PSetBranch(_, left_left, left_value, left_right):
+                left_left_size = left_left.size()
+                left_right_size = left_right.size()
+                if left_left_size >= left_right_size:
+                    # Single rotation right
+                    return PSetBranch(
+                        total_size,
+                        left_left,
+                        left_value,
+                        PSetBranch(
+                            1 + left_right_size + right_size, left_right, value, right
+                        ),
+                    )
+                else:
+                    # Double rotation left-right
+                    match left_right:
+                        case PSetBranch(
+                            _, left_right_left, left_right_value, left_right_right
+                        ):
+                            return PSetBranch(
+                                total_size,
+                                PSetBranch(
+                                    1 + left_left_size + left_right_left.size(),
+                                    left_left,
+                                    left_value,
+                                    left_right_left,
+                                ),
+                                left_right_value,
+                                PSetBranch(
+                                    1 + left_right_right.size() + right_size,
+                                    left_right_right,
+                                    value,
+                                    right,
+                                ),
+                            )
+    elif right_size > 3 * left_size:
+        # Right is too heavy, need to rotate left
+        match right:
+            case PSetBranch(_, right_left, right_value, right_right):
+                right_left_size = right_left.size()
+                right_right_size = right_right.size()
+                if right_right_size >= right_left_size:
+                    # Single rotation left
+                    return PSetBranch(
+                        total_size,
+                        PSetBranch(
+                            1 + left_size + right_left_size, left, value, right_left
+                        ),
+                        right_value,
+                        right_right,
+                    )
+                else:
+                    # Double rotation right-left
+                    match right_left:
+                        case PSetBranch(
+                            _, right_left_left, right_left_value, right_left_right
+                        ):
+                            return PSetBranch(
+                                total_size,
+                                PSetBranch(
+                                    1 + left_size + right_left_left.size(),
+                                    left,
+                                    value,
+                                    right_left_left,
+                                ),
+                                right_left_value,
+                                PSetBranch(
+                                    1 + right_left_right.size() + right_right_size,
+                                    right_left_right,
+                                    right_value,
+                                    right_right,
+                                ),
+                            )
+
+    # Tree is balanced or no rotation needed
+    return PSetBranch(total_size, left, value, right)
