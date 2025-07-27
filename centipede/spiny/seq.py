@@ -20,7 +20,7 @@ from typing import (
     override,
 )
 
-from centipede.spiny.common import Box, Impossible, Sequential
+from centipede.spiny.common import Box, Impossible, SizedComparable
 
 __all__ = ["Seq"]
 
@@ -33,7 +33,7 @@ type InnerNode[T] = Union[Tuple[T, T], Tuple[T, T, T]]
 
 
 # sealed
-class Seq[T](Sequential[T, "Seq[T]"]):
+class Seq[T](SizedComparable[T, "Seq[T]"]):
     """A Hinze-Patterson finger tree as persistent catenable sequence"""
 
     @staticmethod

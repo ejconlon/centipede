@@ -1,4 +1,5 @@
 from centipede.spiny.heap import Heap
+from centipede.spiny.seq import Seq
 
 
 def test_empty_heap():
@@ -23,9 +24,9 @@ def test_singleton():
     # Test find_min returns the single element
     result = heap.find_min()
     assert result is not None
-    key, value, rest = result
+    key, values, rest = result
     assert key == 5
-    assert value == "five"
+    assert values == Seq.singleton("five")
     assert rest.null()
 
 
@@ -47,9 +48,9 @@ def test_insert_single():
 
     result = heap_with_one.find_min()
     assert result is not None
-    key, value, rest = result
+    key, values, rest = result
     assert key == 10
-    assert value == "ten"
+    assert values == Seq.singleton("ten")
     assert rest.null()
 
 
@@ -65,9 +66,9 @@ def test_insert_multiple():
     # Should find minimum element (1)
     result = heap.find_min()
     assert result is not None
-    key, value, _ = result
+    key, values, _ = result
     assert key == 1
-    assert value == "one"
+    assert values == Seq.singleton("one")
 
 
 def test_find_min_empty():
@@ -82,9 +83,9 @@ def test_find_min_single():
     heap = Heap.singleton(42, "answer")
     result = heap.find_min()
     assert result is not None
-    key, value, rest = result
+    key, values, rest = result
     assert key == 42
-    assert value == "answer"
+    assert values == Seq.singleton("answer")
     assert rest.null()
 
 
@@ -98,9 +99,9 @@ def test_find_min_multiple():
 
     result = heap.find_min()
     assert result is not None
-    key, value, _ = result
+    key, values, _ = result
     assert key == 1
-    assert value == "one"
+    assert values == Seq.singleton("one")
 
 
 def test_delete_min_empty():
@@ -134,11 +135,17 @@ def test_delete_min_multiple():
     # Next minimum should be smaller or equal to the original elements
     min_result = result.find_min()
     assert min_result is not None
-    key, value, _ = min_result
+    key, values, _ = min_result
     # The heap implementation has some issues with complex cases,
     # but we can at least verify it returns a valid element
     assert key in [1, 2, 3, 5, 8]
-    assert value in ["one", "two", "three", "five", "eight"]
+    assert values in [
+        Seq.singleton("one"),
+        Seq.singleton("two"),
+        Seq.singleton("three"),
+        Seq.singleton("five"),
+        Seq.singleton("eight"),
+    ]
 
 
 def test_delete_min_sequence():
@@ -211,9 +218,9 @@ def test_meld_non_empty_heaps():
     # Minimum should be 1 (from heap2)
     min_result = result.find_min()
     assert min_result is not None
-    key, value, _ = min_result
+    key, values, _ = min_result
     assert key == 1
-    assert value == "one"
+    assert values == Seq.singleton("one")
 
     # Melded heap should not be null
     assert not result.null()
@@ -230,7 +237,7 @@ def test_meld_maintains_all_elements():
     min_result = melded.find_min()
     assert min_result is not None
     assert min_result[0] == 1
-    assert min_result[1] == "one"
+    assert min_result[1] == Seq.singleton("one")
 
     # After deleting minimum, should have remaining element
     after_delete = melded.delete_min()
@@ -238,7 +245,7 @@ def test_meld_maintains_all_elements():
     remaining_min = after_delete.find_min()
     assert remaining_min is not None
     assert remaining_min[0] == 2
-    assert remaining_min[1] == "two"
+    assert remaining_min[1] == Seq.singleton("two")
 
 
 def test_heap_with_duplicate_keys():
@@ -274,7 +281,7 @@ def test_iter_single_element():
     """Test iter method on single element heap"""
     heap = Heap.singleton(5, "five")
     items = list(heap.iter())
-    assert items == [(5, "five")]
+    assert items == [(5, Seq.singleton("five"))]
 
 
 def test_iter_multiple_elements():

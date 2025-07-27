@@ -14,10 +14,10 @@ from typing import Any, Generator, List, cast, override
 __all__ = [
     "Box",
     "Comparable",
-    "Entry",
+    "LexComparable",
     "Impossible",
     "Ordering",
-    "Sequential",
+    "SizedComparable",
     "Unit",
     "compare",
     "compare_lex",
@@ -91,9 +91,9 @@ class Comparable[T](metaclass=ABCMeta):
         return not self.__lt__(other)
 
 
-class Sequential[U, T](Comparable[T]):
+class LexComparable[U, T](Comparable[T]):
     @abstractmethod
-    def size(self) -> int: ...
+    def null(self) -> bool: ...
 
     @abstractmethod
     def iter(self) -> Generator[U]: ...
@@ -102,14 +102,8 @@ class Sequential[U, T](Comparable[T]):
     def compare(self, other: T) -> Ordering:
         return compare_lex(self.iter(), getattr(other, "iter")())
 
-    def null(self) -> bool:
-        return self.size() == 0
-
     def list(self) -> List[U]:
         return list(self.iter())
-
-    def __len__(self) -> int:
-        return self.size()
 
     def __bool__(self) -> bool:
         return not self.null()
@@ -121,13 +115,16 @@ class Sequential[U, T](Comparable[T]):
         return self.list()
 
 
-@dataclass(frozen=True, eq=False)
-class Entry[K, V](Comparable["Entry[K, V]"]):
-    key: K
-    value: V
+class SizedComparable[U, T](LexComparable[U, T]):
+    @abstractmethod
+    def size(self) -> int: ...
 
-    def compare(self, other: Entry[K, V]) -> Ordering:
-        return compare(self.key, other.key)
+    @override
+    def null(self) -> bool:
+        return self.size() == 0
+
+    def __len__(self) -> int:
+        return self.size()
 
 
 class Ordering(Enum):
