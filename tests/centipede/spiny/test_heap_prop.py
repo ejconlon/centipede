@@ -152,8 +152,8 @@ def test_meld_size_additive(heap1, heap2):
     assert melded.size() == heap1.size() + heap2.size()
 
 
-@given(heap_strategy(), heap_strategy())
-def test_meld_empty_identity(heap1, heap2):
+@given(heap_strategy())
+def test_meld_empty_identity(heap1):
     """Melding with empty heap should be identity."""
     empty = Heap.empty(int, str)
 
