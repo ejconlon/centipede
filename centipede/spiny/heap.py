@@ -110,7 +110,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
         if result is None:
             return None
         key, value, remaining = result
-        return (key, value, Heap(self._size - 1, remaining._children))
+        return (key, value, remaining)
 
     def insert(self, key: K, value: V) -> Heap[K, V]:
         """Insert a new key-value pair into the heap.
@@ -146,9 +146,7 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
             minimum element removed.
         """
         result = _heap_delete_min(self)
-        if result is None:
-            return None
-        return Heap(self._size - 1, result._children)
+        return result
 
     @override
     def size(self) -> int:
@@ -183,16 +181,23 @@ class Heap[K, V](Sized, Iterating[Tuple[K, V]]):
 _HEAP_EMPTY: Heap[Any, Any] = Heap(0, Seq.empty())
 
 
+def _calculate_node_size[K, V](node: HeapNode[K, V]) -> int:
+    """Calculate the size of a heap node (1 + size of its rest heap)."""
+    return 1 + node.rest._size
+
+
 def _heap_insert[K, V](cand: HeapNode[K, V], heap: Heap[K, V]) -> Heap[K, V]:
+    cand_size = _calculate_node_size(cand)
     match heap._children.uncons():
         case None:
-            return Heap(0, Seq.singleton(cand))
+            return Heap(cand_size, Seq.singleton(cand))
         case (head, tail):
             if cand.rank < head.rank:
-                return Heap(0, heap._children.cons(cand))
+                return Heap(heap._size + cand_size, heap._children.cons(cand))
             else:
                 new_node = _heap_link(cand, head)
-                return _heap_insert(new_node, Heap(0, tail))
+                tail_size = heap._size - _calculate_node_size(head)
+                return _heap_insert(new_node, Heap(tail_size, tail))
         case _:
             raise Impossible
 
@@ -200,18 +205,20 @@ def _heap_insert[K, V](cand: HeapNode[K, V], heap: Heap[K, V]) -> Heap[K, V]:
 def _heap_link[K, V](first: HeapNode[K, V], second: HeapNode[K, V]) -> HeapNode[K, V]:
     match compare(first.key, second.key):
         case Ordering.Gt:
+            new_rest_size = second.rest._size + _calculate_node_size(first)
             return HeapNode(
                 second.key,
                 second.value,
                 second.rank + 1,
-                Heap(0, second.rest._children.cons(first)),
+                Heap(new_rest_size, second.rest._children.cons(first)),
             )
         case _:
+            new_rest_size = first.rest._size + _calculate_node_size(second)
             return HeapNode(
                 first.key,
                 first.value,
                 first.rank + 1,
-                Heap(0, first.rest._children.cons(second)),
+                Heap(new_rest_size, first.rest._children.cons(second)),
             )
 
 
@@ -225,14 +232,31 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
                     return first
                 case (second_head, second_tail):
                     if first_head.rank < second_head.rank:
-                        tail = _heap_meld(Heap(0, first_tail), second)
-                        return Heap(0, tail._children.cons(first_head))
+                        first_tail_size = first._size - _calculate_node_size(first_head)
+                        tail = _heap_meld(Heap(first_tail_size, first_tail), second)
+                        return Heap(
+                            tail._size + _calculate_node_size(first_head),
+                            tail._children.cons(first_head),
+                        )
                     elif second_head.rank < first_head.rank:
-                        tail = _heap_meld(first, Heap(0, second_tail))
-                        return Heap(0, tail._children.cons(second_head))
+                        second_tail_size = second._size - _calculate_node_size(
+                            second_head
+                        )
+                        tail = _heap_meld(first, Heap(second_tail_size, second_tail))
+                        return Heap(
+                            tail._size + _calculate_node_size(second_head),
+                            tail._children.cons(second_head),
+                        )
                     else:
                         head = _heap_link(first_head, second_head)
-                        tail = _heap_meld(Heap(0, first_tail), Heap(0, second_tail))
+                        first_tail_size = first._size - _calculate_node_size(first_head)
+                        second_tail_size = second._size - _calculate_node_size(
+                            second_head
+                        )
+                        tail = _heap_meld(
+                            Heap(first_tail_size, first_tail),
+                            Heap(second_tail_size, second_tail),
+                        )
                         return _heap_insert(head, tail)
                 case _:
                     raise Impossible
@@ -250,12 +274,16 @@ def _heap_find_min[K, V](
             if tail.null():
                 return (head.key, head.value, head.rest)
             else:
-                cand = _heap_find_min(Heap(0, tail))
-                if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
-                    rest = _heap_meld(head.rest, Heap(0, tail))
+                tail_size = heap._size - _calculate_node_size(head)
+                cand = _heap_find_min(Heap(tail_size, tail))
+                if cand is None or compare(head.key, cand[0]) != Ordering.Gt:
+                    # Choose head when it's smaller or equal (prefer head for ties)
+                    rest = _heap_meld(head.rest, Heap(tail_size, tail))
                     return (head.key, head.value, rest)
                 else:
-                    rest = _heap_meld(head.rest, cand[2])
+                    # Only choose candidate when head is strictly greater
+                    head_as_heap = Heap(_calculate_node_size(head), Seq.singleton(head))
+                    rest = _heap_meld(head_as_heap, cand[2])
                     return (cand[0], cand[1], rest)
         case _:
             raise Impossible
@@ -269,11 +297,15 @@ def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
             if tail.null():
                 return head.rest
             else:
-                cand = _heap_find_min(Heap(0, tail))
-                if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
-                    return _heap_meld(head.rest, Heap(0, tail))
+                tail_size = heap._size - _calculate_node_size(head)
+                cand = _heap_find_min(Heap(tail_size, tail))
+                if cand is None or compare(head.key, cand[0]) != Ordering.Gt:
+                    # Choose head when it's smaller or equal (prefer head for ties)
+                    return _heap_meld(head.rest, Heap(tail_size, tail))
                 else:
-                    return _heap_meld(head.rest, cand[2])
+                    # Only choose candidate when head is strictly greater
+                    head_as_heap = Heap(_calculate_node_size(head), Seq.singleton(head))
+                    return _heap_meld(head_as_heap, cand[2])
         case _:
             raise Impossible
 
@@ -283,6 +315,10 @@ def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, V]]:
         min_result = heap.find_min()
         if min_result is None:
             break
-        key, value, remaining = min_result
+        key, value, _ = min_result
         yield (key, value)
-        heap = remaining
+
+        delete_result = heap.delete_min()
+        if delete_result is None:
+            break
+        heap = delete_result
