@@ -130,13 +130,13 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         result = self.find_min()
         return None if result is None else result[1]
 
-    def find_max(self) -> Optional[Tuple[T, PSet[T]]]:
+    def find_max(self) -> Optional[Tuple[PSet[T], T]]:
         """Find the maximum element in the set.
 
         Returns:
             None if the set is empty, otherwise a tuple containing:
-            - The maximum element
             - A new set with the maximum element removed
+            - The maximum element
         """
         return _pset_find_max(self)
 
@@ -148,7 +148,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
             maximum element removed.
         """
         result = self.find_max()
-        return None if result is None else result[1]
+        return None if result is None else result[0]
 
     def __rshift__(self, value: T) -> PSet[T]:
         """Insert element using >> operator (element on right).
@@ -287,7 +287,7 @@ def _pset_find_min[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
             raise Impossible
 
 
-def _pset_find_max[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
+def _pset_find_max[T](pset: PSet[T]) -> Optional[Tuple[PSet[T], T]]:
     """Find the maximum element in the set and return it with the remaining set."""
     match pset:
         case PSetEmpty():
@@ -295,15 +295,15 @@ def _pset_find_max[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
         case PSetBranch(_, left, value, right):
             if right.null():
                 # This node contains the maximum value
-                return (value, left)
+                return (left, value)
             else:
                 # Maximum is in the right subtree
                 max_result = _pset_find_max(right)
                 if max_result is None:
                     raise Impossible
-                max_value, new_right = max_result
+                new_right, max_value = max_result
                 new_tree = _pset_balance(left, value, new_right)
-                return (max_value, new_tree)
+                return (new_tree, max_value)
         case _:
             raise Impossible
 

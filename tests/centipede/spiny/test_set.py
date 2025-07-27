@@ -541,7 +541,7 @@ def test_find_max_singleton():
     result = single_set.find_max()
 
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == 42
     assert remaining.null()
     assert remaining.size() == 0
@@ -553,7 +553,7 @@ def test_find_max_multiple_elements():
     result = set_obj.find_max()
 
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == 9
     assert remaining.size() == 4
     assert remaining.list() == [1, 2, 5, 8]
@@ -565,7 +565,7 @@ def test_find_max_negative_numbers():
     result = set_obj.find_max()
 
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == 7
     assert remaining.size() == 5
     assert remaining.list() == [-10, -5, -1, 0, 3]
@@ -577,7 +577,7 @@ def test_find_max_strings():
     result = set_obj.find_max()
 
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == "zebra"
     assert remaining.size() == 3
     assert remaining.list() == ["apple", "banana", "cherry"]
@@ -597,7 +597,7 @@ def test_find_max_persistence():
 
     # Result should be correct
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == 4
     assert remaining.list() == [1, 2, 3]
 
@@ -612,7 +612,7 @@ def test_find_max_repeated_calls():
         result = current.find_max()
         if result is None:
             break
-        max_val, remaining = result
+        remaining, max_val = result
         extracted.append(max_val)
         current = remaining
 
@@ -628,7 +628,7 @@ def test_find_max_large_set():
     result = set_obj.find_max()
 
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == 100
     assert remaining.size() == 99
     # Verify the remaining set doesn't contain the maximum
@@ -672,7 +672,7 @@ def test_delete_max_consistency_with_find_max():
     assert find_result is not None
     assert delete_result is not None
 
-    _, remaining_from_find = find_result
+    remaining_from_find, _ = find_result
 
     # delete_max result should be same as remaining set from find_max
     assert delete_result.list() == remaining_from_find.list()
@@ -690,7 +690,7 @@ def test_find_min_max_symmetry():
     assert max_result is not None
 
     min_val, _ = min_result
-    max_val, _ = max_result
+    _, max_val = max_result
 
     assert min_val == 1
     assert max_val == 9
@@ -724,6 +724,6 @@ def test_find_max_single_element_after_operations():
     # Should have only element 3 left
     result = after_second_min.find_max()
     assert result is not None
-    max_val, remaining = result
+    remaining, max_val = result
     assert max_val == 3
     assert remaining.null()
