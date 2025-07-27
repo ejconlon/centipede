@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generator, List, cast, override
+from typing import Any, Generator, List, Tuple, cast, override
 
 __all__ = [
     "Box",
@@ -21,6 +21,7 @@ __all__ = [
     "Unit",
     "compare",
     "compare_lex",
+    "group_runs",
 ]
 
 
@@ -193,3 +194,37 @@ def compare_lex[T](agen: Generator[T], bgen: Generator[T]) -> Ordering:
                 return r
         except StopIteration:
             return Ordering.Gt
+
+
+def group_runs[K, V](gen: Generator[Tuple[K, V]]) -> Generator[Tuple[K, List[V]]]:
+    """Group consecutive elements with equal keys into runs.
+
+    Takes a generator of (key, value) pairs and yields (key, sequence) pairs where
+    each sequence contains all consecutive values that had the same key.
+
+    Args:
+        gen: Generator producing (key, value) tuples.
+
+    Yields:
+        Tuples of (key, sequence)
+
+    Example:
+        >>> list(group_runs(iter([('a', 1), ('a', 2), ('b', 3), ('b', 4), ('a', 5)])))
+        [('a', [1, 2]), ('b', [3, 4]), ('a', [5])]
+    """
+    try:
+        current_key, current_value = next(gen)
+    except StopIteration:
+        return
+
+    current_run = [current_value]
+
+    for key, value in gen:
+        if key == current_key:
+            current_run.append(value)
+        else:
+            yield (current_key, current_run)
+            current_key = key
+            current_run = [value]
+
+    yield (current_key, current_run)

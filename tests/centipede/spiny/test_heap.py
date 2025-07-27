@@ -290,3 +290,85 @@ def test_iter_multiple_elements():
     # Keys should be in ascending order
     assert keys == sorted(keys)
     assert keys[0] == 1  # First element should be minimum
+
+
+def test_size_empty_heap():
+    """Test size method on empty heap"""
+    heap = Heap.empty(int, str)
+    assert heap.size() == 0
+
+
+def test_size_singleton():
+    """Test size method on single element heap"""
+    heap = Heap.singleton(5, "five")
+    assert heap.size() == 1
+
+
+def test_size_multiple_elements():
+    """Test size method with multiple elements"""
+    heap = Heap.empty(int, str)
+    assert heap.size() == 0
+
+    heap = heap.insert(5, "five")
+    assert heap.size() == 1
+
+    heap = heap.insert(2, "two")
+    assert heap.size() == 2
+
+    heap = heap.insert(8, "eight")
+    assert heap.size() == 3
+
+    heap = heap.insert(1, "one")
+    assert heap.size() == 4
+
+    heap = heap.insert(3, "three")
+    assert heap.size() == 5
+
+
+def test_size_after_delete_min():
+    """Test size method after deleting minimum elements"""
+    heap = Heap.empty(int, str)
+    heap = heap.insert(5, "five")
+    heap = heap.insert(2, "two")
+    heap = heap.insert(8, "eight")
+    heap = heap.insert(1, "one")
+
+    assert heap.size() == 4
+
+    # Delete minimum element
+    heap_after_delete = heap.delete_min()
+    assert heap_after_delete is not None
+    assert heap_after_delete.size() == 3
+
+    # Delete another minimum
+    heap_after_delete2 = heap_after_delete.delete_min()
+    assert heap_after_delete2 is not None
+    assert heap_after_delete2.size() == 2
+
+
+def test_size_after_meld():
+    """Test size method after melding heaps"""
+    heap1 = Heap.empty(int, str)
+    heap1 = heap1.insert(5, "five")
+    heap1 = heap1.insert(2, "two")
+
+    heap2 = Heap.empty(int, str)
+    heap2 = heap2.insert(3, "three")
+    heap2 = heap2.insert(1, "one")
+
+    assert heap1.size() == 2
+    assert heap2.size() == 2
+
+    melded = heap1.meld(heap2)
+    assert melded.size() == 4
+
+
+def test_size_with_duplicates():
+    """Test size method with duplicate keys"""
+    heap = Heap.empty(int, str)
+    heap = heap.insert(5, "first_five")
+    heap = heap.insert(5, "second_five")
+    heap = heap.insert(5, "third_five")
+    heap = heap.insert(1, "one")
+
+    assert heap.size() == 4

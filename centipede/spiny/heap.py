@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
 
-from centipede.spiny.common import Impossible, LexComparable, Ordering, compare
+from centipede.spiny.common import Impossible, Ordering, SizedComparable, compare
 from centipede.spiny.seq import Seq
 
 __all__ = ["Heap"]
@@ -39,7 +39,7 @@ class HeapNode[K, V]:
 
 
 @dataclass(frozen=True, eq=False)
-class Heap[K, V](LexComparable[Tuple[K, V], "Heap[K, V]"]):
+class Heap[K, V](SizedComparable[Tuple[K, V], "Heap[K, V]"]):
     """A Brodal-Okasaki persistent min-heap"""
 
     _unwrap: Seq[HeapNode[K, V]]
@@ -139,6 +139,15 @@ class Heap[K, V](LexComparable[Tuple[K, V], "Heap[K, V]"]):
             minimum element removed.
         """
         return _heap_delete_min(self)
+
+    @override
+    def size(self) -> int:
+        """Return the number of elements in the heap.
+
+        Returns:
+            The total number of key-value pairs in the heap.
+        """
+        return _heap_size(self)
 
     @override
     def iter(self) -> Generator[Tuple[K, V]]:
@@ -266,6 +275,18 @@ def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
                     return _heap_meld(head.rest, cand[2])
         case _:
             raise Impossible
+
+
+def _heap_size[K, V](heap: Heap[K, V]) -> int:
+    """Calculate the total number of elements in the heap."""
+    if heap.null():
+        return 0
+
+    total = 0
+    for node in heap._unwrap.iter():
+        total += 1 + _heap_size(node.rest)
+
+    return total
 
 
 def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, V]]:
