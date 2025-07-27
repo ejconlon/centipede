@@ -4,7 +4,7 @@ This module provides a functional min-heap data structure that supports
 efficient insertion, deletion, and melding operations while maintaining
 persistence (immutability).
 
-Values associated with the same key are collected in a sequence.
+Each key is associated with a single value.
 """
 
 from __future__ import annotations
@@ -27,19 +27,19 @@ class HeapNode[K, V]:
 
     Attributes:
         key: The key used for heap ordering.
-        values: The values associated with the key.
+        value: The value associated with the key.
         rank: The rank (size) of this heap node.
         rest: Child heap containing remaining elements.
     """
 
     key: K
-    values: Seq[V]
+    value: V
     rank: int
     rest: Heap[K, V]
 
 
 @dataclass(frozen=True, eq=False)
-class Heap[K, V](LexComparable[Tuple[K, Seq[V]], "Heap[K, V]"]):
+class Heap[K, V](LexComparable[Tuple[K, V], "Heap[K, V]"]):
     """A Brodal-Okasaki persistent min-heap"""
 
     _unwrap: Seq[HeapNode[K, V]]
@@ -70,7 +70,7 @@ class Heap[K, V](LexComparable[Tuple[K, Seq[V]], "Heap[K, V]"]):
         Returns:
             A heap containing only the given key-value pair.
         """
-        return Heap(Seq.singleton(HeapNode(key, Seq.singleton(value), 0, Heap.empty())))
+        return Heap(Seq.singleton(HeapNode(key, value, 0, Heap.empty())))
 
     @staticmethod
     def mk(entries: Iterable[Tuple[K, V]]) -> Heap[K, V]:
@@ -96,7 +96,7 @@ class Heap[K, V](LexComparable[Tuple[K, Seq[V]], "Heap[K, V]"]):
         """
         return self._unwrap.null()
 
-    def find_min(self) -> Optional[Tuple[K, Seq[V], Heap[K, V]]]:
+    def find_min(self) -> Optional[Tuple[K, V, Heap[K, V]]]:
         """Find the minimum element in the heap.
 
         Returns:
@@ -117,7 +117,7 @@ class Heap[K, V](LexComparable[Tuple[K, Seq[V]], "Heap[K, V]"]):
         Returns:
             A new heap containing the inserted element.
         """
-        cand = HeapNode(key, Seq.singleton(value), 0, Heap.empty())
+        cand = HeapNode(key, value, 0, Heap.empty())
         return _heap_insert(cand, self)
 
     def meld(self, other: Heap[K, V]) -> Heap[K, V]:
@@ -141,7 +141,7 @@ class Heap[K, V](LexComparable[Tuple[K, Seq[V]], "Heap[K, V]"]):
         return _heap_delete_min(self)
 
     @override
-    def iter(self) -> Generator[Tuple[K, Seq[V]]]:
+    def iter(self) -> Generator[Tuple[K, V]]:
         """Iterate through the heap in ascending order.
 
         Yields:
@@ -183,21 +183,21 @@ def _heap_link[K, V](first: HeapNode[K, V], second: HeapNode[K, V]) -> HeapNode[
         case Ordering.Lt:
             return HeapNode(
                 first.key,
-                first.values,
+                first.value,
                 first.rank + 1,
                 Heap(first.rest._unwrap.cons(second)),
             )
         case Ordering.Eq:
             return HeapNode(
                 first.key,
-                first.values + second.values,
-                first.rank + second.rank,
-                Heap(first.rest._unwrap + second.rest._unwrap),
+                first.value,
+                first.rank + 1,
+                Heap(first.rest._unwrap.cons(second)),
             )
         case Ordering.Gt:
             return HeapNode(
                 second.key,
-                second.values,
+                second.value,
                 second.rank + 1,
                 Heap(second.rest._unwrap.cons(first)),
             )
@@ -232,18 +232,18 @@ def _heap_meld[K, V](first: Heap[K, V], second: Heap[K, V]) -> Heap[K, V]:
 
 def _heap_find_min[K, V](
     heap: Heap[K, V],
-) -> Optional[Tuple[K, Seq[V], Heap[K, V]]]:
+) -> Optional[Tuple[K, V, Heap[K, V]]]:
     match heap._unwrap.uncons():
         case None:
             return None
         case (head, tail):
             if tail.null():
-                return (head.key, head.values, head.rest)
+                return (head.key, head.value, head.rest)
             else:
                 cand = _heap_find_min(Heap(tail))
                 if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
                     rest = _heap_meld(head.rest, Heap(tail))
-                    return (head.key, head.values, rest)
+                    return (head.key, head.value, rest)
                 else:
                     rest = _heap_meld(head.rest, cand[2])
                     return (cand[0], cand[1], rest)
@@ -263,16 +263,16 @@ def _heap_delete_min[K, V](heap: Heap[K, V]) -> Optional[Heap[K, V]]:
                 if cand is None or compare(head.key, cand[0]) == Ordering.Lt:
                     return _heap_meld(head.rest, Heap(tail))
                 else:
-                    return _heap_meld(Heap(tail), cand[2])
+                    return _heap_meld(head.rest, cand[2])
         case _:
             raise Impossible
 
 
-def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, Seq[V]]]:
+def _heap_iter[K, V](heap: Heap[K, V]) -> Generator[Tuple[K, V]]:
     while not heap.null():
         min_result = heap.find_min()
         if min_result is None:
             break
-        key, values, remaining = min_result
-        yield (key, values)
+        key, value, remaining = min_result
+        yield (key, value)
         heap = remaining
