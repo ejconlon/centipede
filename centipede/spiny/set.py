@@ -184,7 +184,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def union(self, other: PSet[T]) -> PSet[T]:
         """Return the union of two sets.
 
-        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Time Complexity: O(m log(n/m+1)) where m ≤ n are sizes of the sets
         Space Complexity: O(log(m + n)) for recursion
 
         Args:
@@ -198,7 +198,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def intersection(self, other: PSet[T]) -> PSet[T]:
         """Return the intersection of two sets.
 
-        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Time Complexity: O(m log(n/m+1)) where m ≤ n are sizes of the sets
         Space Complexity: O(log(min(m, n))) for recursion
 
         Args:
@@ -212,7 +212,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def difference(self, other: PSet[T]) -> PSet[T]:
         """Return the difference of two sets (elements in self but not in other).
 
-        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Time Complexity: O(m log n) where m is size of self, n is size of other
         Space Complexity: O(log m) for recursion
 
         Args:
@@ -304,12 +304,32 @@ def _pset_merge[T](left_set: PSet[T], right_set: PSet[T]) -> PSet[T]:
             return right_set
         case (_, PSetEmpty()):
             return left_set
-        case (PSetBranch(_, left_left, left_value, left_right), _):
-            # Split right_set around left_value and merge recursively
-            smaller, _, larger = _pset_split(right_set, left_value)
-            merged_left = _pset_merge(left_left, smaller)
-            merged_right = _pset_merge(left_right, larger)
-            return _pset_balance(merged_left, left_value, merged_right)
+        case (PSetBranch(left_size, _, _, _), PSetBranch(right_size, _, _, _)):
+            # Use the smaller set to split the larger one for better complexity
+            if left_size <= right_size:
+                return _pset_merge_smaller_into_larger(left_set, right_set)
+            else:
+                return _pset_merge_smaller_into_larger(right_set, left_set)
+        case _:
+            raise Impossible
+
+
+def _pset_merge_smaller_into_larger[T](
+    smaller_set: PSet[T], larger_set: PSet[T]
+) -> PSet[T]:
+    """Merge by processing each element of the smaller set against the larger set.
+
+    This achieves O(m log(n/m+1)) complexity where m <= n are the sizes.
+    """
+    match smaller_set:
+        case PSetEmpty():
+            return larger_set
+        case PSetBranch(_, left, value, right):
+            # Split larger_set around value and merge recursively
+            smaller_part, _, larger_part = _pset_split(larger_set, value)
+            merged_left = _pset_merge_smaller_into_larger(left, smaller_part)
+            merged_right = _pset_merge_smaller_into_larger(right, larger_part)
+            return _pset_balance(merged_left, value, merged_right)
         case _:
             raise Impossible
 
@@ -490,15 +510,39 @@ def _pset_intersection[T](set1: PSet[T], set2: PSet[T]) -> PSet[T]:
             return _PSET_EMPTY
         case (_, PSetEmpty()):
             return _PSET_EMPTY
-        case (PSetBranch(_, left1, value1, right1), _):
-            # Split set2 around value1
-            smaller2, value1_in_set2, larger2 = _pset_split(set2, value1)
-            left_intersection = _pset_intersection(left1, smaller2)
-            right_intersection = _pset_intersection(right1, larger2)
+        case (PSetBranch(size1, _, _, _), PSetBranch(size2, _, _, _)):
+            # Use the smaller set to split the larger one for better complexity
+            if size1 <= size2:
+                return _pset_intersection_smaller_with_larger(set1, set2)
+            else:
+                return _pset_intersection_smaller_with_larger(set2, set1)
+        case _:
+            raise Impossible
 
-            # Include value1 only if it's in set2
-            if value1_in_set2:
-                return _pset_balance(left_intersection, value1, right_intersection)
+
+def _pset_intersection_smaller_with_larger[T](
+    smaller_set: PSet[T], larger_set: PSet[T]
+) -> PSet[T]:
+    """Compute intersection by processing each element of the smaller set against the larger set.
+
+    This achieves O(m log(n/m+1)) complexity where m <= n are the sizes.
+    """
+    match smaller_set:
+        case PSetEmpty():
+            return _PSET_EMPTY
+        case PSetBranch(_, left, value, right):
+            # Split larger_set around value
+            smaller_part, value_in_larger, larger_part = _pset_split(larger_set, value)
+            left_intersection = _pset_intersection_smaller_with_larger(
+                left, smaller_part
+            )
+            right_intersection = _pset_intersection_smaller_with_larger(
+                right, larger_part
+            )
+
+            # Include value only if it's in the larger set
+            if value_in_larger:
+                return _pset_balance(left_intersection, value, right_intersection)
             else:
                 return _pset_merge(left_intersection, right_intersection)
         case _:
@@ -506,7 +550,11 @@ def _pset_intersection[T](set1: PSet[T], set2: PSet[T]) -> PSet[T]:
 
 
 def _pset_difference[T](set1: PSet[T], set2: PSet[T]) -> PSet[T]:
-    """Compute difference of two sets (set1 - set2) using tree structure."""
+    """Compute difference of two sets (set1 - set2) using tree structure.
+
+    For difference, we always process set1 against set2 regardless of size,
+    since we need to preserve the structure based on set1.
+    """
     match (set1, set2):
         case (PSetEmpty(), _):
             return _PSET_EMPTY

@@ -202,7 +202,7 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def merge(self, other: PMap[K, V]) -> PMap[K, V]:
         """Merge this map with another map.
 
-        Time Complexity: O(m + n) where m, n are sizes of the maps
+        Time Complexity: O(m log(n/m+1)) where m ≤ n are sizes of the maps
         Space Complexity: O(log(m + n)) for recursion and path copying
 
         If both maps contain the same key, the value from this map takes precedence.
@@ -412,12 +412,51 @@ def _pmap_merge[K, V](left_map: PMap[K, V], right_map: PMap[K, V]) -> PMap[K, V]
             return right_map
         case (_, PMapEmpty()):
             return left_map
-        case (PMapBranch(_, left_left, left_key, left_value, left_right), _):
-            # Split right_map around left_key and merge recursively
-            smaller, _, larger = _pmap_split(right_map, left_key)
-            merged_left = _pmap_merge(left_left, smaller)
-            merged_right = _pmap_merge(left_right, larger)
-            return _pmap_balance(merged_left, left_key, left_value, merged_right)
+        case (PMapBranch(left_size, _, _, _, _), PMapBranch(right_size, _, _, _, _)):
+            # Use the smaller map to split the larger one for better complexity
+            if left_size <= right_size:
+                return _pmap_merge_smaller_into_larger(
+                    left_map, right_map, prefer_smaller=True
+                )
+            else:
+                return _pmap_merge_smaller_into_larger(
+                    right_map, left_map, prefer_smaller=False
+                )
+        case _:
+            raise Impossible
+
+
+def _pmap_merge_smaller_into_larger[K, V](
+    smaller_map: PMap[K, V], larger_map: PMap[K, V], prefer_smaller: bool
+) -> PMap[K, V]:
+    """Merge by processing each entry of the smaller map against the larger map.
+
+    This achieves O(m log(n/m+1)) complexity where m <= n are the sizes.
+
+    Args:
+        smaller_map: The smaller map to process
+        larger_map: The larger map to split
+        prefer_smaller: If True, prefer values from smaller_map on conflicts,
+                       if False, prefer values from larger_map on conflicts
+    """
+    match smaller_map:
+        case PMapEmpty():
+            return larger_map
+        case PMapBranch(_, left, key, value, right):
+            # Split larger_map around key and merge recursively
+            smaller_part, existing_value, larger_part = _pmap_split(larger_map, key)
+            merged_left = _pmap_merge_smaller_into_larger(
+                left, smaller_part, prefer_smaller
+            )
+            merged_right = _pmap_merge_smaller_into_larger(
+                right, larger_part, prefer_smaller
+            )
+
+            # Choose which value to use based on preference
+            final_value = (
+                value if prefer_smaller or existing_value is None else existing_value
+            )
+            return _pmap_balance(merged_left, key, final_value, merged_right)
         case _:
             raise Impossible
 
