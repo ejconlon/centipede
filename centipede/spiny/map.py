@@ -184,7 +184,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
     def merge(self, other: PMap[K, V]) -> PMap[K, V]:
         """Merge this map with another map.
 
-        If both maps contain the same key, the value from the other map takes precedence.
+        If both maps contain the same key, the value from this map takes precedence.
 
         Args:
             other: The map to merge with this one.
@@ -192,8 +192,8 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             A new map containing entries from both maps.
         """
-        result = self
-        for key, value in other.items():
+        result = other
+        for key, value in self.items():
             result = result.put(key, value)
         return result
 

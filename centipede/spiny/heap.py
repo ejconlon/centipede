@@ -1,10 +1,10 @@
 """Persistent min-heap implementation using Brodal-Okasaki binomial heaps.
 
 This module provides a functional min-heap data structure that supports
-efficient insertion, deletion, and melding operations while maintaining
+efficient insertion, deletion, and merging operations while maintaining
 persistence (immutability).
 
-Each key is associated with a single value.
+The heap can be used with Entry for map-like functionality.
 """
 
 from __future__ import annotations
@@ -19,41 +19,36 @@ __all__ = ["PHeap"]
 
 
 @dataclass(frozen=True, eq=False)
-class PHeapNode[K, V]:
+class PHeapNode[T]:
     """Internal node representation for the binomial heap.
 
-    Each node contains a key-values pair, a rank indicating the size of the
+    Each node contains a value, a rank indicating the depth of the
     subtree, and a reference to child heaps.
 
     Attributes:
-        key: The key used for heap ordering.
-        value: The value associated with the key.
-        rank: The rank (size) of this heap node.
+        value: The value used for heap ordering.
+        rank: The rank (depth) of this heap node.
         rest: Child heap containing remaining elements.
     """
 
-    key: K
-    value: V
+    value: T
     rank: int
-    rest: PHeap[K, V]
+    rest: PHeap[T]
 
 
 @dataclass(frozen=True, eq=False)
-class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
+class PHeap[T](Sized, Iterating[T]):
     """A Brodal-Okasaki persistent min-heap"""
 
     _size: int
-    _children: PSeq[PHeapNode[K, V]]
+    _children: PSeq[PHeapNode[T]]
 
     @staticmethod
-    def empty(
-        _kty: Optional[Type[K]] = None, _vty: Optional[Type[V]] = None
-    ) -> PHeap[K, V]:
+    def empty(_ty: Optional[Type[T]] = None) -> PHeap[T]:
         """Create an empty heap.
 
         Args:
-            _kty: Optional type hint for keys (unused).
-            _vty: Optional type hint for values (unused).
+            _ty: Optional type hint for elements (unused).
 
         Returns:
             An empty heap instance.
@@ -61,31 +56,30 @@ class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
         return _HEAP_EMPTY
 
     @staticmethod
-    def singleton(key: K, value: V) -> PHeap[K, V]:
-        """Create a heap containing a single key-value pair.
+    def singleton(value: T) -> PHeap[T]:
+        """Create a heap containing a single element.
 
         Args:
-            key: The key for the single element.
-            value: The value for the single element.
+            value: The singleton element.
 
         Returns:
-            A heap containing only the given key-value pair.
+            A heap containing only the given element.
         """
-        return PHeap(1, PSeq.singleton(PHeapNode(key, value, 0, PHeap.empty())))
+        return PHeap(1, PSeq.singleton(PHeapNode(value, 0, PHeap.empty())))
 
     @staticmethod
-    def mk(entries: Iterable[Tuple[K, V]]) -> PHeap[K, V]:
-        """Create a heap from an iterable of key-value pairs.
+    def mk(values: Iterable[T]) -> PHeap[T]:
+        """Create a heap from an iterable of elements.
 
         Args:
-            entries: Iterable of (key, value) tuples to insert into the heap.
+            values: Iterable of elements to insert into the heap.
 
         Returns:
-            A heap containing all the given entries.
+            A heap containing all the given elements.
         """
-        heap: PHeap[K, V] = PHeap.empty()
-        for key, value in entries:
-            heap = heap.insert(key, value)
+        heap: PHeap[T] = PHeap.empty()
+        for value in values:
+            heap = heap.insert(value)
         return heap
 
     @override
@@ -97,36 +91,29 @@ class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
         """
         return self._children.null()
 
-    def find_min(self) -> Optional[Tuple[K, V, PHeap[K, V]]]:
-        """Find the minimum element in the heap.
+    @override
+    def size(self) -> int:
+        """Return the number of elements in the heap.
 
         Returns:
-            None if the heap is empty, otherwise a tuple containing:
-            - The minimum key
-            - The corresponding value
-            - A new heap with the minimum element removed
+            The total number of elements in the heap.
         """
-        result = _heap_find_min(self)
-        if result is None:
-            return None
-        key, value, remaining = result
-        return (key, value, remaining)
+        return self._size
 
-    def insert(self, key: K, value: V) -> PHeap[K, V]:
-        """Insert a new key-value pair into the heap.
+    def insert(self, value: T) -> PHeap[T]:
+        """Insert a new element into the heap.
 
         Args:
-            key: The key to insert.
-            value: The value associated with the key.
+            value: The element to insert.
 
         Returns:
             A new heap containing the inserted element.
         """
-        cand = PHeapNode(key, value, 0, PHeap.empty())
+        cand = PHeapNode(value, 0, PHeap.empty())
         new_heap = _heap_insert(cand, self)
         return PHeap(self._size + 1, new_heap._children)
 
-    def meld(self, other: PHeap[K, V]) -> PHeap[K, V]:
+    def merge(self, other: PHeap[T]) -> PHeap[T]:
         """Merge this heap with another heap.
 
         Args:
@@ -135,10 +122,24 @@ class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
         Returns:
             A new heap containing all elements from both heaps.
         """
-        new_heap = _heap_meld(self, other)
+        new_heap = _heap_merge(self, other)
         return PHeap(self._size + other._size, new_heap._children)
 
-    def delete_min(self) -> Optional[PHeap[K, V]]:
+    def find_min(self) -> Optional[Tuple[T, PHeap[T]]]:
+        """Find the minimum element in the heap.
+
+        Returns:
+            None if the heap is empty, otherwise a tuple containing:
+            - The minimum element
+            - A new heap with the minimum element removed
+        """
+        result = _heap_find_min(self)
+        if result is None:
+            return None
+        value, remaining = result
+        return (value, remaining)
+
+    def delete_min(self) -> Optional[PHeap[T]]:
         """Remove the minimum element from the heap.
 
         Returns:
@@ -146,27 +147,18 @@ class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
             minimum element removed.
         """
         result = self.find_min()
-        return None if result is None else result[2]
+        return None if result is None else result[1]
 
     @override
-    def size(self) -> int:
-        """Return the number of elements in the heap.
-
-        Returns:
-            The total number of key-value pairs in the heap.
-        """
-        return self._size
-
-    @override
-    def iter(self) -> Generator[Tuple[K, V]]:
+    def iter(self) -> Generator[T]:
         """Iterate through the heap in ascending order.
 
         Yields:
-            Tuples of (key, value) pairs in ascending order by key.
+            Elements in ascending order.
         """
         return _heap_iter(self)
 
-    def __add__(self, other: PHeap[K, V]) -> PHeap[K, V]:
+    def __add__(self, other: PHeap[T]) -> PHeap[T]:
         """Merge heaps using the + operator.
 
         Args:
@@ -175,18 +167,40 @@ class PHeap[K, V](Sized, Iterating[Tuple[K, V]]):
         Returns:
             A new heap containing all elements from both heaps.
         """
-        return self.meld(other)
+        return self.merge(other)
+
+    def __rshift__(self, value: T) -> PHeap[T]:
+        """Insert element using >> operator (element on right).
+
+        Args:
+            value: The element to insert.
+
+        Returns:
+            A new set with the element inserted.
+        """
+        return self.insert(value)
+
+    def __rlshift__(self, value: T) -> PHeap[T]:
+        """Insert element using << operator (element on left).
+
+        Args:
+            value: The element to insert.
+
+        Returns:
+            A new set with the element inserted.
+        """
+        return self.insert(value)
 
 
-_HEAP_EMPTY: PHeap[Any, Any] = PHeap(0, PSeq.empty())
+_HEAP_EMPTY: PHeap[Any] = PHeap(0, PSeq.empty())
 
 
-def _calculate_node_size[K, V](node: PHeapNode[K, V]) -> int:
+def _calculate_node_size[T](node: PHeapNode[T]) -> int:
     """Calculate the size of a heap node (1 + size of its rest heap)."""
     return 1 + node.rest._size
 
 
-def _heap_insert[K, V](cand: PHeapNode[K, V], heap: PHeap[K, V]) -> PHeap[K, V]:
+def _heap_insert[T](cand: PHeapNode[T], heap: PHeap[T]) -> PHeap[T]:
     cand_size = _calculate_node_size(cand)
     match heap._children.uncons():
         case None:
@@ -202,14 +216,11 @@ def _heap_insert[K, V](cand: PHeapNode[K, V], heap: PHeap[K, V]) -> PHeap[K, V]:
             raise Impossible
 
 
-def _heap_link[K, V](
-    first: PHeapNode[K, V], second: PHeapNode[K, V]
-) -> PHeapNode[K, V]:
-    match compare(first.key, second.key):
+def _heap_link[T](first: PHeapNode[T], second: PHeapNode[T]) -> PHeapNode[T]:
+    match compare(first.value, second.value):
         case Ordering.Gt:
             new_rest_size = second.rest._size + _calculate_node_size(first)
             return PHeapNode(
-                second.key,
                 second.value,
                 second.rank + 1,
                 PHeap(new_rest_size, second.rest._children.cons(first)),
@@ -217,14 +228,13 @@ def _heap_link[K, V](
         case _:
             new_rest_size = first.rest._size + _calculate_node_size(second)
             return PHeapNode(
-                first.key,
                 first.value,
                 first.rank + 1,
                 PHeap(new_rest_size, first.rest._children.cons(second)),
             )
 
 
-def _heap_meld[K, V](first: PHeap[K, V], second: PHeap[K, V]) -> PHeap[K, V]:
+def _heap_merge[T](first: PHeap[T], second: PHeap[T]) -> PHeap[T]:
     match first._children.uncons():
         case None:
             return second
@@ -235,7 +245,7 @@ def _heap_meld[K, V](first: PHeap[K, V], second: PHeap[K, V]) -> PHeap[K, V]:
                 case (second_head, second_tail):
                     if first_head.rank < second_head.rank:
                         first_tail_size = first._size - _calculate_node_size(first_head)
-                        tail = _heap_meld(PHeap(first_tail_size, first_tail), second)
+                        tail = _heap_merge(PHeap(first_tail_size, first_tail), second)
                         return PHeap(
                             tail._size + _calculate_node_size(first_head),
                             tail._children.cons(first_head),
@@ -244,7 +254,7 @@ def _heap_meld[K, V](first: PHeap[K, V], second: PHeap[K, V]) -> PHeap[K, V]:
                         second_tail_size = second._size - _calculate_node_size(
                             second_head
                         )
-                        tail = _heap_meld(first, PHeap(second_tail_size, second_tail))
+                        tail = _heap_merge(first, PHeap(second_tail_size, second_tail))
                         return PHeap(
                             tail._size + _calculate_node_size(second_head),
                             tail._children.cons(second_head),
@@ -255,7 +265,7 @@ def _heap_meld[K, V](first: PHeap[K, V], second: PHeap[K, V]) -> PHeap[K, V]:
                         second_tail_size = second._size - _calculate_node_size(
                             second_head
                         )
-                        tail = _heap_meld(
+                        tail = _heap_merge(
                             PHeap(first_tail_size, first_tail),
                             PHeap(second_tail_size, second_tail),
                         )
@@ -266,40 +276,40 @@ def _heap_meld[K, V](first: PHeap[K, V], second: PHeap[K, V]) -> PHeap[K, V]:
             raise Impossible
 
 
-def _heap_find_min[K, V](
-    heap: PHeap[K, V],
-) -> Optional[Tuple[K, V, PHeap[K, V]]]:
+def _heap_find_min[T](
+    heap: PHeap[T],
+) -> Optional[Tuple[T, PHeap[T]]]:
     match heap._children.uncons():
         case None:
             return None
         case (head, tail):
             if tail.null():
-                return (head.key, head.value, head.rest)
+                return (head.value, head.rest)
             else:
                 tail_size = heap._size - _calculate_node_size(head)
                 cand = _heap_find_min(PHeap(tail_size, tail))
-                if cand is None or compare(head.key, cand[0]) != Ordering.Gt:
+                if cand is None or compare(head.value, cand[0]) != Ordering.Gt:
                     # Choose head when it's smaller or equal (prefer head for ties)
-                    rest = _heap_meld(head.rest, PHeap(tail_size, tail))
-                    return (head.key, head.value, rest)
+                    rest = _heap_merge(head.rest, PHeap(tail_size, tail))
+                    return (head.value, rest)
                 else:
                     # Only choose candidate when head is strictly greater
                     head_as_heap = PHeap(
                         _calculate_node_size(head), PSeq.singleton(head)
                     )
-                    rest = _heap_meld(head_as_heap, cand[2])
-                    return (cand[0], cand[1], rest)
+                    rest = _heap_merge(head_as_heap, cand[1])
+                    return (cand[0], rest)
         case _:
             raise Impossible
 
 
-def _heap_iter[K, V](heap: PHeap[K, V]) -> Generator[Tuple[K, V]]:
+def _heap_iter[T](heap: PHeap[T]) -> Generator[T]:
     while not heap.null():
         min_result = heap.find_min()
         if min_result is None:
             break
-        key, value, _ = min_result
-        yield (key, value)
+        value, _ = min_result
+        yield value
 
         delete_result = heap.delete_min()
         if delete_result is None:

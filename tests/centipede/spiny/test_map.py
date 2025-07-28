@@ -356,13 +356,13 @@ def test_merge_overlapping_maps():
 
     result = map1.merge(map2)
 
-    # Values from map2 should win for common keys
+    # Values from map1 should win for common keys
     assert result.size() == 6
     expected_items = [
         (1, "one"),
         (2, "two"),
-        (3, "THREE"),
-        (4, "FOUR"),
+        (3, "three"),
+        (4, "four"),
         (5, "five"),
         (6, "six"),
     ]
@@ -388,13 +388,13 @@ def test_merge_subset_maps():
     result1 = map1.merge(map2)
     result2 = map2.merge(map1)
 
-    # map2 values should win in result1
-    expected1 = [(1, "one"), (2, "TWO"), (3, "three"), (4, "FOUR"), (5, "five")]
+    # map1 values should win in result1 (left precedence)
+    expected1 = [(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")]
     assert list(result1.items()) == expected1
     assert result1.size() == 5
 
-    # map1 values should win in result2
-    expected2 = [(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")]
+    # map2 values should win in result2 (left precedence)
+    expected2 = [(1, "one"), (2, "TWO"), (3, "three"), (4, "FOUR"), (5, "five")]
     assert list(result2.items()) == expected2
     assert result2.size() == 5
 
@@ -411,7 +411,7 @@ def test_merge_single_entry_maps():
     assert list(result1.items()) == [(1, "one"), (2, "two")]
     assert result1.size() == 2
 
-    assert list(result2.items()) == [(1, "ONE")]
+    assert list(result2.items()) == [(1, "one")]  # map1 wins with left precedence
     assert result2.size() == 1
 
 
@@ -435,7 +435,7 @@ def test_merge_string_maps():
 
     expected = [
         ("apple", 1),
-        ("banana", 20),
+        ("banana", 2),  # map1 wins with left precedence
         ("cherry", 3),
         ("date", 4),
         ("elderberry", 5),
@@ -451,7 +451,13 @@ def test_merge_operator_plus():
 
     result = map1 + map2
 
-    expected = [(1, "one"), (2, "two"), (3, "THREE"), (4, "four"), (5, "five")]
+    expected = [
+        (1, "one"),
+        (2, "two"),
+        (3, "three"),
+        (4, "four"),
+        (5, "five"),
+    ]  # map1 wins with left precedence
     assert list(result.items()) == expected
     assert result.size() == 5
 
@@ -981,3 +987,21 @@ def test_edge_cases():
     assert map_with_none.contains(1)  # Should still contain the key
     assert map_with_none.get(3) is None
     assert not map_with_none.contains(3)  # Should not contain non-existent key
+
+
+def test_merge_favors_left_values_on_collision():
+    """Test that merging maps favors values from the left map when keys collide"""
+    left_map = PMap.mk([(1, "left_one"), (2, "left_two"), (3, "left_three")])
+    right_map = PMap.mk([(2, "right_two"), (3, "right_three"), (4, "right_four")])
+
+    result = left_map.merge(right_map)
+
+    # Values from left_map should win for common keys (2 and 3)
+    assert result.size() == 4
+    expected_items = [
+        (1, "left_one"),
+        (2, "left_two"),  # Should keep left value, not "right_two"
+        (3, "left_three"),  # Should keep left value, not "right_three"
+        (4, "right_four"),
+    ]
+    assert list(result.items()) == expected_items

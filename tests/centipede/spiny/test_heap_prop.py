@@ -1,6 +1,6 @@
 """Property-based tests for PHeap using Hypothesis."""
 
-from typing import List, Tuple
+from typing import List
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -12,31 +12,25 @@ configure_hypo()
 
 
 @st.composite
-def heap_strategy(draw, key_strategy=st.integers(), value_strategy=st.text()):
-    """Generate a PHeap with random key-value pairs."""
-    entries = draw(
-        st.lists(st.tuples(key_strategy, value_strategy), min_size=0, max_size=20)
-    )
-    return PHeap.mk(entries)
+def heap_strategy(draw, value_strategy=st.integers()):
+    """Generate a PHeap with random values."""
+    values = draw(st.lists(value_strategy, min_size=0, max_size=20))
+    return PHeap.mk(values)
 
 
 @st.composite
-def heap_with_entries_strategy(
-    draw, key_strategy=st.integers(), value_strategy=st.text()
-):
-    """Generate a PHeap along with the entries used to create it."""
-    entries = draw(
-        st.lists(st.tuples(key_strategy, value_strategy), min_size=0, max_size=20)
-    )
-    return PHeap.mk(entries), entries
+def heap_with_values_strategy(draw, value_strategy=st.integers()):
+    """Generate a PHeap along with the values used to create it."""
+    values = draw(st.lists(value_strategy, min_size=0, max_size=20))
+    return PHeap.mk(values), values
 
 
-@given(st.lists(st.tuples(st.integers(), st.text()), min_size=0, max_size=50))
-def test_heap_mk_size_consistency(entries: List[Tuple[int, str]]):
-    """Creating a PHeap from entries should have correct size."""
-    heap = PHeap.mk(entries)
-    assert heap.size() == len(entries)
-    assert heap.null() == (len(entries) == 0)
+@given(st.lists(st.integers(), min_size=0, max_size=50))
+def test_heap_mk_size_consistency(values: List[int]):
+    """Creating a PHeap from values should have correct size."""
+    heap = PHeap.mk(values)
+    assert heap.size() == len(values)
+    assert heap.null() == (len(values) == 0)
 
 
 @given(heap_strategy())
@@ -49,14 +43,14 @@ def test_exhaustive_heap_operations(heap):
     while not current.null():
         min_result = current.find_min()
         assert min_result is not None
-        key, value, remaining = min_result
+        value, remaining = min_result
 
         # Check delete_min consistency
         delete_result = current.delete_min()
         assert delete_result is not None
         assert delete_result.size() == remaining.size()
 
-        extracted.append((key, value))
+        extracted.append(value)
         current = delete_result
 
     # Should have extracted all elements
@@ -66,55 +60,54 @@ def test_exhaustive_heap_operations(heap):
     assert current.delete_min() is None
 
 
-@given(heap_strategy(), st.integers(), st.text())
-def test_insert_increases_size(heap, key, value):
+@given(heap_strategy(), st.integers())
+def test_insert_increases_size(heap, value):
     """Inserting an element should increase size by 1."""
     original_size = heap.size()
-    new_heap = heap.insert(key, value)
+    new_heap = heap.insert(value)
 
     assert new_heap.size() == original_size + 1
     assert not new_heap.null()
 
 
-@given(heap_strategy(), st.integers(), st.text())
-def test_insert_preserves_min_heap_property(heap, key, value):
+@given(heap_strategy(), st.integers())
+def test_insert_preserves_min_heap_property(heap, value):
     """After insertion, find_min should return a valid minimum."""
-    new_heap = heap.insert(key, value)
+    new_heap = heap.insert(value)
 
     if heap.null():
         # If original was empty, new minimum should be the inserted element
         min_result = new_heap.find_min()
         assert min_result is not None
-        min_key, min_value, _ = min_result
-        assert min_key == key
+        min_value, _ = min_result
         assert min_value == value
     else:
-        # New minimum should be <= inserted key and <= original minimum
+        # New minimum should be <= inserted value and <= original minimum
         original_min = heap.find_min()
         assert original_min is not None
-        original_min_key, _, _ = original_min
+        original_min_value, _ = original_min
 
         new_min = new_heap.find_min()
         assert new_min is not None
-        new_min_key, _, _ = new_min
+        new_min_value, _ = new_min
 
-        assert new_min_key <= key
-        assert new_min_key <= original_min_key
+        assert new_min_value <= value
+        assert new_min_value <= original_min_value
 
 
-@given(heap_with_entries_strategy())
-def test_find_min_returns_actual_minimum(heap_and_entries):
-    """find_min should return the actual minimum key from all entries."""
-    heap, entries = heap_and_entries
+@given(heap_with_values_strategy())
+def test_find_min_returns_actual_minimum(heap_and_values):
+    """find_min should return the actual minimum value from all values."""
+    heap, values = heap_and_values
 
-    if not entries:
+    if not values:
         assert heap.find_min() is None
     else:
-        expected_min_key = min(key for key, _ in entries)
+        expected_min_value = min(values)
         min_result = heap.find_min()
         assert min_result is not None
-        actual_min_key, _, _ = min_result
-        assert actual_min_key == expected_min_key
+        actual_min_value, _ = min_result
+        assert actual_min_value == expected_min_value
 
 
 @given(heap_strategy())
@@ -130,7 +123,7 @@ def test_find_min_delete_min_consistency(heap):
         assert find_result is not None
         assert delete_result is not None
 
-        _, _, remaining_from_find = find_result
+        _, remaining_from_find = find_result
 
         assert remaining_from_find.size() == delete_result.size()
         assert remaining_from_find.size() == heap.size() - 1
@@ -149,28 +142,28 @@ def test_delete_min_decreases_size(heap):
 
 
 @given(heap_strategy(), heap_strategy())
-def test_meld_size_additive(heap1, heap2):
-    """Melded heap size should equal sum of individual sizes."""
-    melded = heap1.meld(heap2)
-    assert melded.size() == heap1.size() + heap2.size()
+def test_merge_size_additive(heap1, heap2):
+    """mergeed heap size should equal sum of individual sizes."""
+    mergeed = heap1.merge(heap2)
+    assert mergeed.size() == heap1.size() + heap2.size()
 
 
 @given(heap_strategy())
-def test_meld_empty_identity(heap1):
-    """Melding with empty heap should be identity."""
-    empty = PHeap.empty(int, str)
+def test_merge_empty_identity(heap1):
+    """merging with empty heap should be identity."""
+    empty = PHeap.empty(int)
 
-    assert heap1.meld(empty).size() == heap1.size()
-    assert empty.meld(heap1).size() == heap1.size()
+    assert heap1.merge(empty).size() == heap1.size()
+    assert empty.merge(heap1).size() == heap1.size()
 
 
 @given(heap_strategy(), heap_strategy())
-def test_meld_preserves_min_heap_property(heap1, heap2):
-    """Melded heap should maintain min-heap property."""
-    melded = heap1.meld(heap2)
+def test_merge_preserves_min_heap_property(heap1, heap2):
+    """mergeed heap should maintain min-heap property."""
+    mergeed = heap1.merge(heap2)
 
     if heap1.null() and heap2.null():
-        assert melded.null()
+        assert mergeed.null()
     else:
         # Find minimums of individual heaps
         min1 = heap1.find_min()
@@ -184,18 +177,18 @@ def test_meld_preserves_min_heap_property(heap1, heap2):
         elif min2 is not None:
             expected_overall_min = min2[0]
 
-        melded_min = melded.find_min()
-        assert melded_min is not None
-        assert melded_min[0] == expected_overall_min
+        mergeed_min = mergeed.find_min()
+        assert mergeed_min is not None
+        assert mergeed_min[0] == expected_overall_min
 
 
 @given(heap_strategy(), heap_strategy())
-def test_meld_associative(heap1, heap2):
-    """Meld should be associative: (a + b) + c == a + (b + c)."""
-    heap3 = PHeap.mk([(100, "hundred"), (200, "two_hundred")])
+def test_merge_associative(heap1, heap2):
+    """merge should be associative: (a + b) + c == a + (b + c)."""
+    heap3 = PHeap.mk([100, 200])
 
-    left_assoc = heap1.meld(heap2).meld(heap3)
-    right_assoc = heap1.meld(heap2.meld(heap3))
+    left_assoc = heap1.merge(heap2).merge(heap3)
+    right_assoc = heap1.merge(heap2.merge(heap3))
 
     # Both should have same size
     assert left_assoc.size() == right_assoc.size()
@@ -214,17 +207,16 @@ def test_meld_associative(heap1, heap2):
 @given(heap_strategy())
 def test_iter_sorted_order(heap):
     """Iterating through heap should yield elements in sorted order."""
-    items = list(heap.iter())
-    keys = [key for key, _ in items]
+    values = list(heap.iter())
 
-    assert len(items) == heap.size()
-    assert keys == sorted(keys)
+    assert len(values) == heap.size()
+    assert values == sorted(values)
 
 
 @given(heap_strategy())
 def test_iter_exhausts_heap_elements(heap):
     """Iterating should yield all elements that were in the heap."""
-    items = list(heap.iter())
+    values = list(heap.iter())
 
     # Check that we can extract the same elements by repeated delete_min
     extracted = []
@@ -232,38 +224,37 @@ def test_iter_exhausts_heap_elements(heap):
     while not current.null():
         min_result = current.find_min()
         assert min_result is not None
-        key, value, remaining = min_result
-        extracted.append((key, value))
+        value, remaining = min_result
+        extracted.append(value)
         current = remaining
 
-    assert len(items) == len(extracted)
-    assert items == extracted
+    assert len(values) == len(extracted)
+    assert values == extracted
 
 
-@given(heap_with_entries_strategy())
-def test_iter_contains_all_inserted_elements(heap_and_entries):
-    """Iteration should contain all originally inserted elements."""
-    heap, entries = heap_and_entries
+@given(heap_with_values_strategy())
+def test_iter_contains_all_inserted_elements(heap_and_values):
+    """Iteration should contain all originally inserted values."""
+    heap, values = heap_and_values
 
-    items = list(heap.iter())
-    items_sorted = sorted(items)
-    entries_sorted = sorted(entries)
+    heap_values = list(heap.iter())
+    heap_values_sorted = sorted(heap_values)
+    values_sorted = sorted(values)
 
-    assert items_sorted == entries_sorted
+    assert heap_values_sorted == values_sorted
 
 
-@given(st.integers(), st.text())
-def test_singleton_properties(key, value):
+@given(st.integers())
+def test_singleton_properties(value):
     """Singleton heap should have expected properties."""
-    heap = PHeap.singleton(key, value)
+    heap = PHeap.singleton(value)
 
     assert not heap.null()
     assert heap.size() == 1
 
     min_result = heap.find_min()
     assert min_result is not None
-    min_key, min_value, remaining = min_result
-    assert min_key == key
+    min_value, remaining = min_result
     assert min_value == value
     assert remaining.null()
 
@@ -271,21 +262,21 @@ def test_singleton_properties(key, value):
     assert delete_result is not None
     assert delete_result.null()
 
-    items = list(heap.iter())
-    assert items == [(key, value)]
+    values = list(heap.iter())
+    assert values == [value]
 
 
 @given(heap_strategy())
 def test_multiple_delete_min_maintains_order(heap):
     """Repeated delete_min should maintain sorted order."""
-    extracted_keys = []
+    extracted_values = []
     current = heap
 
     while not current.null():
         min_result = current.find_min()
         assert min_result is not None
-        key, _, remaining = min_result
-        extracted_keys.append(key)
+        value, remaining = min_result
+        extracted_values.append(value)
 
         delete_result = current.delete_min()
         assert delete_result is not None
@@ -293,26 +284,24 @@ def test_multiple_delete_min_maintains_order(heap):
 
         current = remaining
 
-    # Extracted keys should be in non-decreasing order
-    assert extracted_keys == sorted(extracted_keys)
+    # Extracted values should be in non-decreasing order
+    assert extracted_values == sorted(extracted_values)
 
 
-@given(heap_strategy(), st.integers(), st.text())
-def test_insert_then_delete_min_with_duplicates(heap, key, value):
+@given(heap_strategy(), st.integers())
+def test_insert_then_delete_min_with_duplicates(heap, value):
     """Insert then delete_min should handle duplicates correctly."""
-    # Insert the same key multiple times
-    heap_with_dups = (
-        heap.insert(key, value).insert(key, f"{value}_2").insert(key, f"{value}_3")
-    )
+    # Insert the same value multiple times
+    heap_with_dups = heap.insert(value).insert(value).insert(value)
 
     original_size = heap.size()
     assert heap_with_dups.size() == original_size + 3
 
-    # The minimum should be no greater than our inserted key
+    # The minimum should be no greater than our inserted value
     min_result = heap_with_dups.find_min()
     assert min_result is not None
-    min_key, _, _ = min_result
-    assert min_key <= key
+    min_value, _ = min_result
+    assert min_value <= value
 
 
 @given(heap_strategy())
@@ -322,8 +311,8 @@ def test_heap_immutability(heap):
     original_null = heap.null()
 
     # Perform various operations
-    heap.insert(999, "test")
-    heap.meld(PHeap.singleton(1000, "another"))
+    heap.insert(999)
+    heap.merge(PHeap.singleton(1000))
     heap.delete_min()
     heap.find_min()
     list(heap.iter())
@@ -334,46 +323,44 @@ def test_heap_immutability(heap):
 
 
 @given(heap_strategy(), heap_strategy())
-def test_addition_operator_equals_meld(heap1, heap2):
-    """+ operator should be equivalent to meld method."""
-    meld_result = heap1.meld(heap2)
+def test_addition_operator_equals_merge(heap1, heap2):
+    """+ operator should be equivalent to merge method."""
+    merge_result = heap1.merge(heap2)
     add_result = heap1 + heap2
 
-    assert meld_result.size() == add_result.size()
+    assert merge_result.size() == add_result.size()
 
     # Both should have same minimum
-    meld_min = meld_result.find_min()
+    merge_min = merge_result.find_min()
     add_min = add_result.find_min()
 
-    if meld_min is None:
+    if merge_min is None:
         assert add_min is None
     else:
         assert add_min is not None
-        assert meld_min[0] == add_min[0]
-        assert meld_min[1] == add_min[1]
+        assert merge_min[0] == add_min[0]
 
 
-@given(st.lists(st.tuples(st.integers(), st.text()), min_size=1, max_size=10))
-def test_heap_sort_property(entries: List[Tuple[int, str]]):
-    """Using heap as priority queue should sort elements by key."""
-    heap = PHeap.mk(entries)
+@given(st.lists(st.integers(), min_size=1, max_size=10))
+def test_heap_sort_property(values: List[int]):
+    """Using heap as priority queue should sort elements by value."""
+    heap = PHeap.mk(values)
 
     sorted_by_heap = list(heap.iter())
 
     # Should extract all elements
-    assert len(sorted_by_heap) == len(entries)
+    assert len(sorted_by_heap) == len(values)
 
-    # Keys should be in non-decreasing order
-    keys = [key for key, _ in sorted_by_heap]
-    assert keys == sorted(keys)
+    # values should be in non-decreasing order
+    assert sorted_by_heap == sorted(sorted_by_heap)
 
-    # Should contain the same elements (order may vary for equal keys)
-    assert sorted(sorted_by_heap) == sorted(entries)
+    # Should contain the same elements
+    assert sorted(sorted_by_heap) == sorted(values)
 
 
 @given(heap_strategy())
 def test_find_min_idempotent(heap):
-    """Multiple calls to find_min should return consistent key-value pairs."""
+    """Multiple calls to find_min should return consistent values."""
     result1 = heap.find_min()
     result2 = heap.find_min()
     result3 = heap.find_min()
@@ -382,32 +369,31 @@ def test_find_min_idempotent(heap):
         assert result2 is None and result3 is None
     else:
         assert result2 is not None and result3 is not None
-        # Keys and values should be the same, though heap objects may differ
+        # values should be the same, though heap objects may differ
         assert result1[0] == result2[0] == result3[0]
-        assert result1[1] == result2[1] == result3[1]
 
 
-@given(heap_with_entries_strategy())
-def test_size_matches_entry_count(heap_and_entries):
-    """PHeap size should match the number of entries inserted."""
-    heap, entries = heap_and_entries
-    assert heap.size() == len(entries)
+@given(heap_with_values_strategy())
+def test_size_matches_value_count(heap_and_values):
+    """PHeap size should match the number of values inserted."""
+    heap, values = heap_and_values
+    assert heap.size() == len(values)
 
 
-@given(st.lists(st.tuples(st.integers(), st.text()), min_size=0, max_size=15))
-def test_sequential_operations_maintain_invariants(entries: List[Tuple[int, str]]):
+@given(st.lists(st.integers(), min_size=0, max_size=15))
+def test_sequential_operations_maintain_invariants(values: List[int]):
     """Sequential insert/delete operations should maintain heap invariants."""
-    heap = PHeap.empty(int, str)
+    heap = PHeap.empty(int)
 
-    # Insert all entries
-    for key, value in entries:
-        heap = heap.insert(key, value)
+    # Insert all values
+    for value in values:
+        heap = heap.insert(value)
         assert not heap.null()
         min_result = heap.find_min()
         assert min_result is not None
 
-    # Delete half the entries
-    for _ in range(len(entries) // 2):
+    # Delete half the values
+    for _ in range(len(values) // 2):
         if not heap.null():
             original_size = heap.size()
             delete_result = heap.delete_min()
@@ -417,15 +403,15 @@ def test_sequential_operations_maintain_invariants(entries: List[Tuple[int, str]
 
 
 @given(heap_strategy())
-def test_meld_with_self(heap):
-    """Melding a heap with itself should double the size."""
-    melded = heap.meld(heap)
-    assert melded.size() == 2 * heap.size()
+def test_merge_with_self(heap):
+    """merging a heap with itself should double the size."""
+    mergeed = heap.merge(heap)
+    assert mergeed.size() == 2 * heap.size()
 
     if not heap.null():
         # Minimum should be the same
         original_min = heap.find_min()
-        melded_min = melded.find_min()
+        mergeed_min = mergeed.find_min()
         assert original_min is not None
-        assert melded_min is not None
-        assert original_min[0] == melded_min[0]
+        assert mergeed_min is not None
+        assert original_min[0] == mergeed_min[0]
