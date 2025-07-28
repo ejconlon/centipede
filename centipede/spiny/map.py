@@ -13,7 +13,7 @@ from centipede.spiny.common import (
     Sized,
     compare,
 )
-from centipede.spiny.set import PSet
+from centipede.spiny.set import PSet, PSetBranch, PSetEmpty
 
 __all__ = ["PMap", "Entry"]
 
@@ -107,15 +107,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             The value associated with the key, or None if the key is not found.
         """
-        # Search for the key in the entries
-        for entry in self._entries.iter():
-            cmp = compare(key, entry.key)
-            if cmp == Ordering.Eq:
-                return entry.value
-            elif cmp == Ordering.Lt:
-                # Key would be before this entry, so it's not in the map
-                break
-        return None
+        return _map_get(self, key)
 
     def contains(self, key: K) -> bool:
         """Check if the map contains the given key.
@@ -126,17 +118,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             True if the key exists in the map, False otherwise.
         """
-        # We need to search for the key directly, not rely on get()
-        # since get() returning None doesn't distinguish between
-        # "key not found" and "key has None value"
-        for entry in self._entries.iter():
-            cmp = compare(key, entry.key)
-            if cmp == Ordering.Eq:
-                return True
-            elif cmp == Ordering.Lt:
-                # Key would be before this entry, so it's not in the map
-                break
-        return False
+        return _map_contains(self, key)
 
     def put(self, key: K, value: V) -> PMap[K, V]:
         """Insert or update a key-value pair in the map.
@@ -150,7 +132,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         """
         entry = Entry(key, value)
         # Remove any existing entry with this key, then insert the new one
-        new_entries = self._remove_key(key).insert(entry)
+        new_entries = _map_remove(self, key)._entries.insert(entry)
         return PMap(new_entries)
 
     def remove(self, key: K) -> PMap[K, V]:
@@ -162,24 +144,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             A new map with the key-value pair removed.
         """
-        return PMap(self._remove_key(key))
-
-    def _remove_key(self, key: K) -> PSet[Entry[K, V]]:
-        """Helper method to remove a key from the internal set.
-
-        Args:
-            key: The key to remove.
-
-        Returns:
-            A new PSet with the entry for the given key removed.
-        """
-        # Build a new set excluding the target entry
-        result_entries: PSet[Entry[K, V]] = PSet.empty()
-        for entry in self._entries.iter():
-            if compare(key, entry.key) != Ordering.Eq:
-                result_entries = result_entries.insert(entry)
-
-        return result_entries
+        return _map_remove(self, key)
 
     def merge(self, other: PMap[K, V]) -> PMap[K, V]:
         """Merge this map with another map.
@@ -281,3 +246,47 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
             A new map containing entries from both maps.
         """
         return self.merge(other)
+
+
+def _map_get[K, V](pmap: PMap[K, V], key: K) -> Optional[V]:
+    current = pmap._entries
+    while True:
+        match current:
+            case PSetEmpty():
+                return None
+            case PSetBranch(_, left, entry, right):
+                cmp = compare(key, entry.key)
+                if cmp == Ordering.Eq:
+                    return entry.value
+                elif cmp == Ordering.Lt:
+                    current = left
+                else:
+                    current = right
+            case _:
+                return None
+
+
+def _map_contains[K, V](pmap: PMap[K, V], key: K) -> bool:
+    current = pmap._entries
+    while True:
+        match current:
+            case PSetEmpty():
+                return False
+            case PSetBranch(_, left, entry, right):
+                cmp = compare(key, entry.key)
+                if cmp == Ordering.Eq:
+                    return True
+                elif cmp == Ordering.Lt:
+                    current = left
+                else:
+                    current = right
+            case _:
+                return False
+
+
+def _map_remove[K, V](pmap: PMap[K, V], key: K) -> PMap[K, V]:
+    # HACK Since Entry comparison won't even look at value,
+    # we can fill in whatever to use as a pivot
+    dummy_entry = Entry(key, None)
+    smaller, larger = pmap._entries.split(dummy_entry)  # type: ignore
+    return PMap(smaller.merge(larger))
