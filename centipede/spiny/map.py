@@ -25,6 +25,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     ) -> PMap[K, V]:
         """Create an empty map.
 
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+
         Args:
             _kty: Optional key type hint (unused).
             _vty: Optional value type hint (unused).
@@ -37,6 +40,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     @staticmethod
     def singleton(key: K, value: V) -> PMap[K, V]:
         """Create a map containing a single key-value pair.
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
 
         Args:
             key: The key for the entry.
@@ -51,6 +57,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def mk(pairs: Iterable[Tuple[K, V]]) -> PMap[K, V]:
         """Create a map from an iterable of key-value pairs.
 
+        Time Complexity: O(n log n) where n is the number of pairs
+        Space Complexity: O(n) for the resulting tree
+
         Args:
             pairs: Iterable of (key, value) tuples.
 
@@ -64,7 +73,11 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     @override
     def null(self) -> bool:
-        """Check if the map is empty."""
+        """Check if the map is empty.
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+        """
         match self:
             case PMapEmpty():
                 return True
@@ -75,7 +88,11 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     @override
     def size(self) -> int:
-        """Get the number of key-value pairs in the map."""
+        """Get the number of key-value pairs in the map.
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+        """
         match self:
             case PMapEmpty():
                 return 0
@@ -86,7 +103,11 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     @override
     def iter(self) -> Generator[Tuple[K, V]]:
-        """Iterate over all key-value pairs in the map in key order."""
+        """Iterate over all key-value pairs in the map in key order.
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         match self:
             case PMapEmpty():
                 return
@@ -96,21 +117,36 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
                 yield from right.iter()
 
     def keys(self) -> Generator[K]:
-        """Iterate over all keys in the map in sorted order."""
+        """Iterate over all keys in the map in sorted order.
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         for key, _ in self.iter():
             yield key
 
     def values(self) -> Generator[V]:
-        """Iterate over all values in the map in key order."""
+        """Iterate over all values in the map in key order.
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         for _, value in self.iter():
             yield value
 
     def items(self) -> Generator[Tuple[K, V]]:
-        """Iterate over all key-value pairs in the map in key order."""
+        """Iterate over all key-value pairs in the map in key order.
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         yield from self.iter()
 
     def get(self, key: K) -> Optional[V]:
         """Get the value associated with a key.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for recursion stack
 
         Args:
             key: The key to look up.
@@ -123,6 +159,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def contains(self, key: K) -> bool:
         """Check if the map contains the given key.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for recursion stack
+
         Args:
             key: The key to check for.
 
@@ -133,6 +172,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     def put(self, key: K, value: V) -> PMap[K, V]:
         """Insert or update a key-value pair in the map.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Args:
             key: The key to insert or update.
@@ -146,6 +188,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def remove(self, key: K) -> PMap[K, V]:
         """Remove a key-value pair from the map.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Args:
             key: The key to remove.
 
@@ -156,6 +201,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     def merge(self, other: PMap[K, V]) -> PMap[K, V]:
         """Merge this map with another map.
+
+        Time Complexity: O(m + n) where m, n are sizes of the maps
+        Space Complexity: O(log(m + n)) for recursion and path copying
 
         If both maps contain the same key, the value from this map takes precedence.
 
@@ -169,6 +217,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     def find_min(self) -> Optional[Tuple[K, V, PMap[K, V]]]:
         """Find the minimum key-value pair in the map.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Returns:
             None if the map is empty, otherwise a tuple containing:
@@ -184,6 +235,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     def find_max(self) -> Optional[Tuple[PMap[K, V], K, V]]:
         """Find the maximum key-value pair in the map.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Returns:
             None if the map is empty, otherwise a tuple containing:
@@ -217,13 +271,18 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         result = self.find_max()
         return None if result is None else result[0]
 
-    def split(self, pivot_key: K) -> Tuple[PMap[K, V], PMap[K, V]]:
+    def split(self, pivot_key: K) -> Tuple[PMap[K, V], Optional[V], PMap[K, V]]:
         """Split a map into entries with keys smaller and larger than the pivot.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
-            A tuple (smaller, larger) where smaller contains entries with keys < pivot_key
-            and larger contains entries with keys > pivot_key. Entries with the pivot key
-            are excluded.
+            A tuple (smaller, pivot_value, larger) where:
+            - smaller contains entries with keys < pivot_key
+            - pivot_value is the value associated with pivot_key if it existed, None otherwise
+            - larger contains entries with keys > pivot_key
+            Entries with the pivot key are excluded from both smaller and larger.
         """
         return _pmap_split(self, pivot_key)
 
@@ -376,7 +435,7 @@ def _pmap_merge[K, V](left_map: PMap[K, V], right_map: PMap[K, V]) -> PMap[K, V]
             return left_map
         case (PMapBranch(_, left_left, left_key, left_value, left_right), _):
             # Split right_map around left_key and merge recursively
-            smaller, larger = _pmap_split(right_map, left_key)
+            smaller, _, larger = _pmap_split(right_map, left_key)
             merged_left = _pmap_merge(left_left, smaller)
             merged_right = _pmap_merge(left_right, larger)
             return _pmap_balance(merged_left, left_key, left_value, merged_right)
@@ -384,25 +443,27 @@ def _pmap_merge[K, V](left_map: PMap[K, V], right_map: PMap[K, V]) -> PMap[K, V]
             raise Impossible
 
 
-def _pmap_split[K, V](pmap: PMap[K, V], pivot_key: K) -> Tuple[PMap[K, V], PMap[K, V]]:
+def _pmap_split[K, V](
+    pmap: PMap[K, V], pivot_key: K
+) -> Tuple[PMap[K, V], Optional[V], PMap[K, V]]:
     match pmap:
         case PMapEmpty():
-            return (_PMAP_EMPTY, _PMAP_EMPTY)
+            return (_PMAP_EMPTY, None, _PMAP_EMPTY)
         case PMapBranch(_, left, key, value, right):
             cmp = compare(pivot_key, key)
             if cmp == Ordering.Lt:
                 # pivot_key < key, so this entry goes to larger side
-                left_smaller, left_larger = _pmap_split(left, pivot_key)
+                left_smaller, pivot_value, left_larger = _pmap_split(left, pivot_key)
                 larger = _pmap_balance(left_larger, key, value, right)
-                return (left_smaller, larger)
+                return (left_smaller, pivot_value, larger)
             elif cmp == Ordering.Gt:
                 # pivot_key > key, so this entry goes to smaller side
-                right_smaller, right_larger = _pmap_split(right, pivot_key)
+                right_smaller, pivot_value, right_larger = _pmap_split(right, pivot_key)
                 smaller = _pmap_balance(left, key, value, right_smaller)
-                return (smaller, right_larger)
+                return (smaller, pivot_value, right_larger)
             else:
-                # pivot_key == key, exclude this entry
-                return (left, right)
+                # pivot_key == key, found it and exclude this entry
+                return (left, value, right)
         case _:
             raise Impossible
 

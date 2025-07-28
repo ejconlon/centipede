@@ -91,6 +91,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def insert(self, value: T) -> PSet[T]:
         """Insert a value into the set.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Args:
             value: The value to insert.
 
@@ -102,6 +105,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def merge(self, other: PSet[T]) -> PSet[T]:
         """Merge this set with another set, returning a new set containing all elements.
 
+        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Space Complexity: O(log(m + n)) for recursion and path copying
+
         Args:
             other: The set to merge with this one.
 
@@ -112,6 +118,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
 
     def find_min(self) -> Optional[Tuple[T, PSet[T]]]:
         """Find the minimum element in the set.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Returns:
             None if the set is empty, otherwise a tuple containing:
@@ -133,6 +142,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def find_max(self) -> Optional[Tuple[PSet[T], T]]:
         """Find the maximum element in the set.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
             None if the set is empty, otherwise a tuple containing:
             - A new set with the maximum element removed
@@ -150,14 +162,87 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         result = self.find_max()
         return None if result is None else result[0]
 
-    def split(self, pivot: T) -> Tuple[PSet[T], PSet[T]]:
+    def split(self, pivot: T) -> Tuple[PSet[T], bool, PSet[T]]:
         """Split a set into elements smaller and larger than the pivot.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
-            A tuple (smaller, larger) where smaller contains elements < pivot
-            and larger contains elements > pivot. The pivot itself is excluded.
+            A tuple (smaller, pivot_found, larger) where:
+            - smaller contains elements < pivot
+            - pivot_found indicates whether pivot was in the original set
+            - larger contains elements > pivot
+            The pivot itself is excluded from both smaller and larger.
         """
         return _pset_split(self, pivot)
+
+    def contains(self, value: T) -> bool:
+        """Check if a value is present in the set.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for recursion stack
+
+        Args:
+            value: The value to search for.
+
+        Returns:
+            True if the value is in the set, False otherwise.
+        """
+        return _pset_contains(self, value)
+
+    def __contains__(self, value: T) -> bool:
+        """Support 'in' operator for membership testing.
+
+        Args:
+            value: The value to search for.
+
+        Returns:
+            True if the value is in the set, False otherwise.
+        """
+        return self.contains(value)
+
+    def union(self, other: PSet[T]) -> PSet[T]:
+        """Return the union of two sets.
+
+        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Space Complexity: O(log(m + n)) for recursion
+
+        Args:
+            other: The set to union with this one.
+
+        Returns:
+            A new set containing all elements from both sets.
+        """
+        return self.merge(other)
+
+    def intersection(self, other: PSet[T]) -> PSet[T]:
+        """Return the intersection of two sets.
+
+        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Space Complexity: O(log(min(m, n))) for recursion
+
+        Args:
+            other: The set to intersect with this one.
+
+        Returns:
+            A new set containing only elements present in both sets.
+        """
+        return _pset_intersection(self, other)
+
+    def difference(self, other: PSet[T]) -> PSet[T]:
+        """Return the difference of two sets (elements in self but not in other).
+
+        Time Complexity: O(m + n) where m, n are sizes of the sets
+        Space Complexity: O(log m) for recursion
+
+        Args:
+            other: The set to subtract from this one.
+
+        Returns:
+            A new set containing elements in self but not in other.
+        """
+        return _pset_difference(self, other)
 
     def __rshift__(self, value: T) -> PSet[T]:
         """Insert element using >> operator (element on right).
@@ -236,7 +321,7 @@ def _pset_merge[T](left_set: PSet[T], right_set: PSet[T]) -> PSet[T]:
             return left_set
         case (PSetBranch(_, left_left, left_value, left_right), _):
             # Split right_set around left_value and merge recursively
-            smaller, larger = _pset_split(right_set, left_value)
+            smaller, _, larger = _pset_split(right_set, left_value)
             merged_left = _pset_merge(left_left, smaller)
             merged_right = _pset_merge(left_right, larger)
             return _pset_balance(merged_left, left_value, merged_right)
@@ -244,25 +329,25 @@ def _pset_merge[T](left_set: PSet[T], right_set: PSet[T]) -> PSet[T]:
             raise Impossible
 
 
-def _pset_split[T](pset: PSet[T], pivot: T) -> tuple[PSet[T], PSet[T]]:
+def _pset_split[T](pset: PSet[T], pivot: T) -> tuple[PSet[T], bool, PSet[T]]:
     match pset:
         case PSetEmpty():
-            return (_PSET_EMPTY, _PSET_EMPTY)
+            return (_PSET_EMPTY, False, _PSET_EMPTY)
         case PSetBranch(_, left, value, right):
             cmp = compare(pivot, value)
             if cmp == Ordering.Lt:
                 # pivot < value, so value goes to larger side
-                left_smaller, left_larger = _pset_split(left, pivot)
+                left_smaller, pivot_found, left_larger = _pset_split(left, pivot)
                 larger = _pset_balance(left_larger, value, right)
-                return (left_smaller, larger)
+                return (left_smaller, pivot_found, larger)
             elif cmp == Ordering.Gt:
                 # pivot > value, so value goes to smaller side
-                right_smaller, right_larger = _pset_split(right, pivot)
+                right_smaller, pivot_found, right_larger = _pset_split(right, pivot)
                 smaller = _pset_balance(left, value, right_smaller)
-                return (smaller, right_larger)
+                return (smaller, pivot_found, right_larger)
             else:
-                # pivot == value, exclude the value
-                return (left, right)
+                # pivot == value, found it and exclude the value
+                return (left, True, right)
         case _:
             raise Impossible
 
@@ -393,3 +478,65 @@ def _pset_balance[T](left: PSet[T], value: T, right: PSet[T]) -> PSet[T]:
 
     # Tree is balanced or no rotation needed
     return PSetBranch(total_size, left, value, right)
+
+
+def _pset_contains[T](pset: PSet[T], value: T) -> bool:
+    """Check if a value is present in the set using binary search."""
+    match pset:
+        case PSetEmpty():
+            return False
+        case PSetBranch(_, left, branch_value, right):
+            cmp = compare(value, branch_value)
+            if cmp == Ordering.Lt:
+                return _pset_contains(left, value)
+            elif cmp == Ordering.Gt:
+                return _pset_contains(right, value)
+            else:
+                # Found exact match
+                return True
+        case _:
+            raise Impossible
+
+
+def _pset_intersection[T](set1: PSet[T], set2: PSet[T]) -> PSet[T]:
+    """Compute intersection of two sets efficiently using tree structure."""
+    match (set1, set2):
+        case (PSetEmpty(), _):
+            return _PSET_EMPTY
+        case (_, PSetEmpty()):
+            return _PSET_EMPTY
+        case (PSetBranch(_, left1, value1, right1), _):
+            # Split set2 around value1
+            smaller2, value1_in_set2, larger2 = _pset_split(set2, value1)
+            left_intersection = _pset_intersection(left1, smaller2)
+            right_intersection = _pset_intersection(right1, larger2)
+
+            # Include value1 only if it's in set2
+            if value1_in_set2:
+                return _pset_balance(left_intersection, value1, right_intersection)
+            else:
+                return _pset_merge(left_intersection, right_intersection)
+        case _:
+            raise Impossible
+
+
+def _pset_difference[T](set1: PSet[T], set2: PSet[T]) -> PSet[T]:
+    """Compute difference of two sets (set1 - set2) using tree structure."""
+    match (set1, set2):
+        case (PSetEmpty(), _):
+            return _PSET_EMPTY
+        case (_, PSetEmpty()):
+            return set1
+        case (PSetBranch(_, left1, value1, right1), _):
+            # Split set2 around value1
+            smaller2, value1_in_set2, larger2 = _pset_split(set2, value1)
+            left_difference = _pset_difference(left1, smaller2)
+            right_difference = _pset_difference(right1, larger2)
+
+            # Include value1 only if it's NOT in set2
+            if not value1_in_set2:
+                return _pset_balance(left_difference, value1, right_difference)
+            else:
+                return _pset_merge(left_difference, right_difference)
+        case _:
+            raise Impossible

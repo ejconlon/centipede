@@ -96,6 +96,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     def insert(self, key: K, value: V) -> PHeapMap[K, V]:
         """Insert a key-value pair into the heap map.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Note: Unlike regular maps, heap maps can contain duplicate keys.
         This operation always adds a new entry.
 
@@ -112,6 +115,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     def find_min(self) -> Optional[Tuple[K, V, PHeapMap[K, V]]]:
         """Find the minimum key-value pair in the heap map.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
             None if the heap map is empty, otherwise a tuple containing:
             - The minimum key
@@ -127,6 +133,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     def delete_min(self) -> Optional[PHeapMap[K, V]]:
         """Remove the minimum key-value pair from the heap map.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
             None if the heap map is empty, otherwise a new heap map with the
             minimum entry removed.
@@ -139,6 +148,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
 
     def merge(self, other: PHeapMap[K, V]) -> PHeapMap[K, V]:
         """Merge this heap map with another heap map.
+
+        Time Complexity: O(log(m + n)) where m, n are sizes of the heaps
+        Space Complexity: O(log(m + n)) for path copying
 
         Args:
             other: The heap map to merge with this one.

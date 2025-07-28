@@ -103,6 +103,9 @@ class PHeap[T](Sized, Iterating[T]):
     def insert(self, value: T) -> PHeap[T]:
         """Insert a new element into the heap.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Args:
             value: The element to insert.
 
@@ -116,6 +119,9 @@ class PHeap[T](Sized, Iterating[T]):
     def merge(self, other: PHeap[T]) -> PHeap[T]:
         """Merge this heap with another heap.
 
+        Time Complexity: O(log(m + n)) where m, n are sizes of the heaps
+        Space Complexity: O(log(m + n)) for path copying
+
         Args:
             other: The heap to merge with this one.
 
@@ -127,6 +133,9 @@ class PHeap[T](Sized, Iterating[T]):
 
     def find_min(self) -> Optional[Tuple[T, PHeap[T]]]:
         """Find the minimum element in the heap.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Returns:
             None if the heap is empty, otherwise a tuple containing:

@@ -727,3 +727,192 @@ def test_find_max_single_element_after_operations():
     remaining, max_val = result
     assert max_val == 3
     assert remaining.null()
+
+
+def test_contains_method():
+    """Test the new contains() method"""
+    set_obj = PSet.mk([1, 3, 5, 7, 9])
+
+    # Test existing elements
+    assert set_obj.contains(1)
+    assert set_obj.contains(5)
+    assert set_obj.contains(9)
+
+    # Test non-existing elements
+    assert not set_obj.contains(0)
+    assert not set_obj.contains(2)
+    assert not set_obj.contains(10)
+
+    # Test empty set
+    empty_set = PSet.empty(int)
+    assert not empty_set.contains(1)
+
+
+def test_contains_operator():
+    """Test the new __contains__() method (in operator)"""
+    set_obj = PSet.mk([1, 3, 5, 7, 9])
+
+    # Test existing elements with 'in' operator
+    assert 1 in set_obj
+    assert 5 in set_obj
+    assert 9 in set_obj
+
+    # Test non-existing elements with 'in' operator
+    assert 0 not in set_obj
+    assert 2 not in set_obj
+    assert 10 not in set_obj
+
+    # Test empty set
+    empty_set = PSet.empty(int)
+    assert 1 not in empty_set
+
+
+def test_contains_strings():
+    """Test contains method with string elements"""
+    set_obj = PSet.mk(["apple", "banana", "cherry"])
+
+    assert "banana" in set_obj
+    assert set_obj.contains("apple")
+    assert "date" not in set_obj
+    assert not set_obj.contains("elderberry")
+
+
+def test_union_method():
+    """Test the new union() method"""
+    set1 = PSet.mk([1, 2, 3])
+    set2 = PSet.mk([3, 4, 5])
+
+    result = set1.union(set2)
+
+    assert result.size() == 5
+    assert result.list() == [1, 2, 3, 4, 5]
+
+    # Original sets should be unchanged
+    assert set1.list() == [1, 2, 3]
+    assert set2.list() == [3, 4, 5]
+
+
+def test_intersection_method():
+    """Test the new intersection() method"""
+    set1 = PSet.mk([1, 2, 3, 4])
+    set2 = PSet.mk([3, 4, 5, 6])
+
+    result = set1.intersection(set2)
+
+    assert result.size() == 2
+    assert result.list() == [3, 4]
+
+    # Test with no intersection
+    set3 = PSet.mk([7, 8, 9])
+    no_overlap = set1.intersection(set3)
+    assert no_overlap.size() == 0
+    assert no_overlap.null()
+
+
+def test_difference_method():
+    """Test the new difference() method"""
+    set1 = PSet.mk([1, 2, 3, 4, 5])
+    set2 = PSet.mk([3, 4, 5, 6, 7])
+
+    result = set1.difference(set2)
+
+    assert result.size() == 2
+    assert result.list() == [1, 2]
+
+    # Test difference with no overlap
+    set3 = PSet.mk([10, 11, 12])
+    all_elements = set1.difference(set3)
+    assert all_elements.list() == set1.list()
+
+
+def test_set_operations_empty_sets():
+    """Test set operations with empty sets"""
+    set1 = PSet.mk([1, 2, 3])
+    empty = PSet.empty(int)
+
+    # Union with empty
+    assert set1.union(empty).list() == set1.list()
+    assert empty.union(set1).list() == set1.list()
+
+    # Intersection with empty
+    assert set1.intersection(empty).null()
+    assert empty.intersection(set1).null()
+
+    # Difference with empty
+    assert set1.difference(empty).list() == set1.list()
+    assert empty.difference(set1).null()
+
+
+def test_set_operations_same_set():
+    """Test set operations on identical sets"""
+    set1 = PSet.mk([1, 2, 3])
+    set2 = PSet.mk([1, 2, 3])
+
+    # Union should be same as original
+    assert set1.union(set2).list() == [1, 2, 3]
+
+    # Intersection should be same as original
+    assert set1.intersection(set2).list() == [1, 2, 3]
+
+    # Difference should be empty
+    assert set1.difference(set2).null()
+
+
+def test_set_operations_chaining():
+    """Test chaining multiple set operations"""
+    set1 = PSet.mk([1, 2, 3])
+    set2 = PSet.mk([3, 4, 5])
+    set3 = PSet.mk([5, 6, 7])
+
+    # Chain operations
+    result = set1.union(set2).intersection(set3.union(PSet.mk([4, 5])))
+
+    # Should contain elements common to both unions
+    assert 4 in result
+    assert 5 in result
+
+
+def test_split_method():
+    """Test the enhanced split method with pivot membership"""
+    set_obj = PSet.mk([1, 2, 3, 4, 5, 6, 7])
+
+    # Test with pivot in set
+    smaller, found, larger = set_obj.split(4)
+    assert found is True
+    assert smaller.list() == [1, 2, 3]
+    assert larger.list() == [5, 6, 7]
+
+    # Test with pivot not in set (between existing elements)
+    smaller2, found2, larger2 = set_obj.split(3)
+    assert found2 is True  # 3 is in the set
+    assert smaller2.list() == [1, 2]
+    assert larger2.list() == [4, 5, 6, 7]
+
+    # Test with pivot truly not in set
+    set_sparse = PSet.mk([1, 3, 5, 7])
+    smaller_sparse, found_sparse, larger_sparse = set_sparse.split(4)
+    assert found_sparse is False
+    assert smaller_sparse.list() == [1, 3]
+    assert larger_sparse.list() == [5, 7]
+
+    # Test with pivot smaller than all elements
+    smaller3, found3, larger3 = set_obj.split(0)
+    assert found3 is False
+    assert smaller3.list() == []
+    assert larger3.list() == [1, 2, 3, 4, 5, 6, 7]
+
+    # Test with pivot larger than all elements
+    smaller4, found4, larger4 = set_obj.split(10)
+    assert found4 is False
+    assert smaller4.list() == [1, 2, 3, 4, 5, 6, 7]
+    assert larger4.list() == []
+
+
+def test_split_empty_set():
+    """Test split on empty set"""
+    empty = PSet.empty(int)
+    smaller, found, larger = empty.split(5)
+
+    assert found is False
+    assert smaller.null()
+    assert larger.null()

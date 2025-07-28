@@ -369,6 +369,109 @@ def test_merge_overlapping_maps():
     assert list(result.items()) == expected_items
 
 
+def test_split_method():
+    """Test the enhanced split method with key lookup"""
+    map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")])
+
+    # Test with key in map
+    smaller, found_value, larger = map_obj.split(3)
+    assert found_value == "three"
+    assert list(smaller.items()) == [(1, "one"), (2, "two")]
+    assert list(larger.items()) == [(4, "four"), (5, "five")]
+
+    # Test with key not in map (using a sparse map)
+    sparse_map = PMap.mk([(1, "one"), (3, "three"), (5, "five"), (7, "seven")])
+    smaller2, found_value2, larger2 = sparse_map.split(4)
+    assert found_value2 is None
+    assert list(smaller2.items()) == [(1, "one"), (3, "three")]
+    assert list(larger2.items()) == [(5, "five"), (7, "seven")]
+
+    # Test with key smaller than all elements
+    smaller3, found_value3, larger3 = map_obj.split(0)
+    assert found_value3 is None
+    assert smaller3.null()
+    assert list(larger3.items()) == [
+        (1, "one"),
+        (2, "two"),
+        (3, "three"),
+        (4, "four"),
+        (5, "five"),
+    ]
+
+    # Test with key larger than all elements
+    smaller4, found_value4, larger4 = map_obj.split(10)
+    assert found_value4 is None
+    assert list(smaller4.items()) == [
+        (1, "one"),
+        (2, "two"),
+        (3, "three"),
+        (4, "four"),
+        (5, "five"),
+    ]
+    assert larger4.null()
+
+
+def test_split_empty_map():
+    """Test split on empty map"""
+    empty = PMap.empty(int, str)
+    smaller, found_value, larger = empty.split(5)
+
+    assert found_value is None
+    assert smaller.null()
+    assert larger.null()
+
+
+def test_split_single_entry():
+    """Test split on single-entry map"""
+    single = PMap.singleton(5, "five")
+
+    # Split on existing key
+    smaller1, found_value1, larger1 = single.split(5)
+    assert found_value1 == "five"
+    assert smaller1.null()
+    assert larger1.null()
+
+    # Split on smaller key
+    smaller2, found_value2, larger2 = single.split(3)
+    assert found_value2 is None
+    assert smaller2.null()
+    assert list(larger2.items()) == [(5, "five")]
+
+    # Split on larger key
+    smaller3, found_value3, larger3 = single.split(7)
+    assert found_value3 is None
+    assert list(smaller3.items()) == [(5, "five")]
+    assert larger3.null()
+
+
+def test_split_with_none_values():
+    """Test split method with None values"""
+    map_obj = PMap.mk([(1, None), (2, "two"), (3, None)])
+
+    # Split on key with None value
+    smaller, found_value, larger = map_obj.split(1)
+    assert found_value is None  # This is the actual value, not "not found"
+    assert smaller.null()
+    assert list(larger.items()) == [(2, "two"), (3, None)]
+
+    # Split on key not in map should also return None, but for different reason
+    sparse_map_with_none = PMap.mk([(1, None), (3, None), (5, "five")])
+    smaller2, found_value2, larger2 = sparse_map_with_none.split(2)
+    assert found_value2 is None  # This means "not found"
+    assert list(smaller2.items()) == [(1, None)]
+    assert list(larger2.items()) == [(3, None), (5, "five")]
+
+
+def test_split_string_keys():
+    """Test split method with string keys"""
+    map_obj = PMap.mk([("apple", 1), ("banana", 2), ("cherry", 3), ("date", 4)])
+
+    smaller, found_value, larger = map_obj.split("banana")
+    assert found_value == 2
+    assert list(smaller.items()) == [("apple", 1)]
+    assert list(larger.items()) == [("cherry", 3), ("date", 4)]
+
+
 def test_merge_identical_maps():
     """Test merging identical maps"""
     map1 = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
