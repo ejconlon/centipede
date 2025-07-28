@@ -70,39 +70,39 @@ def test_insert_increases_size_at_most_one(pset, element):
 
 
 @given(set_strategy(), set_strategy())
-def test_merge_commutative(pset1, pset2):
-    """Merge should be commutative: A + B == B + A."""
-    merged1 = pset1.merge(pset2)
-    merged2 = pset2.merge(pset1)
+def test_union_commutative(pset1, pset2):
+    """Union should be commutative: A + B == B + A."""
+    merged1 = pset1.union(pset2)
+    merged2 = pset2.union(pset1)
 
     assert merged1.list() == merged2.list()
     assert merged1.size() == merged2.size()
 
 
 @given(set_strategy(), set_strategy())
-def test_merge_associative(pset1, pset2):
-    """Merge should be associative: (A + B) + C == A + (B + C)."""
+def test_union_associative(pset1, pset2):
+    """Union should be associative: (A + B) + C == A + (B + C)."""
     pset3 = PSet.mk([100, 200, 300])
 
-    left_assoc = pset1.merge(pset2).merge(pset3)
-    right_assoc = pset1.merge(pset2.merge(pset3))
+    left_assoc = pset1.union(pset2).union(pset3)
+    right_assoc = pset1.union(pset2.union(pset3))
 
     assert left_assoc.list() == right_assoc.list()
 
 
 @given(set_strategy())
-def test_merge_empty_identity(pset):
-    """Merging with empty should be identity."""
+def test_union_empty_identity(pset):
+    """Union with empty should be identity."""
     empty = PSet.empty(int)
 
-    assert pset.merge(empty).list() == pset.list()
-    assert empty.merge(pset).list() == pset.list()
+    assert pset.union(empty).list() == pset.list()
+    assert empty.union(pset).list() == pset.list()
 
 
 @given(set_strategy(), set_strategy())
-def test_merge_contains_all_elements(pset1, pset2):
-    """Merged set should contain all elements from both sets."""
-    merged = pset1.merge(pset2)
+def test_union_contains_all_elements(pset1, pset2):
+    """Union set should contain all elements from both sets."""
+    merged = pset1.union(pset2)
 
     elements1 = set(pset1.list())
     elements2 = set(pset2.list())
@@ -233,7 +233,7 @@ def test_persistence_under_operations(pset):
 
     # Perform various operations
     pset.insert(999)
-    pset.merge(PSet.mk([1000, 1001]))
+    pset.union(PSet.mk([1000, 1001]))
     pset.find_min()
     pset.find_max()
     pset.delete_min()
@@ -264,12 +264,12 @@ def test_operators_consistency(elements: List[int]):
 
 
 @given(set_strategy(), set_strategy())
-def test_addition_operator_merge(pset1, pset2):
-    """+ operator should match merge method."""
-    merge_method = pset1.merge(pset2)
-    merge_op = pset1 + pset2
+def test_or_operator_union(pset1, pset2):
+    """| operator should match union method."""
+    union_method = pset1.union(pset2)
+    union_op = pset1 | pset2
 
-    assert merge_method.list() == merge_op.list()
+    assert union_method.list() == union_op.list()
 
 
 @given(st.integers())

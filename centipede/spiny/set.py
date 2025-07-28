@@ -102,20 +102,6 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         """
         return _pset_insert(self, value)
 
-    def merge(self, other: PSet[T]) -> PSet[T]:
-        """Merge this set with another set, returning a new set containing all elements.
-
-        Time Complexity: O(m + n) where m, n are sizes of the sets
-        Space Complexity: O(log(m + n)) for recursion and path copying
-
-        Args:
-            other: The set to merge with this one.
-
-        Returns:
-            A new set containing elements from both sets.
-        """
-        return _pset_merge(self, other)
-
     def find_min(self) -> Optional[Tuple[T, PSet[T]]]:
         """Find the minimum element in the set.
 
@@ -214,7 +200,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         Returns:
             A new set containing all elements from both sets.
         """
-        return self.merge(other)
+        return _pset_merge(self, other)
 
     def intersection(self, other: PSet[T]) -> PSet[T]:
         """Return the intersection of two sets.
@@ -244,6 +230,17 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         """
         return _pset_difference(self, other)
 
+    def symdiff(self, other: PSet[T]) -> PSet[T]:
+        """Symmetric difference.
+
+        Args:
+            other: The set to compute symmetric difference with.
+
+        Returns:
+            A new set containing elements in either set but not in both.
+        """
+        return self.union(other).difference(self.intersection(other))
+
     def __rshift__(self, value: T) -> PSet[T]:
         """Insert element using >> operator (element on right).
 
@@ -266,16 +263,49 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         """
         return self.insert(value)
 
-    def __add__(self, other: PSet[T]) -> PSet[T]:
-        """Merge sequences using + operator.
+    def __or__(self, other: PSet[T]) -> PSet[T]:
+        """Union using | operator (Python set-like behavior).
 
         Args:
-            other: The set to merge with this one.
+            other: The set to union with this one.
 
         Returns:
             A new set containing elements from both sets.
         """
-        return self.merge(other)
+        return self.union(other)
+
+    def __and__(self, other: PSet[T]) -> PSet[T]:
+        """Intersection using & operator (Python set-like behavior).
+
+        Args:
+            other: The set to intersect with this one.
+
+        Returns:
+            A new set containing only elements present in both sets.
+        """
+        return self.intersection(other)
+
+    def __sub__(self, other: PSet[T]) -> PSet[T]:
+        """Difference using - operator (Python set-like behavior).
+
+        Args:
+            other: The set to subtract from this one.
+
+        Returns:
+            A new set containing elements in self but not in other.
+        """
+        return self.difference(other)
+
+    def __xor__(self, other: PSet[T]) -> PSet[T]:
+        """Symmetric difference using ^ operator (Python set-like behavior).
+
+        Args:
+            other: The set to compute symmetric difference with.
+
+        Returns:
+            A new set containing elements in either set but not in both.
+        """
+        return self.symdiff(other)
 
 
 @dataclass(frozen=True, eq=False)

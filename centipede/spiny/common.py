@@ -15,6 +15,7 @@ __all__ = [
     "Box",
     "Comparable",
     "Entry",
+    "Flip",
     "LexComparable",
     "Impossible",
     "Ordering",
@@ -45,6 +46,66 @@ class Box[T]:
     """
 
     value: T
+
+    def __iadd__(self, other):
+        """Defer += operator to the underlying value."""
+        self.value = self.value + other
+        return self
+
+    def __isub__(self, other):
+        """Defer -= operator to the underlying value."""
+        self.value = self.value - other
+        return self
+
+    def __imul__(self, other):
+        """Defer *= operator to the underlying value."""
+        self.value = self.value * other
+        return self
+
+    def __itruediv__(self, other):
+        """Defer /= operator to the underlying value."""
+        self.value = self.value / other
+        return self
+
+    def __ifloordiv__(self, other):
+        """Defer //= operator to the underlying value."""
+        self.value = self.value // other
+        return self
+
+    def __imod__(self, other):
+        """Defer %= operator to the underlying value."""
+        self.value = self.value % other
+        return self
+
+    def __ipow__(self, other):
+        """Defer **= operator to the underlying value."""
+        self.value = self.value**other
+        return self
+
+    def __ilshift__(self, other):
+        """Defer <<= operator to the underlying value."""
+        self.value = other << self.value
+        return self
+
+    def __irshift__(self, other):
+        """Defer >>= operator to the underlying value."""
+        self.value = self.value >> other
+        return self
+
+    def __iand__(self, other):
+        """Defer &= operator to the underlying value."""
+        self.value = self.value & other
+        return self
+
+    def __ior__(self, other):
+        """Defer |= operator to the underlying value."""
+        self.value = self.value | other
+        return self
+
+    def __ixor__(self, other):
+        """Defer ^= operator to the underlying value."""
+        self.value = self.value ^ other
+        return self
 
 
 @dataclass(frozen=True)
@@ -151,6 +212,35 @@ class Entry[K, V](Comparable["Entry[K, V]"]):
     def compare(self, other: Entry[K, V]) -> Ordering:
         """Compare entries based on their keys only."""
         return compare(self.key, other.key)
+
+
+@dataclass(frozen=True, eq=False)
+class Flip[T](Comparable["Flip[T]"]):
+    """A wrapper that flips the comparison result of the wrapped value.
+
+    This is useful for converting min-heaps to max-heaps by reversing
+    the comparison order of elements.
+
+    Example:
+        >>> from centipede.spiny.common import Flip, compare, Ordering
+        >>> compare(1, 2)  # Normal comparison
+        <Ordering.Lt: -1>
+        >>> compare(Flip(1), Flip(2))  # Flipped comparison
+        <Ordering.Gt: 1>
+    """
+
+    value: T
+
+    @override
+    def compare(self, other: Flip[T]) -> Ordering:
+        """Compare by flipping the result of comparing the wrapped values."""
+        result = compare(self.value, other.value)
+        if result == Ordering.Lt:
+            return Ordering.Gt
+        elif result == Ordering.Gt:
+            return Ordering.Lt
+        else:
+            return Ordering.Eq
 
 
 def compare[T](a: T, b: T) -> Ordering:

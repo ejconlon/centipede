@@ -211,24 +211,24 @@ def test_balanced_tree_property():
     assert set_obj.size() == 51
 
 
-def test_merge_empty_sets():
-    """Test merging empty sets"""
+def test_union_empty_sets():
+    """Test union of empty sets"""
     empty1 = PSet.empty(int)
     empty2 = PSet.empty(int)
-    result = empty1.merge(empty2)
+    result = empty1.union(empty2)
 
     assert result.null()
     assert result.size() == 0
     assert result.list() == []
 
 
-def test_merge_empty_with_non_empty():
-    """Test merging empty set with non-empty set"""
+def test_union_empty_with_non_empty():
+    """Test union of empty set with non-empty set"""
     empty_set = PSet.empty(int)
     non_empty = PSet.mk([1, 2, 3])
 
-    result1 = empty_set.merge(non_empty)
-    result2 = non_empty.merge(empty_set)
+    result1 = empty_set.union(non_empty)
+    result2 = non_empty.union(empty_set)
 
     assert result1.list() == [1, 2, 3]
     assert result2.list() == [1, 2, 3]
@@ -236,46 +236,46 @@ def test_merge_empty_with_non_empty():
     assert result2.size() == 3
 
 
-def test_merge_disjoint_sets():
-    """Test merging sets with no common elements"""
+def test_union_disjoint_sets():
+    """Test union of sets with no common elements"""
     set1 = PSet.mk([1, 3, 5])
     set2 = PSet.mk([2, 4, 6])
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     assert result.size() == 6
     assert result.list() == [1, 2, 3, 4, 5, 6]
 
 
-def test_merge_overlapping_sets():
-    """Test merging sets with some common elements"""
+def test_union_overlapping_sets():
+    """Test union of sets with some common elements"""
     set1 = PSet.mk([1, 2, 3, 4])
     set2 = PSet.mk([3, 4, 5, 6])
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     assert result.size() == 6
     assert result.list() == [1, 2, 3, 4, 5, 6]
 
 
-def test_merge_identical_sets():
-    """Test merging identical sets"""
+def test_union_identical_sets():
+    """Test union of identical sets"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([1, 2, 3])
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     assert result.size() == 3
     assert result.list() == [1, 2, 3]
 
 
-def test_merge_subset_sets():
-    """Test merging when one set is a subset of another"""
+def test_union_subset_sets():
+    """Test union of when one set is a subset of another"""
     set1 = PSet.mk([1, 2, 3, 4, 5])
     set2 = PSet.mk([2, 4])
 
-    result1 = set1.merge(set2)
-    result2 = set2.merge(set1)
+    result1 = set1.union(set2)
+    result2 = set2.union(set1)
 
     assert result1.list() == [1, 2, 3, 4, 5]
     assert result2.list() == [1, 2, 3, 4, 5]
@@ -283,14 +283,14 @@ def test_merge_subset_sets():
     assert result2.size() == 5
 
 
-def test_merge_single_element_sets():
-    """Test merging single element sets"""
+def test_union_single_element_sets():
+    """Test union of single element sets"""
     set1 = PSet.singleton(1)
     set2 = PSet.singleton(2)
     set3 = PSet.singleton(1)  # Same element
 
-    result1 = set1.merge(set2)
-    result2 = set1.merge(set3)
+    result1 = set1.union(set2)
+    result2 = set1.union(set3)
 
     assert result1.list() == [1, 2]
     assert result1.size() == 2
@@ -299,61 +299,61 @@ def test_merge_single_element_sets():
     assert result2.size() == 1
 
 
-def test_merge_large_sets():
-    """Test merging large sets"""
+def test_union_large_sets():
+    """Test union of large sets"""
     set1 = PSet.mk(range(0, 100, 2))  # Even numbers 0-98
     set2 = PSet.mk(range(1, 100, 2))  # Odd numbers 1-99
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     assert result.size() == 100
     assert result.list() == list(range(100))
 
 
-def test_merge_string_sets():
-    """Test merging sets of strings"""
+def test_union_string_sets():
+    """Test union of sets of strings"""
     set1 = PSet.mk(["apple", "banana", "cherry"])
     set2 = PSet.mk(["banana", "date", "elderberry"])
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     expected = ["apple", "banana", "cherry", "date", "elderberry"]
     assert result.list() == expected
     assert result.size() == 5
 
 
-def test_merge_operator_plus():
-    """Test merge using + operator"""
+def test_union_operator_or():
+    """Test union using | operator"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([3, 4, 5])
 
-    result = set1 + set2
+    result = set1 | set2
 
     assert result.list() == [1, 2, 3, 4, 5]
     assert result.size() == 5
 
 
-def test_merge_chaining():
-    """Test chaining multiple merge operations"""
+def test_union_chaining():
+    """Test chaining multiple union operations"""
     set1 = PSet.mk([1, 2])
     set2 = PSet.mk([3, 4])
     set3 = PSet.mk([5, 6])
 
-    result = set1.merge(set2).merge(set3)
+    result = set1.union(set2).union(set3)
 
     assert result.list() == [1, 2, 3, 4, 5, 6]
     assert result.size() == 6
 
 
-def test_merge_persistence():
-    """Test that merge operations don't modify original sets"""
+def test_union_persistence():
+    """Test that union operations don't modify original sets"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([4, 5, 6])
 
     original1_list = set1.list()
     original2_list = set2.list()
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     # Original sets should be unchanged
     assert set1.list() == original1_list
@@ -366,12 +366,12 @@ def test_merge_persistence():
     assert result.size() == 6
 
 
-def test_merge_negative_numbers():
-    """Test merging sets with negative numbers"""
+def test_union_negative_numbers():
+    """Test union of sets with negative numbers"""
     set1 = PSet.mk([-3, -1, 1, 3])
     set2 = PSet.mk([-2, 0, 2])
 
-    result = set1.merge(set2)
+    result = set1.union(set2)
 
     assert result.list() == [-3, -2, -1, 0, 1, 2, 3]
     assert result.size() == 7
@@ -916,3 +916,88 @@ def test_split_empty_set():
     assert found is False
     assert smaller.null()
     assert larger.null()
+
+
+def test_or_operator_union():
+    """Test | operator for union (Python set-like behavior)"""
+    set1 = PSet.mk([1, 2, 3])
+    set2 = PSet.mk([3, 4, 5])
+
+    result = set1 | set2
+
+    assert result.size() == 5
+    assert result.list() == [1, 2, 3, 4, 5]
+
+
+def test_and_operator_intersection():
+    """Test & operator for intersection (Python set-like behavior)"""
+    set1 = PSet.mk([1, 2, 3, 4])
+    set2 = PSet.mk([3, 4, 5, 6])
+
+    result = set1 & set2
+
+    assert result.size() == 2
+    assert result.list() == [3, 4]
+
+
+def test_sub_operator_difference():
+    """Test - operator for difference (Python set-like behavior)"""
+    set1 = PSet.mk([1, 2, 3, 4, 5])
+    set2 = PSet.mk([3, 4, 5, 6, 7])
+
+    result = set1 - set2
+
+    assert result.size() == 2
+    assert result.list() == [1, 2]
+
+
+def test_xor_operator_symmetric_difference():
+    """Test ^ operator for symmetric difference (Python set-like behavior)"""
+    set1 = PSet.mk([1, 2, 3, 4])
+    set2 = PSet.mk([3, 4, 5, 6])
+
+    result = set1 ^ set2
+
+    assert result.size() == 4
+    assert result.list() == [1, 2, 5, 6]
+
+
+def test_python_set_operators_consistency():
+    """Test that Python set-like operators produce consistent results with their methods"""
+    set1 = PSet.mk([1, 2, 3, 4])
+    set2 = PSet.mk([3, 4, 5, 6])
+
+    # Union: | should match union()
+    assert (set1 | set2).list() == set1.union(set2).list()
+
+    # Intersection: & should match intersection()
+    assert (set1 & set2).list() == set1.intersection(set2).list()
+
+    # Difference: - should match difference()
+    assert (set1 - set2).list() == set1.difference(set2).list()
+
+    # Symmetric difference: ^ should match expected behavior
+    expected_sym_diff = set1.union(set2).difference(set1.intersection(set2))
+    assert (set1 ^ set2).list() == expected_sym_diff.list()
+
+
+def test_python_set_operators_empty_sets():
+    """Test Python set-like operators with empty sets"""
+    set1 = PSet.mk([1, 2, 3])
+    empty = PSet.empty(int)
+
+    # Union with empty
+    assert (set1 | empty).list() == set1.list()
+    assert (empty | set1).list() == set1.list()
+
+    # Intersection with empty
+    assert (set1 & empty).null()
+    assert (empty & set1).null()
+
+    # Difference with empty
+    assert (set1 - empty).list() == set1.list()
+    assert (empty - set1).null()
+
+    # Symmetric difference with empty
+    assert (set1 ^ empty).list() == set1.list()
+    assert (empty ^ set1).list() == set1.list()
