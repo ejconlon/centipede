@@ -1,29 +1,24 @@
-"""Persistent map implementation based on persistent sets"""
+"""Persistent map implementation based on weight-balanced trees"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generator, Iterable, Optional, Tuple, Type, override
+from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Box,
-    Entry,
+    Impossible,
     LexComparable,
     Ordering,
     Sized,
     compare,
 )
-from centipede.spiny.set import PSet, PSetBranch, PSetEmpty
 
-__all__ = ["PMap", "Entry"]
+__all__ = ["PMap"]
 
 
-@dataclass(frozen=True, eq=False)
-class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
-    """Persistent map implementation using a PSet of Entry objects internally."""
-
-    _entries: PSet[Entry[K, V]]
-
+# sealed
+class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     @staticmethod
     def empty(
         _kty: Optional[Type[K]] = None, _vty: Optional[Type[V]] = None
@@ -37,7 +32,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             An empty map instance.
         """
-        return PMap(PSet.empty())
+        return _PMAP_EMPTY
 
     @staticmethod
     def singleton(key: K, value: V) -> PMap[K, V]:
@@ -50,8 +45,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             A map containing only the given key-value pair.
         """
-        entry = Entry(key, value)
-        return PMap(PSet.singleton(entry))
+        return PMapBranch(1, _PMAP_EMPTY, key, value, _PMAP_EMPTY)
 
     @staticmethod
     def mk(pairs: Iterable[Tuple[K, V]]) -> PMap[K, V]:
@@ -71,32 +65,49 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
     @override
     def null(self) -> bool:
         """Check if the map is empty."""
-        return self._entries.null()
+        match self:
+            case PMapEmpty():
+                return True
+            case PMapBranch():
+                return False
+            case _:
+                raise Impossible
 
     @override
     def size(self) -> int:
         """Get the number of key-value pairs in the map."""
-        return self._entries.size()
+        match self:
+            case PMapEmpty():
+                return 0
+            case PMapBranch(_size, _, _, _, _):
+                return _size
+            case _:
+                raise Impossible
 
     @override
-    def iter(self) -> Generator[Entry[K, V]]:
-        """Iterate over all entries in the map in key order."""
-        yield from self._entries.iter()
+    def iter(self) -> Generator[Tuple[K, V]]:
+        """Iterate over all key-value pairs in the map in key order."""
+        match self:
+            case PMapEmpty():
+                return
+            case PMapBranch(_, left, key, value, right):
+                yield from left.iter()
+                yield (key, value)
+                yield from right.iter()
 
     def keys(self) -> Generator[K]:
         """Iterate over all keys in the map in sorted order."""
-        for entry in self._entries.iter():
-            yield entry.key
+        for key, _ in self.iter():
+            yield key
 
     def values(self) -> Generator[V]:
         """Iterate over all values in the map in key order."""
-        for entry in self._entries.iter():
-            yield entry.value
+        for _, value in self.iter():
+            yield value
 
     def items(self) -> Generator[Tuple[K, V]]:
         """Iterate over all key-value pairs in the map in key order."""
-        for entry in self._entries.iter():
-            yield (entry.key, entry.value)
+        yield from self.iter()
 
     def get(self, key: K) -> Optional[V]:
         """Get the value associated with a key.
@@ -107,7 +118,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             The value associated with the key, or None if the key is not found.
         """
-        return _map_get(self, key)
+        return _pmap_get(self, key)
 
     def contains(self, key: K) -> bool:
         """Check if the map contains the given key.
@@ -118,7 +129,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             True if the key exists in the map, False otherwise.
         """
-        return _map_contains(self, key)
+        return _pmap_contains(self, key)
 
     def put(self, key: K, value: V) -> PMap[K, V]:
         """Insert or update a key-value pair in the map.
@@ -130,10 +141,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             A new map with the key-value pair inserted or updated.
         """
-        entry = Entry(key, value)
-        # Remove any existing entry with this key, then insert the new one
-        new_entries = _map_remove(self, key)._entries.insert(entry)
-        return PMap(new_entries)
+        return _pmap_put(self, key, value)
 
     def remove(self, key: K) -> PMap[K, V]:
         """Remove a key-value pair from the map.
@@ -144,7 +152,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             A new map with the key-value pair removed.
         """
-        return _map_remove(self, key)
+        return _pmap_remove(self, key)
 
     def merge(self, other: PMap[K, V]) -> PMap[K, V]:
         """Merge this map with another map.
@@ -157,10 +165,7 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         Returns:
             A new map containing entries from both maps.
         """
-        result = other
-        for key, value in self.items():
-            result = result.put(key, value)
-        return result
+        return _pmap_merge(self, other)
 
     def find_min(self) -> Optional[Tuple[K, V, PMap[K, V]]]:
         """Find the minimum key-value pair in the map.
@@ -171,11 +176,11 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
             - The value associated with the minimum key
             - A new map with the minimum entry removed
         """
-        result = self._entries.find_min()
+        result = _pmap_find_min(self)
         if result is None:
             return None
-        entry, remaining_entries = result
-        return (entry.key, entry.value, PMap(remaining_entries))
+        key, value, remaining = result
+        return (key, value, remaining)
 
     def find_max(self) -> Optional[Tuple[PMap[K, V], K, V]]:
         """Find the maximum key-value pair in the map.
@@ -186,11 +191,11 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
             - The maximum key
             - The value associated with the maximum key
         """
-        result = self._entries.find_max()
+        result = _pmap_find_max(self)
         if result is None:
             return None
-        remaining_entries, entry = result
-        return (PMap(remaining_entries), entry.key, entry.value)
+        remaining, key, value = result
+        return (remaining, key, value)
 
     def delete_min(self) -> Optional[PMap[K, V]]:
         """Remove the minimum key-value pair from the map.
@@ -211,6 +216,16 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         """
         result = self.find_max()
         return None if result is None else result[0]
+
+    def split(self, pivot_key: K) -> Tuple[PMap[K, V], PMap[K, V]]:
+        """Split a map into entries with keys smaller and larger than the pivot.
+
+        Returns:
+            A tuple (smaller, larger) where smaller contains entries with keys < pivot_key
+            and larger contains entries with keys > pivot_key. Entries with the pivot key
+            are excluded.
+        """
+        return _pmap_split(self, pivot_key)
 
     def __rshift__(self, pair: Tuple[K, V]) -> PMap[K, V]:
         """Insert key-value pair using >> operator.
@@ -248,45 +263,299 @@ class PMap[K, V](Sized, LexComparable[Entry[K, V], "PMap[K, V]"]):
         return self.merge(other)
 
 
-def _map_get[K, V](pmap: PMap[K, V], key: K) -> Optional[V]:
-    current = pmap._entries
-    while True:
-        match current:
-            case PSetEmpty():
-                return None
-            case PSetBranch(_, left, entry, right):
-                cmp = compare(key, entry.key)
-                if cmp == Ordering.Eq:
-                    return entry.value
-                elif cmp == Ordering.Lt:
-                    current = left
+@dataclass(frozen=True, eq=False)
+class PMapEmpty[K, V](PMap[K, V]):
+    pass
+
+
+_PMAP_EMPTY: PMap[Any, Any] = PMapEmpty()
+
+
+@dataclass(frozen=True, eq=False)
+class PMapBranch[K, V](PMap[K, V]):
+    _size: int
+    _left: PMap[K, V]
+    _key: K
+    _value: V
+    _right: PMap[K, V]
+
+
+def _pmap_get[K, V](pmap: PMap[K, V], key: K) -> Optional[V]:
+    match pmap:
+        case PMapEmpty():
+            return None
+        case PMapBranch(_, left, branch_key, branch_value, right):
+            cmp = compare(key, branch_key)
+            if cmp == Ordering.Eq:
+                return branch_value
+            elif cmp == Ordering.Lt:
+                return _pmap_get(left, key)
+            else:
+                return _pmap_get(right, key)
+        case _:
+            raise Impossible
+
+
+def _pmap_contains[K, V](pmap: PMap[K, V], key: K) -> bool:
+    match pmap:
+        case PMapEmpty():
+            return False
+        case PMapBranch(_, left, branch_key, _, right):
+            cmp = compare(key, branch_key)
+            if cmp == Ordering.Eq:
+                return True
+            elif cmp == Ordering.Lt:
+                return _pmap_contains(left, key)
+            else:
+                return _pmap_contains(right, key)
+        case _:
+            raise Impossible
+
+
+def _pmap_put[K, V](pmap: PMap[K, V], key: K, value: V) -> PMap[K, V]:
+    match pmap:
+        case PMapEmpty():
+            return PMapBranch(1, _PMAP_EMPTY, key, value, _PMAP_EMPTY)
+        case PMapBranch(_, left, branch_key, branch_value, right):
+            cmp = compare(key, branch_key)
+            if cmp == Ordering.Lt:
+                new_left = _pmap_put(left, key, value)
+                return _pmap_balance(new_left, branch_key, branch_value, right)
+            elif cmp == Ordering.Gt:
+                new_right = _pmap_put(right, key, value)
+                return _pmap_balance(left, branch_key, branch_value, new_right)
+            else:
+                # Key exists, update value
+                return PMapBranch(pmap._size, left, key, value, right)
+        case _:
+            raise Impossible
+
+
+def _pmap_remove[K, V](pmap: PMap[K, V], key: K) -> PMap[K, V]:
+    match pmap:
+        case PMapEmpty():
+            return pmap
+        case PMapBranch(_, left, branch_key, branch_value, right):
+            cmp = compare(key, branch_key)
+            if cmp == Ordering.Lt:
+                new_left = _pmap_remove(left, key)
+                return _pmap_balance(new_left, branch_key, branch_value, right)
+            elif cmp == Ordering.Gt:
+                new_right = _pmap_remove(right, key)
+                return _pmap_balance(left, branch_key, branch_value, new_right)
+            else:
+                # Found the key to remove
+                return _pmap_join(left, right)
+        case _:
+            raise Impossible
+
+
+def _pmap_join[K, V](left: PMap[K, V], right: PMap[K, V]) -> PMap[K, V]:
+    """Join two maps where all keys in left are smaller than all keys in right."""
+    match (left, right):
+        case (PMapEmpty(), _):
+            return right
+        case (_, PMapEmpty()):
+            return left
+        case (PMapBranch(), PMapBranch()):
+            # Find the minimum in the right subtree to use as the new root
+            min_result = _pmap_find_min(right)
+            if min_result is None:
+                raise Impossible
+            min_key, min_value, new_right = min_result
+            return _pmap_balance(left, min_key, min_value, new_right)
+        case _:
+            raise Impossible
+
+
+def _pmap_merge[K, V](left_map: PMap[K, V], right_map: PMap[K, V]) -> PMap[K, V]:
+    match (left_map, right_map):
+        case (PMapEmpty(), _):
+            return right_map
+        case (_, PMapEmpty()):
+            return left_map
+        case (PMapBranch(_, left_left, left_key, left_value, left_right), _):
+            # Split right_map around left_key and merge recursively
+            smaller, larger = _pmap_split(right_map, left_key)
+            merged_left = _pmap_merge(left_left, smaller)
+            merged_right = _pmap_merge(left_right, larger)
+            return _pmap_balance(merged_left, left_key, left_value, merged_right)
+        case _:
+            raise Impossible
+
+
+def _pmap_split[K, V](pmap: PMap[K, V], pivot_key: K) -> Tuple[PMap[K, V], PMap[K, V]]:
+    match pmap:
+        case PMapEmpty():
+            return (_PMAP_EMPTY, _PMAP_EMPTY)
+        case PMapBranch(_, left, key, value, right):
+            cmp = compare(pivot_key, key)
+            if cmp == Ordering.Lt:
+                # pivot_key < key, so this entry goes to larger side
+                left_smaller, left_larger = _pmap_split(left, pivot_key)
+                larger = _pmap_balance(left_larger, key, value, right)
+                return (left_smaller, larger)
+            elif cmp == Ordering.Gt:
+                # pivot_key > key, so this entry goes to smaller side
+                right_smaller, right_larger = _pmap_split(right, pivot_key)
+                smaller = _pmap_balance(left, key, value, right_smaller)
+                return (smaller, right_larger)
+            else:
+                # pivot_key == key, exclude this entry
+                return (left, right)
+        case _:
+            raise Impossible
+
+
+def _pmap_find_min[K, V](pmap: PMap[K, V]) -> Optional[Tuple[K, V, PMap[K, V]]]:
+    match pmap:
+        case PMapEmpty():
+            return None
+        case PMapBranch(_, left, key, value, right):
+            if left.null():
+                # This node contains the minimum key
+                return (key, value, right)
+            else:
+                # Minimum is in the left subtree
+                min_result = _pmap_find_min(left)
+                if min_result is None:
+                    raise Impossible
+                min_key, min_value, new_left = min_result
+                new_tree = _pmap_balance(new_left, key, value, right)
+                return (min_key, min_value, new_tree)
+        case _:
+            raise Impossible
+
+
+def _pmap_find_max[K, V](pmap: PMap[K, V]) -> Optional[Tuple[PMap[K, V], K, V]]:
+    match pmap:
+        case PMapEmpty():
+            return None
+        case PMapBranch(_, left, key, value, right):
+            if right.null():
+                # This node contains the maximum key
+                return (left, key, value)
+            else:
+                # Maximum is in the right subtree
+                max_result = _pmap_find_max(right)
+                if max_result is None:
+                    raise Impossible
+                new_right, max_key, max_value = max_result
+                new_tree = _pmap_balance(left, key, value, new_right)
+                return (new_tree, max_key, max_value)
+        case _:
+            raise Impossible
+
+
+def _pmap_balance[K, V](
+    left: PMap[K, V], key: K, value: V, right: PMap[K, V]
+) -> PMap[K, V]:
+    left_size = left.size()
+    right_size = right.size()
+    total_size = left_size + 1 + right_size
+
+    # Weight-balanced tree invariant: neither subtree should be more than
+    # 3 times larger than the other
+    if left_size > 3 * right_size:
+        # Left is too heavy, need to rotate right
+        match left:
+            case PMapBranch(_, left_left, left_key, left_value, left_right):
+                left_left_size = left_left.size()
+                left_right_size = left_right.size()
+                if left_left_size >= left_right_size:
+                    # Single rotation right
+                    return PMapBranch(
+                        total_size,
+                        left_left,
+                        left_key,
+                        left_value,
+                        PMapBranch(
+                            1 + left_right_size + right_size,
+                            left_right,
+                            key,
+                            value,
+                            right,
+                        ),
+                    )
                 else:
-                    current = right
-            case _:
-                return None
-
-
-def _map_contains[K, V](pmap: PMap[K, V], key: K) -> bool:
-    current = pmap._entries
-    while True:
-        match current:
-            case PSetEmpty():
-                return False
-            case PSetBranch(_, left, entry, right):
-                cmp = compare(key, entry.key)
-                if cmp == Ordering.Eq:
-                    return True
-                elif cmp == Ordering.Lt:
-                    current = left
+                    # Double rotation left-right
+                    match left_right:
+                        case PMapBranch(
+                            _,
+                            left_right_left,
+                            left_right_key,
+                            left_right_value,
+                            left_right_right,
+                        ):
+                            return PMapBranch(
+                                total_size,
+                                PMapBranch(
+                                    1 + left_left_size + left_right_left.size(),
+                                    left_left,
+                                    left_key,
+                                    left_value,
+                                    left_right_left,
+                                ),
+                                left_right_key,
+                                left_right_value,
+                                PMapBranch(
+                                    1 + left_right_right.size() + right_size,
+                                    left_right_right,
+                                    key,
+                                    value,
+                                    right,
+                                ),
+                            )
+    elif right_size > 3 * left_size:
+        # Right is too heavy, need to rotate left
+        match right:
+            case PMapBranch(_, right_left, right_key, right_value, right_right):
+                right_left_size = right_left.size()
+                right_right_size = right_right.size()
+                if right_right_size >= right_left_size:
+                    # Single rotation left
+                    return PMapBranch(
+                        total_size,
+                        PMapBranch(
+                            1 + left_size + right_left_size,
+                            left,
+                            key,
+                            value,
+                            right_left,
+                        ),
+                        right_key,
+                        right_value,
+                        right_right,
+                    )
                 else:
-                    current = right
-            case _:
-                return False
+                    # Double rotation right-left
+                    match right_left:
+                        case PMapBranch(
+                            _,
+                            right_left_left,
+                            right_left_key,
+                            right_left_value,
+                            right_left_right,
+                        ):
+                            return PMapBranch(
+                                total_size,
+                                PMapBranch(
+                                    1 + left_size + right_left_left.size(),
+                                    left,
+                                    key,
+                                    value,
+                                    right_left_left,
+                                ),
+                                right_left_key,
+                                right_left_value,
+                                PMapBranch(
+                                    1 + right_left_right.size() + right_right_size,
+                                    right_left_right,
+                                    right_key,
+                                    right_value,
+                                    right_right,
+                                ),
+                            )
 
-
-def _map_remove[K, V](pmap: PMap[K, V], key: K) -> PMap[K, V]:
-    # HACK Since Entry comparison won't even look at value,
-    # we can fill in whatever to use as a pivot
-    dummy_entry = Entry(key, None)
-    smaller, larger = pmap._entries.split(dummy_entry)  # type: ignore
-    return PMap(smaller.merge(larger))
+    # Tree is balanced or no rotation needed
+    return PMapBranch(total_size, left, key, value, right)
