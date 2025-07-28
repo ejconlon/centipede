@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
+from typing import Any, Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Box,
@@ -79,7 +79,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
                 raise Impossible
 
     @override
-    def iter(self) -> Generator[T]:
+    def iter(self) -> Iterator[T]:
         match self:
             case PSetEmpty():
                 return

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
+from typing import Any, Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Box,
@@ -102,7 +102,7 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
                 raise Impossible
 
     @override
-    def iter(self) -> Generator[Tuple[K, V]]:
+    def iter(self) -> Iterator[Tuple[K, V]]:
         """Iterate over all key-value pairs in the map in key order.
 
         Time Complexity: O(n) for complete iteration
@@ -116,7 +116,7 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
                 yield (key, value)
                 yield from right.iter()
 
-    def keys(self) -> Generator[K]:
+    def keys(self) -> Iterator[K]:
         """Iterate over all keys in the map in sorted order.
 
         Time Complexity: O(n) for complete iteration
@@ -125,7 +125,7 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         for key, _ in self.iter():
             yield key
 
-    def values(self) -> Generator[V]:
+    def values(self) -> Iterator[V]:
         """Iterate over all values in the map in key order.
 
         Time Complexity: O(n) for complete iteration
@@ -134,7 +134,7 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         for _, value in self.iter():
             yield value
 
-    def items(self) -> Generator[Tuple[K, V]]:
+    def items(self) -> Iterator[Tuple[K, V]]:
         """Iterate over all key-value pairs in the map in key order.
 
         Time Complexity: O(n) for complete iteration

@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import (
     Any,
-    Generator,
     Iterable,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -195,7 +195,7 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
         return _seq_update(self, ix, value)
 
     @override
-    def iter(self) -> Generator[T]:
+    def iter(self) -> Iterator[T]:
         """Return a generator that yields elements in order.
 
         Returns:
@@ -203,7 +203,7 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
         """
         return _seq_iter(self)
 
-    def reversed(self) -> Generator[T]:
+    def reversed(self) -> Iterator[T]:
         """Return a generator that yields elements in reverse order.
 
         Returns:
@@ -227,7 +227,7 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
         """Alias for concat()."""
         return self.concat(other)
 
-    def __reversed__(self) -> Generator[T]:
+    def __reversed__(self) -> Iterator[T]:
         """Alias for reversed()."""
         return self.reversed()
 
@@ -712,7 +712,7 @@ def _seq_update_between[T](
     return between
 
 
-def _seq_iter[T](seq: PSeq[T]) -> Generator[T]:
+def _seq_iter[T](seq: PSeq[T]) -> Iterator[T]:
     match seq:
         case PSeqEmpty():
             pass
@@ -727,7 +727,7 @@ def _seq_iter[T](seq: PSeq[T]) -> Generator[T]:
             raise Impossible
 
 
-def _seq_reversed[T](seq: PSeq[T]) -> Generator[T]:
+def _seq_reversed[T](seq: PSeq[T]) -> Iterator[T]:
     match seq:
         case PSeqEmpty():
             pass

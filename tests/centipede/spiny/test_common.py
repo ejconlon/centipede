@@ -1,6 +1,6 @@
 """Tests for common utility types and functions."""
 
-from typing import Generator, List, Tuple
+from typing import Iterator, List, Tuple
 
 from centipede.spiny.common import (
     Entry,
@@ -112,19 +112,19 @@ def test_compare_function():
     assert compare(1.5, 1.5) == Ordering.Eq
 
 
-def test_compare_lex_empty_generators():
-    """Test compare_lex with empty generators."""
+def test_compare_lex_empty_iterators():
+    """Test compare_lex with empty iterators."""
     empty_list: List[int] = []
-    gen1: Generator[int, None, None] = (x for x in empty_list)
-    gen2: Generator[int, None, None] = (x for x in empty_list)
+    gen1: Iterator[int] = (x for x in empty_list)
+    gen2: Iterator[int] = (x for x in empty_list)
     assert compare_lex(gen1, gen2) == Ordering.Eq
 
 
 def test_compare_lex_one_empty():
-    """Test compare_lex when one generator is empty."""
+    """Test compare_lex when one iterator is empty."""
     empty_list: List[int] = []
-    gen1: Generator[int, None, None] = (x for x in empty_list)
-    gen2: Generator[int, None, None] = (x for x in [1, 2, 3])
+    gen1: Iterator[int] = (x for x in empty_list)
+    gen2: Iterator[int] = (x for x in [1, 2, 3])
     assert compare_lex(gen1, gen2) == Ordering.Lt
 
     gen1 = (x for x in [1, 2, 3])
@@ -184,9 +184,9 @@ def test_compare_lex_strings():
 
 
 def test_group_runs_empty():
-    """Test group_runs with empty generator."""
+    """Test group_runs with empty iterator."""
     empty_list: List[Tuple[str, int]] = []
-    gen: Generator[Tuple[str, int], None, None] = (x for x in empty_list)
+    gen: Iterator[Tuple[str, int]] = (x for x in empty_list)
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))
     assert result == []
 

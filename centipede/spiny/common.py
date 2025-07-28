@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generator, List, Tuple, cast, override
+from typing import Any, Iterator, List, Tuple, cast, override
 
 __all__ = [
     "Box",
@@ -147,12 +147,12 @@ class Sized(metaclass=ABCMeta):
 
 class Iterating[U](metaclass=ABCMeta):
     @abstractmethod
-    def iter(self) -> Generator[U]: ...
+    def iter(self) -> Iterator[U]: ...
 
     def list(self) -> List[U]:
         return list(self.iter())
 
-    def __iter__(self) -> Generator[U]:
+    def __iter__(self) -> Iterator[U]:
         """Alias for iter()."""
         return self.iter()
 
@@ -268,16 +268,16 @@ def compare[T](a: T, b: T) -> Ordering:
         return Ordering.Gt
 
 
-def compare_lex[T](agen: Generator[T], bgen: Generator[T]) -> Ordering:
-    """Perform lexicographic comparison of two sequences via generators.
+def compare_lex[T](agen: Iterator[T], bgen: Iterator[T]) -> Ordering:
+    """Perform lexicographic comparison of two sequences via iterators.
 
-    Compares elements from both generators in order, returning the first
-    non-equal comparison result. If one generator is exhausted first,
+    Compares elements from both iterators in order, returning the first
+    non-equal comparison result. If one iterator is exhausted first,
     the shorter sequence is considered less than the longer one.
 
     Args:
-        agen: Generator producing elements from the first sequence.
-        bgen: Generator producing elements from the second sequence.
+        agen: Iterator producing elements from the first sequence.
+        bgen: Iterator producing elements from the second sequence.
 
     Returns:
         Ordering indicating the lexicographic relationship between the sequences.
@@ -300,14 +300,14 @@ def compare_lex[T](agen: Generator[T], bgen: Generator[T]) -> Ordering:
             return Ordering.Gt
 
 
-def group_runs[K, V](gen: Generator[Tuple[K, V]]) -> Generator[Tuple[K, List[V]]]:
+def group_runs[K, V](gen: Iterator[Tuple[K, V]]) -> Iterator[Tuple[K, List[V]]]:
     """Group consecutive elements with equal keys into runs.
 
-    Takes a generator of (key, value) pairs and yields (key, sequence) pairs where
+    Takes an iterator of (key, value) pairs and yields (key, sequence) pairs where
     each sequence contains all consecutive values that had the same key.
 
     Args:
-        gen: Generator producing (key, value) tuples.
+        gen: Iterator producing (key, value) tuples.
 
     Yields:
         Tuples of (key, sequence)

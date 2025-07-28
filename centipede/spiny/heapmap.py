@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generator, Iterable, Optional, Tuple, Type, override
+from typing import Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Entry,
@@ -78,17 +78,17 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
         return self._heap.size()
 
     @override
-    def iter(self) -> Generator[Tuple[K, V]]:
+    def iter(self) -> Iterator[Tuple[K, V]]:
         """Iterate over all key-value pairs in the heap map in heap order (sorted by key)."""
         for entry in self._heap.iter():
             yield (entry.key, entry.value)
 
-    def keys(self) -> Generator[K]:
+    def keys(self) -> Iterator[K]:
         """Iterate over all keys in the heap map in sorted order."""
         for key, _ in self.iter():
             yield key
 
-    def values(self) -> Generator[V]:
+    def values(self) -> Iterator[V]:
         """Iterate over all values in the heap map in key order."""
         for _, value in self.iter():
             yield value

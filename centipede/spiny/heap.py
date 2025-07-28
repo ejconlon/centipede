@@ -10,7 +10,7 @@ The heap can be used with Entry for map-like functionality.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generator, Iterable, Optional, Tuple, Type, override
+from typing import Any, Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import Impossible, Iterating, Ordering, Sized, compare
 from centipede.spiny.seq import PSeq
@@ -159,7 +159,7 @@ class PHeap[T](Sized, Iterating[T]):
         return None if result is None else result[1]
 
     @override
-    def iter(self) -> Generator[T]:
+    def iter(self) -> Iterator[T]:
         """Iterate through the heap in ascending order.
 
         Yields:
@@ -291,7 +291,7 @@ def _heap_find_min[T](
             raise Impossible
 
 
-def _heap_iter[T](heap: PHeap[T]) -> Generator[T]:
+def _heap_iter[T](heap: PHeap[T]) -> Iterator[T]:
     while not heap.null():
         min_result = heap.find_min()
         if min_result is None:
