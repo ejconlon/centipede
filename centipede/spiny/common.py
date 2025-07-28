@@ -14,6 +14,7 @@ from typing import Any, Generator, List, Tuple, cast, override
 __all__ = [
     "Box",
     "Comparable",
+    "Entry",
     "LexComparable",
     "Impossible",
     "Ordering",
@@ -95,6 +96,14 @@ class Iterating[U](metaclass=ABCMeta):
         return self.list()
 
 
+class Ordering(Enum):
+    """Enumeration representing the result of a comparison operation."""
+
+    Lt = -1
+    Eq = 0
+    Gt = 1
+
+
 class Comparable[T](metaclass=ABCMeta):
     @abstractmethod
     def compare(self, other: T) -> Ordering: ...
@@ -127,12 +136,21 @@ class LexComparable[U, T](Iterating[U], Comparable[T]):
         return compare_lex(self.iter(), getattr(other, "iter")())
 
 
-class Ordering(Enum):
-    """Enumeration representing the result of a comparison operation."""
+@dataclass(frozen=True, eq=False)
+class Entry[K, V](Comparable["Entry[K, V]"]):
+    """A key-value entry that compares only on the key.
 
-    Lt = -1
-    Eq = 0
-    Gt = 1
+    This allows us to store entries in a set or heap and lookup by key only,
+    while still maintaining the associated values.
+    """
+
+    key: K
+    value: V
+
+    @override
+    def compare(self, other: Entry[K, V]) -> Ordering:
+        """Compare entries based on their keys only."""
+        return compare(self.key, other.key)
 
 
 def compare[T](a: T, b: T) -> Ordering:
