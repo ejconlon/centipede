@@ -6,17 +6,15 @@ import numpy as np
 import numpy.typing as npt
 import plotext as plt
 
-type Time = Fraction
-type Delta = Fraction
-type Factor = Fraction
+from centipede.minipat.arc import Arc
+from centipede.minipat.common import ONE, ZERO, Time
+
 type Freq = Fraction
 type Phase = Fraction
 type Rate = int
 type Array = npt.NDArray[np.float64]
 
 
-ZERO = Fraction(0)
-ONE = Fraction(1)
 TAU = np.float64(2 * np.pi)
 
 
@@ -45,6 +43,10 @@ def mk_sin(lspace: Array, freq: Freq, phase: Phase = ZERO) -> Array:
     arr = mk_pspace(lspace=lspace, freq=freq, phase=phase)
     np.sin(arr, out=arr)
     return arr
+
+
+def render_arc(arc: Arc, rate: Rate) -> Array:
+    return mk_lspace(start=arc.start, end=arc.end, rate=rate)
 
 
 def plot(spc: Array, arr: Array) -> None:
