@@ -137,9 +137,11 @@ class Sized(metaclass=ABCMeta):
         return self.size() == 0
 
     def __bool__(self) -> bool:
+        """Alias for not null()."""
         return not self.null()
 
     def __len__(self) -> int:
+        """Alias for size()."""
         return self.size()
 
 
@@ -151,9 +153,11 @@ class Iterating[U](metaclass=ABCMeta):
         return list(self.iter())
 
     def __iter__(self) -> Generator[U]:
+        """Alias for iter()."""
         return self.iter()
 
     def __list__(self) -> List[U]:
+        """Alias for list()."""
         return self.list()
 
 

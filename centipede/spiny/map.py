@@ -287,38 +287,17 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         return _pmap_split(self, pivot_key)
 
     def __rshift__(self, pair: Tuple[K, V]) -> PMap[K, V]:
-        """Insert key-value pair using >> operator.
-
-        Args:
-            pair: A (key, value) tuple to insert.
-
-        Returns:
-            A new map with the key-value pair inserted.
-        """
+        """Alias for put()."""
         key, value = pair
         return self.put(key, value)
 
     def __rlshift__(self, pair: Tuple[K, V]) -> PMap[K, V]:
-        """Insert key-value pair using << operator.
-
-        Args:
-            pair: A (key, value) tuple to insert.
-
-        Returns:
-            A new map with the key-value pair inserted.
-        """
+        """Alias for put()."""
         key, value = pair
         return self.put(key, value)
 
     def __add__(self, other: PMap[K, V]) -> PMap[K, V]:
-        """Merge maps using + operator.
-
-        Args:
-            other: The map to merge with this one.
-
-        Returns:
-            A new map containing entries from both maps.
-        """
+        """Alias for merge()."""
         return self.merge(other)
 
 

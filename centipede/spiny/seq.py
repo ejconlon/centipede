@@ -212,42 +212,23 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
         return _seq_reversed(self)
 
     def __getitem__(self, ix: int) -> T:
+        """Alias for get()."""
         return self.get(ix)
 
     def __rshift__(self, value: T) -> PSeq[T]:
-        """Append element using >> operator.
-
-        Args:
-            value: The element to append.
-
-        Returns:
-            A new sequence with the element appended.
-        """
+        """Alias for snoc()."""
         return self.snoc(value)
 
     def __rlshift__(self, value: T) -> PSeq[T]:
-        """Prepend element using << operator (right-to-left).
-
-        Args:
-            value: The element to prepend.
-
-        Returns:
-            A new sequence with the element prepended.
-        """
+        """Alias for cons()."""
         return self.cons(value)
 
     def __add__(self, other: PSeq[T]) -> PSeq[T]:
-        """Concatenate sequences using + operator.
-
-        Args:
-            other: The sequence to concatenate with this one.
-
-        Returns:
-            A new sequence containing elements from both sequences.
-        """
+        """Alias for concat()."""
         return self.concat(other)
 
     def __reversed__(self) -> Generator[T]:
+        """Alias for reversed()."""
         return self.reversed()
 
 

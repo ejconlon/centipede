@@ -161,36 +161,15 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
         return PHeapMap(self._heap.merge(other._heap))
 
     def __rshift__(self, pair: Tuple[K, V]) -> PHeapMap[K, V]:
-        """Insert key-value pair using >> operator.
-
-        Args:
-            pair: A (key, value) tuple to insert.
-
-        Returns:
-            A new heap map with the key-value pair inserted.
-        """
+        """Alias for insert()."""
         key, value = pair
         return self.insert(key, value)
 
     def __rlshift__(self, pair: Tuple[K, V]) -> PHeapMap[K, V]:
-        """Insert key-value pair using << operator.
-
-        Args:
-            pair: A (key, value) tuple to insert.
-
-        Returns:
-            A new heap map with the key-value pair inserted.
-        """
+        """Alias for insert()."""
         key, value = pair
         return self.insert(key, value)
 
     def __add__(self, other: PHeapMap[K, V]) -> PHeapMap[K, V]:
-        """Merge heap maps using + operator.
-
-        Args:
-            other: The heap map to merge with this one.
-
-        Returns:
-            A new heap map containing entries from both heap maps.
-        """
+        """Alias for merge()."""
         return self.merge(other)

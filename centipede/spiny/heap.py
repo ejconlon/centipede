@@ -168,36 +168,15 @@ class PHeap[T](Sized, Iterating[T]):
         return _heap_iter(self)
 
     def __add__(self, other: PHeap[T]) -> PHeap[T]:
-        """Merge heaps using the + operator.
-
-        Args:
-            other: The heap to merge with this one.
-
-        Returns:
-            A new heap containing all elements from both heaps.
-        """
+        """Alias for merge()."""
         return self.merge(other)
 
     def __rshift__(self, value: T) -> PHeap[T]:
-        """Insert element using >> operator (element on right).
-
-        Args:
-            value: The element to insert.
-
-        Returns:
-            A new set with the element inserted.
-        """
+        """Alias for insert()."""
         return self.insert(value)
 
     def __rlshift__(self, value: T) -> PHeap[T]:
-        """Insert element using << operator (element on left).
-
-        Args:
-            value: The element to insert.
-
-        Returns:
-            A new set with the element inserted.
-        """
+        """Alias for insert()."""
         return self.insert(value)
 
 

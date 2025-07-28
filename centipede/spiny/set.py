@@ -178,14 +178,7 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         return _pset_contains(self, value)
 
     def __contains__(self, value: T) -> bool:
-        """Support 'in' operator for membership testing.
-
-        Args:
-            value: The value to search for.
-
-        Returns:
-            True if the value is in the set, False otherwise.
-        """
+        """Alias for contains()."""
         return self.contains(value)
 
     def union(self, other: PSet[T]) -> PSet[T]:
@@ -242,70 +235,32 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         return self.union(other).difference(self.intersection(other))
 
     def __rshift__(self, value: T) -> PSet[T]:
-        """Insert element using >> operator (element on right).
-
-        Args:
-            value: The element to insert.
-
-        Returns:
-            A new set with the element inserted.
-        """
+        """Alias for insert()."""
         return self.insert(value)
 
     def __rlshift__(self, value: T) -> PSet[T]:
-        """Insert element using << operator (element on left).
-
-        Args:
-            value: The element to insert.
-
-        Returns:
-            A new set with the element inserted.
-        """
+        """Alias for insert()."""
         return self.insert(value)
 
     def __or__(self, other: PSet[T]) -> PSet[T]:
-        """Union using | operator (Python set-like behavior).
-
-        Args:
-            other: The set to union with this one.
-
-        Returns:
-            A new set containing elements from both sets.
-        """
+        """Alias for union()."""
         return self.union(other)
 
     def __and__(self, other: PSet[T]) -> PSet[T]:
-        """Intersection using & operator (Python set-like behavior).
-
-        Args:
-            other: The set to intersect with this one.
-
-        Returns:
-            A new set containing only elements present in both sets.
-        """
+        """Alias for intersection()."""
         return self.intersection(other)
 
     def __sub__(self, other: PSet[T]) -> PSet[T]:
-        """Difference using - operator (Python set-like behavior).
-
-        Args:
-            other: The set to subtract from this one.
-
-        Returns:
-            A new set containing elements in self but not in other.
-        """
+        """Alias for difference()."""
         return self.difference(other)
 
     def __xor__(self, other: PSet[T]) -> PSet[T]:
-        """Symmetric difference using ^ operator (Python set-like behavior).
-
-        Args:
-            other: The set to compute symmetric difference with.
-
-        Returns:
-            A new set containing elements in either set but not in both.
-        """
+        """Alias for symdiff()."""
         return self.symdiff(other)
+
+    def __add__(self, other: PSet[T]) -> PSet[T]:
+        """Alias for union()."""
+        return self.union(other)
 
 
 @dataclass(frozen=True, eq=False)
