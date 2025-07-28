@@ -150,6 +150,15 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         result = self.find_max()
         return None if result is None else result[0]
 
+    def split(self, pivot: T) -> Tuple[PSet[T], PSet[T]]:
+        """Split a set into elements smaller and larger than the pivot.
+
+        Returns:
+            A tuple (smaller, larger) where smaller contains elements < pivot
+            and larger contains elements > pivot. The pivot itself is excluded.
+        """
+        return _pset_split(self, pivot)
+
     def __rshift__(self, value: T) -> PSet[T]:
         """Insert element using >> operator (element on right).
 
@@ -201,7 +210,6 @@ class PSetBranch[T](PSet[T]):
 
 
 def _pset_insert[T](pset: PSet[T], value: T) -> PSet[T]:
-    """Internal insert method using match blocks."""
     match pset:
         case PSetEmpty():
             return PSetBranch(1, _PSET_EMPTY, value, _PSET_EMPTY)
@@ -221,7 +229,6 @@ def _pset_insert[T](pset: PSet[T], value: T) -> PSet[T]:
 
 
 def _pset_merge[T](left_set: PSet[T], right_set: PSet[T]) -> PSet[T]:
-    """Merge two sets efficiently using tree structure."""
     match (left_set, right_set):
         case (PSetEmpty(), _):
             return right_set
@@ -238,12 +245,6 @@ def _pset_merge[T](left_set: PSet[T], right_set: PSet[T]) -> PSet[T]:
 
 
 def _pset_split[T](pset: PSet[T], pivot: T) -> tuple[PSet[T], PSet[T]]:
-    """Split a set into elements smaller and larger than the pivot.
-
-    Returns:
-        A tuple (smaller, larger) where smaller contains elements < pivot
-        and larger contains elements > pivot. The pivot itself is excluded.
-    """
     match pset:
         case PSetEmpty():
             return (_PSET_EMPTY, _PSET_EMPTY)
@@ -267,7 +268,6 @@ def _pset_split[T](pset: PSet[T], pivot: T) -> tuple[PSet[T], PSet[T]]:
 
 
 def _pset_find_min[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
-    """Find the minimum element in the set and return it with the remaining set."""
     match pset:
         case PSetEmpty():
             return None
@@ -288,7 +288,6 @@ def _pset_find_min[T](pset: PSet[T]) -> Optional[Tuple[T, PSet[T]]]:
 
 
 def _pset_find_max[T](pset: PSet[T]) -> Optional[Tuple[PSet[T], T]]:
-    """Find the maximum element in the set and return it with the remaining set."""
     match pset:
         case PSetEmpty():
             return None
@@ -309,7 +308,6 @@ def _pset_find_max[T](pset: PSet[T]) -> Optional[Tuple[PSet[T], T]]:
 
 
 def _pset_balance[T](left: PSet[T], value: T, right: PSet[T]) -> PSet[T]:
-    """Create a balanced tree from left subtree, value, and right subtree."""
     left_size = left.size()
     right_size = right.size()
     total_size = left_size + 1 + right_size
