@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import Enum
 from functools import partial
 from typing import Any, Callable, Tuple
 
@@ -9,6 +10,13 @@ from centipede.common import PartialMatchException, ignore_arg
 from centipede.minipat.arc import Arc
 from centipede.minipat.common import Delta, Factor
 from centipede.spiny import Box, PSeq
+
+
+class RepetitionOp(Enum):
+    """Enumeration for repetition operators."""
+
+    FAST = "*"  # Multiply/repeat
+    SLOW = "/"  # Divide/slow down
 
 
 # sealed
@@ -35,6 +43,38 @@ class Pat[T]:
     @staticmethod
     def par(pats: Iterable[Pat[T]]) -> Pat[T]:
         return Pat(PatPar(PSeq.mk(pats)))
+
+    @staticmethod
+    def choice(choices: Iterable[Pat[T]]) -> Pat[T]:
+        return Pat(PatChoice(PSeq.mk(choices)))
+
+    @staticmethod
+    def euclidean(atom: Pat[T], hits: int, steps: int, rotation: int = 0) -> Pat[T]:
+        return Pat(PatEuclidean(atom, hits, steps, rotation))
+
+    @staticmethod
+    def polymetric(patterns: Iterable[Pat[T]]) -> Pat[T]:
+        return Pat(PatPolymetric(PSeq.mk(patterns)))
+
+    @staticmethod
+    def repetition(pattern: Pat[T], operator: RepetitionOp, count: int) -> Pat[T]:
+        return Pat(PatRepetition(pattern, operator, count))
+
+    @staticmethod
+    def elongation(pattern: Pat[T], count: int) -> Pat[T]:
+        return Pat(PatElongation(pattern, count))
+
+    @staticmethod
+    def probability(pattern: Pat[T], prob: float = 0.5) -> Pat[T]:
+        return Pat(PatProbability(pattern, prob))
+
+    @staticmethod
+    def select(pattern: Pat[T], selector: str) -> Pat[T]:
+        return Pat(PatSelect(pattern, selector))
+
+    @staticmethod
+    def group(pattern: Pat[T]) -> Pat[T]:
+        return Pat(PatGroup(pattern))
 
     def mask(self, arc: Arc) -> Pat[T]:
         if arc.null():
@@ -168,6 +208,54 @@ class PatPar[T, R](PatF[T, R]):
     children: PSeq[R]
 
 
+@dataclass(frozen=True)
+class PatChoice[T, R](PatF[T, R]):
+    choices: PSeq[R]
+
+
+@dataclass(frozen=True)
+class PatEuclidean[T, R](PatF[T, R]):
+    atom: R
+    hits: int
+    steps: int
+    rotation: int
+
+
+@dataclass(frozen=True)
+class PatPolymetric[T, R](PatF[T, R]):
+    patterns: PSeq[R]
+
+
+@dataclass(frozen=True)
+class PatRepetition[T, R](PatF[T, R]):
+    pattern: R
+    operator: RepetitionOp
+    count: int
+
+
+@dataclass(frozen=True)
+class PatElongation[T, R](PatF[T, R]):
+    pattern: R
+    count: int
+
+
+@dataclass(frozen=True)
+class PatProbability[T, R](PatF[T, R]):
+    pattern: R
+    probability: float
+
+
+@dataclass(frozen=True)
+class PatSelect[T, R](PatF[T, R]):
+    pattern: R
+    selector: str
+
+
+@dataclass(frozen=True)
+class PatGroup[T, R](PatF[T, R]):
+    pattern: R
+
+
 def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[T]], Z]:
     def wrapper(env: V, pat: Pat[T]) -> Z:
         pf = pat.unwrap
@@ -191,6 +279,30 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatPar(cs):
                 czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatPar(czs))
+            case PatChoice(cs):
+                czs = PSeq.mk(wrapper(env, c) for c in cs)
+                return fn(env, PatChoice(czs))
+            case PatEuclidean(atom, hits, steps, rotation):
+                atom_z = wrapper(env, atom)
+                return fn(env, PatEuclidean(atom_z, hits, steps, rotation))
+            case PatPolymetric(ps):
+                pzs = PSeq.mk(wrapper(env, p) for p in ps)
+                return fn(env, PatPolymetric(pzs))
+            case PatRepetition(p, op, count):
+                pz = wrapper(env, p)
+                return fn(env, PatRepetition(pz, op, count))
+            case PatElongation(p, count):
+                pz = wrapper(env, p)
+                return fn(env, PatElongation(pz, count))
+            case PatProbability(p, prob):
+                pz = wrapper(env, p)
+                return fn(env, PatProbability(pz, prob))
+            case PatSelect(p, selector):
+                pz = wrapper(env, p)
+                return fn(env, PatSelect(pz, selector))
+            case PatGroup(p):
+                pz = wrapper(env, p)
+                return fn(env, PatGroup(pz))
             case _:
                 raise PartialMatchException(pf)
 
@@ -232,6 +344,22 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatSeq(cs))
             case PatPar(cs):
                 return Pat(PatPar(cs))
+            case PatChoice(cs):
+                return Pat(PatChoice(cs))
+            case PatEuclidean(atom, hits, steps, rotation):
+                return Pat(PatEuclidean(atom, hits, steps, rotation))
+            case PatPolymetric(ps):
+                return Pat(PatPolymetric(ps))
+            case PatRepetition(p, op, count):
+                return Pat(PatRepetition(p, op, count))
+            case PatElongation(p, count):
+                return Pat(PatElongation(p, count))
+            case PatProbability(p, prob):
+                return Pat(PatProbability(p, prob))
+            case PatSelect(p, selector):
+                return Pat(PatSelect(p, selector))
+            case PatGroup(p):
+                return Pat(PatGroup(p))
             case _:
                 raise PartialMatchException(pf)
 

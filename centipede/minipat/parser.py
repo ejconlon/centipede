@@ -2,16 +2,52 @@ from __future__ import annotations
 
 from lark import Lark, Transformer
 
-from centipede.minipat.pat import Pat
+from centipede.minipat.pat import Pat, RepetitionOp
 
 # Grammar for pattern parsing
 PATTERN_GRAMMAR = """
 start: pattern
-pattern: element+
-element: SYMBOL | silence
-silence: "~"
 
-SYMBOL: /[a-zA-Z0-9]+/
+// Main pattern can be a sequence or a single element
+pattern: element+
+
+// Elements can be various types
+element: probability | elongation | repetition | base_element
+base_element: atom | group | choice | euclidean | polymetric
+
+// Basic atoms
+atom: sample_selection | symbol | silence
+symbol: SYMBOL
+silence: "~"
+sample_selection: SYMBOL ":" NUMBER
+
+// Grouping structures
+group: "[" pattern "]" | "." pattern "."
+choice: "[" choice_list "]"
+choice_list: pattern ("|" pattern)+
+
+// Euclidean rhythms: symbol(hits,steps) or symbol(hits,steps,rotation)
+euclidean: atom "(" NUMBER "," NUMBER ("," NUMBER)? ")"
+
+// Polymetric sequences
+polymetric: "{" pattern ("," pattern)+ "}"
+
+// Repetition and speed modifiers
+repetition: base_element MULTIPLY NUMBER | base_element DIVIDE NUMBER | repetition DIVIDE NUMBER | repetition MULTIPLY NUMBER
+elongation: base_element UNDERSCORE+ | base_element AT+ | repetition UNDERSCORE+ | repetition AT+
+
+// Operator tokens
+MULTIPLY: "*"
+DIVIDE: "/"
+UNDERSCORE: "_"
+AT: "@"
+
+// Probability
+probability: atom "?"
+
+// Tokens
+SYMBOL: /[a-zA-Z0-9\\-]+/
+NUMBER: /\\d+/
 
 %import common.WS
 %ignore WS
@@ -27,26 +63,116 @@ class PatternTransformer(Transformer):
 
     def pattern(self, items):
         """Transform a pattern into a sequence of events."""
+        if len(items) == 1:
+            return items[0]
         return Pat.seq(items)
 
     def element(self, items):
-        """Transform an element into a pure pattern."""
+        """Transform an element into a pattern."""
+        return items[0]
+
+    def base_element(self, items):
+        """Transform a base element into a pattern."""
+        return items[0]
+
+    # Basic atoms
+    def atom(self, items):
+        """Transform an atom element."""
+        return items[0]
+
+    def symbol(self, items):
+        """Transform a symbol."""
         return items[0]
 
     def silence(self, items):
         """Transform silence into empty pattern."""
         return Pat.silence()
 
+    def sample_selection(self, items):
+        """Transform sample selection like 'bd:2'."""
+        symbol_token, number = items
+        # Create a pattern from the symbol token and use the number as selector
+        # Extract the actual symbol string if it's already transformed
+        if hasattr(symbol_token, "unwrap") and hasattr(symbol_token.unwrap, "val"):
+            symbol_str = symbol_token.unwrap.val
+        else:
+            symbol_str = str(symbol_token)
+        symbol_pat = Pat.pure(symbol_str)
+        selector = str(number)
+        return Pat.select(symbol_pat, selector)
+
+    # Grouping structures
+    def group(self, items):
+        """Transform grouping [...] or .pattern."""
+        return Pat.group(items[0])
+
+    def choice(self, items):
+        """Transform choice patterns [a|b|c]."""
+        choices = items[0]
+        return Pat.choice(choices)
+
+    def choice_list(self, items):
+        """Transform choice list a|b|c."""
+        return items
+
+    # Euclidean rhythms
+    def euclidean(self, items):
+        """Transform Euclidean rhythm pattern like bd(3,8)."""
+        atom = items[0]
+        hits = int(items[1])
+        steps = int(items[2])
+        rotation = int(items[3]) if len(items) > 3 else 0
+        return Pat.euclidean(atom, hits, steps, rotation)
+
+    # Polymetric sequences
+    def polymetric(self, items):
+        """Transform polymetric patterns {a,b,c}."""
+        return Pat.polymetric(items)
+
+    # Repetition and speed modifiers
+    def repetition(self, items):
+        """Transform repetition patterns like bd*2 or bd/2."""
+        element = items[0]
+        op_str = str(items[1])
+        num = int(items[2])
+
+        # Convert string operator to enum
+        if op_str == "*":
+            op = RepetitionOp.FAST
+        elif op_str == "/":
+            op = RepetitionOp.SLOW
+        else:
+            raise ValueError(f"Unknown repetition operator: {op_str}")
+
+        return Pat.repetition(element, op, num)
+
+    def elongation(self, items):
+        """Transform elongation patterns like bd_ or bd@."""
+        element = items[0]
+        elongation_symbols = items[1:]
+        elongation_count = len(elongation_symbols)
+        return Pat.elongation(element, elongation_count)
+
+    # Probability
+    def probability(self, items):
+        """Transform probability patterns like bd?."""
+        element = items[0]
+        return Pat.probability(element)
+
     def SYMBOL(self, token):
         """Transform a symbol token into a pure pattern."""
         return Pat.pure(str(token))
 
+    def NUMBER(self, token):
+        """Transform a number token."""
+        return int(str(token))
+
 
 def parse_pattern(pattern_str: str) -> Pat[str]:
-    """Parse a pattern string like 'bd sd sd' into a Pat object.
+    """Parse a pattern string into a Pat object.
 
     Args:
-        pattern_str: A string representing a pattern, e.g., "bd sd sd"
+        pattern_str: A string representing a pattern
 
     Returns:
         A Pat object representing the parsed pattern
@@ -57,6 +183,21 @@ def parse_pattern(pattern_str: str) -> Pat[str]:
 
         >>> parse_pattern("bd ~ sd")
         # Returns a Pat.seq with "bd", silence, "sd"
+
+        >>> parse_pattern("bd*2 sd")
+        # Returns a Pat.seq with repeated "bd", then "sd"
+
+        >>> parse_pattern("[bd sd] cp")
+        # Returns a Pat.seq with grouped "bd sd", then "cp"
+
+        >>> parse_pattern("bd(3,8)")
+        # Returns a euclidean rhythm pattern
+
+        >>> parse_pattern("{bd, sd}")
+        # Returns parallel patterns
+
+        >>> parse_pattern("[bd|sd|cp]")
+        # Returns choice pattern
     """
     parser = Lark(PATTERN_GRAMMAR)
     transformer = PatternTransformer()
