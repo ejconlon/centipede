@@ -13,6 +13,7 @@ from centipede.spiny.common import (
     Sized,
     compare,
 )
+from centipede.spiny.set import PSet, PSetBranch, PSetEmpty
 
 __all__ = ["PMap"]
 
@@ -132,6 +133,18 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         """
         for key, _ in self.iter():
             yield key
+
+    def keys_set(self) -> PSet[K]:
+        """Return a set containing all keys from the map.
+
+        Time Complexity: O(n) for tree transformation
+        Space Complexity: O(n) for new tree structure
+
+        Returns:
+            A PSet containing all keys from this map.
+        """
+
+        return _pmap_keys_to_pset(self)
 
     def values(self) -> Iterator[V]:
         """Iterate over all values in the map in key order.
@@ -690,3 +703,21 @@ def _pmap_balance[K, V](
 
     # Tree is balanced or no rotation needed
     return PMapBranch(total_size, left, key, value, right)
+
+
+def _pmap_keys_to_pset[K, V](pmap: PMap[K, V]) -> PSet[K]:
+    """Convert a PMap to a PSet containing all its keys.
+
+    This is implemented efficiently by transforming the tree structure directly
+    rather than iterating through elements.
+    """
+
+    match pmap:
+        case PMapEmpty():
+            return PSetEmpty()
+        case PMapBranch(_size, left, key, _, right):
+            left_set = _pmap_keys_to_pset(left)
+            right_set = _pmap_keys_to_pset(right)
+            return PSetBranch(_size, left_set, key, right_set)
+        case _:
+            raise Impossible
