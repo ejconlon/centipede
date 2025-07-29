@@ -1,4 +1,5 @@
 from centipede.spiny.map import PMap
+from centipede.spiny.set import PSet
 
 
 def test_empty_map():
@@ -1108,3 +1109,315 @@ def test_merge_favors_left_values_on_collision():
         (4, "right_four"),
     ]
     assert list(result.items()) == expected_items
+
+
+def test_keys_set_empty_map():
+    """Test keys_set on empty map returns empty set"""
+    empty_map = PMap.empty(int, str)
+    keys_set = empty_map.keys_set()
+
+    assert keys_set.size() == 0
+    assert keys_set.null()
+    assert list(keys_set.iter()) == []
+
+
+def test_keys_set_singleton():
+    """Test keys_set on singleton map"""
+    single_map = PMap.singleton(42, "forty-two")
+    keys_set = single_map.keys_set()
+
+    assert keys_set.size() == 1
+    assert not keys_set.null()
+    assert list(keys_set.iter()) == [42]
+    assert keys_set.contains(42)
+    assert not keys_set.contains(43)
+
+
+def test_keys_set_multiple_entries():
+    """Test keys_set on map with multiple entries"""
+    map_obj = PMap.mk([(3, "three"), (1, "one"), (4, "four"), (2, "two")])
+    keys_set = map_obj.keys_set()
+
+    assert keys_set.size() == 4
+    assert not keys_set.null()
+
+    # Keys should be in sorted order (same as map iteration)
+    keys_list = list(keys_set.iter())
+    assert keys_list == [1, 2, 3, 4]
+
+    # Test contains for all keys
+    for key in [1, 2, 3, 4]:
+        assert keys_set.contains(key)
+
+    # Test contains for non-existent keys
+    assert not keys_set.contains(0)
+    assert not keys_set.contains(5)
+
+
+def test_keys_set_preserves_order():
+    """Test that keys_set preserves the sorted order from the map"""
+    pairs = [(7, "seven"), (3, "three"), (11, "eleven"), (1, "one"), (9, "nine")]
+    map_obj = PMap.mk(pairs)
+    keys_set = map_obj.keys_set()
+
+    map_keys = list(map_obj.keys())
+    set_keys = list(keys_set.iter())
+
+    assert map_keys == set_keys
+    assert set_keys == sorted([key for key, _ in pairs])
+
+
+def test_keys_set_with_string_keys():
+    """Test keys_set with string keys"""
+    map_obj = PMap.mk([("zebra", 1), ("apple", 2), ("banana", 3), ("cherry", 4)])
+    keys_set = map_obj.keys_set()
+
+    assert keys_set.size() == 4
+    expected_keys = ["apple", "banana", "cherry", "zebra"]
+    assert list(keys_set.iter()) == expected_keys
+
+    for key in expected_keys:
+        assert keys_set.contains(key)
+
+
+def test_keys_set_large_map():
+    """Test keys_set on a large map"""
+    pairs = [(i, f"value_{i}") for i in range(100)]
+    map_obj = PMap.mk(pairs)
+    keys_set = map_obj.keys_set()
+
+    assert keys_set.size() == 100
+    assert list(keys_set.iter()) == list(range(100))
+
+    # Test random sampling of contains
+    for key in [0, 25, 50, 75, 99]:
+        assert keys_set.contains(key)
+    assert not keys_set.contains(100)
+    assert not keys_set.contains(-1)
+
+
+def test_keys_set_type_consistency():
+    """Test that keys_set returns proper PSet type"""
+    map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
+    keys_set = map_obj.keys_set()
+
+    # Should be a PSet instance
+    assert isinstance(keys_set, PSet)
+
+    # Should support PSet operations
+    new_set = keys_set.insert(4)
+    assert new_set.size() == 4
+    assert new_set.contains(4)
+    assert keys_set.size() == 3  # Original unchanged
+
+
+def test_keys_set_equivalence_with_manual_creation():
+    """Test that keys_set produces equivalent result to manual PSet creation"""
+    map_obj = PMap.mk([(5, "five"), (2, "two"), (8, "eight"), (1, "one")])
+
+    # Create using keys_set
+    keys_set = map_obj.keys_set()
+
+    # Create manually from keys iterator
+    manual_set = PSet.mk(map_obj.keys())
+
+    # Should have same elements
+    assert keys_set.size() == manual_set.size()
+    assert list(keys_set.iter()) == list(manual_set.iter())
+
+    # Test equivalence by checking contains for all elements
+    for key in map_obj.keys():
+        assert keys_set.contains(key) == manual_set.contains(key)
+
+
+def test_keys_set_with_negative_keys():
+    """Test keys_set with negative number keys"""
+    map_obj = PMap.mk([(-3, "a"), (-1, "b"), (0, "c"), (2, "d"), (-5, "e")])
+    keys_set = map_obj.keys_set()
+
+    expected_keys = [-5, -3, -1, 0, 2]
+    assert list(keys_set.iter()) == expected_keys
+    assert keys_set.size() == 5
+
+    for key in expected_keys:
+        assert keys_set.contains(key)
+
+
+def test_assoc_empty_set():
+    """Test assoc with empty set"""
+    empty_set = PSet.empty(int)
+    result_map = PMap.assoc(empty_set, "default")
+
+    assert result_map.null()
+    assert result_map.size() == 0
+    assert list(result_map.items()) == []
+
+
+def test_assoc_singleton_set():
+    """Test assoc with singleton set"""
+    single_set = PSet.singleton(42)
+    result_map = PMap.assoc(single_set, "value")
+
+    assert result_map.size() == 1
+    assert not result_map.null()
+    assert result_map.get(42) == "value"
+    assert list(result_map.items()) == [(42, "value")]
+
+
+def test_assoc_multiple_elements():
+    """Test assoc with set containing multiple elements"""
+    multi_set = PSet.mk([3, 1, 4, 2])
+    result_map = PMap.assoc(multi_set, "constant")
+
+    assert result_map.size() == 4
+    assert not result_map.null()
+
+    # All keys should have the same value
+    expected_items = [
+        (1, "constant"),
+        (2, "constant"),
+        (3, "constant"),
+        (4, "constant"),
+    ]
+    assert list(result_map.items()) == expected_items
+
+    # Test individual gets
+    for key in [1, 2, 3, 4]:
+        assert result_map.get(key) == "constant"
+        assert result_map.contains(key)
+
+
+def test_assoc_different_value_types():
+    """Test assoc with different value types"""
+    keys_set = PSet.mk(["x", "y", "z"])
+
+    # Test with int values
+    int_map = PMap.assoc(keys_set, 100)
+    assert list(int_map.items()) == [("x", 100), ("y", 100), ("z", 100)]
+
+    # Test with float values
+    float_map = PMap.assoc(keys_set, 3.14)
+    assert list(float_map.items()) == [("x", 3.14), ("y", 3.14), ("z", 3.14)]
+
+    # Test with list values
+    list_value = [1, 2, 3]
+    list_map = PMap.assoc(keys_set, list_value)
+    expected = [("x", list_value), ("y", list_value), ("z", list_value)]
+    assert list(list_map.items()) == expected
+
+    # Test with None values
+    none_map = PMap.assoc(keys_set, None)
+    expected_none = [("x", None), ("y", None), ("z", None)]
+    assert list(none_map.items()) == expected_none
+
+
+def test_assoc_preserves_order():
+    """Test that assoc preserves the order from the original set"""
+    original_set = PSet.mk([7, 3, 11, 1, 9])
+    result_map = PMap.assoc(original_set, "value")
+
+    # Order should match set iteration order
+    set_keys = list(original_set.iter())
+    map_keys = list(result_map.keys())
+
+    assert set_keys == map_keys
+    assert set_keys == [1, 3, 7, 9, 11]  # Should be sorted
+
+
+def test_assoc_large_set():
+    """Test assoc with a large set"""
+    large_keys = [str(i) for i in range(50)]
+    large_set = PSet.mk(large_keys)
+    result_map = PMap.assoc(large_set, "constant")
+
+    assert result_map.size() == 50
+
+    # Test first few items
+    items = list(result_map.items())
+    for i in range(5):
+        key, value = items[i]
+        assert value == "constant"
+        assert result_map.contains(key)
+
+    # Test that all values are the same
+    all_values = list(result_map.values())
+    assert all(v == "constant" for v in all_values)
+
+
+def test_assoc_with_string_keys():
+    """Test assoc with string keys"""
+    string_set = PSet.mk(["apple", "banana", "cherry"])
+    result_map = PMap.assoc(string_set, 42)
+
+    expected_items = [("apple", 42), ("banana", 42), ("cherry", 42)]
+    assert list(result_map.items()) == expected_items
+    assert result_map.size() == 3
+
+
+def test_assoc_round_trip_with_keys_set():
+    """Test round-trip conversion: PSet -> PMap via assoc -> PSet via keys_set"""
+    original_set = PSet.mk(["foo", "bar", "baz", "qux"])
+
+    # Convert to map using assoc
+    map_from_set = PMap.assoc(original_set, "test_value")
+
+    # Convert back to set using keys_set
+    recovered_set = map_from_set.keys_set()
+
+    # Should preserve structure and order
+    original_keys = list(original_set.iter())
+    recovered_keys = list(recovered_set.iter())
+
+    assert original_keys == recovered_keys
+    assert original_set.size() == recovered_set.size()
+
+    # Test element-wise equivalence
+    for key in original_keys:
+        assert original_set.contains(key)
+        assert recovered_set.contains(key)
+
+
+def test_assoc_type_consistency():
+    """Test that assoc returns proper PMap type"""
+    test_set = PSet.mk([1, 2, 3])
+    result_map = PMap.assoc(test_set, "value")
+
+    # Should be a PMap instance
+    assert isinstance(result_map, PMap)
+
+    # Should support PMap operations
+    new_map = result_map.put(4, "new_value")
+    assert new_map.size() == 4
+    assert new_map.get(4) == "new_value"
+    assert result_map.size() == 3  # Original unchanged
+
+
+def test_assoc_with_negative_keys():
+    """Test assoc with negative number keys"""
+    negative_set = PSet.mk([-5, -1, 0, 3, -10])
+    result_map = PMap.assoc(negative_set, "negative_test")
+
+    expected_keys = [-10, -5, -1, 0, 3]  # Should be sorted
+    assert list(result_map.keys()) == expected_keys
+    assert result_map.size() == 5
+
+    for key in expected_keys:
+        assert result_map.get(key) == "negative_test"
+
+
+def test_assoc_efficiency_structure_preservation():
+    """Test that assoc preserves the tree structure efficiently"""
+    # Create a set with known structure
+    keys = [i for i in range(1, 16)]  # 1 to 15, should create balanced tree
+    original_set = PSet.mk(keys)
+    result_map = PMap.assoc(original_set, "test")
+
+    # Size should be preserved
+    assert original_set.size() == result_map.size()
+
+    # Order should be preserved
+    assert list(original_set.iter()) == list(result_map.keys())
+
+    # All values should be the same
+    for key in keys:
+        assert result_map.get(key) == "test"

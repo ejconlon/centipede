@@ -80,6 +80,22 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
             box.value = box.value.put(key, value)
         return box.value
 
+    @staticmethod
+    def assoc(pset: PSet[K], value: V) -> PMap[K, V]:
+        """Create a map by associating the same value with each key from a set.
+
+        Time Complexity: O(n) for tree transformation
+        Space Complexity: O(n) for new tree structure
+
+        Args:
+            pset: The set of keys to use.
+            value: The value to associate with each key.
+
+        Returns:
+            A map containing all keys from the set, each associated with the given value.
+        """
+        return _pset_to_pmap_with_value(pset, value)
+
     @override
     def null(self) -> bool:
         """Check if the map is empty.
@@ -719,5 +735,22 @@ def _pmap_keys_to_pset[K, V](pmap: PMap[K, V]) -> PSet[K]:
             left_set = _pmap_keys_to_pset(left)
             right_set = _pmap_keys_to_pset(right)
             return PSetBranch(_size, left_set, key, right_set)
+        case _:
+            raise Impossible
+
+
+def _pset_to_pmap_with_value[K, V](pset: PSet[K], value: V) -> PMap[K, V]:
+    """Convert a PSet to a PMap by associating the same value with each key.
+
+    This is implemented efficiently by transforming the tree structure directly
+    rather than iterating through elements and inserting them one by one.
+    """
+    match pset:
+        case PSetEmpty():
+            return _PMAP_EMPTY
+        case PSetBranch(_size, left, key, right):
+            left_map = _pset_to_pmap_with_value(left, value)
+            right_map = _pset_to_pmap_with_value(right, value)
+            return PMapBranch(_size, left_map, key, value, right_map)
         case _:
             raise Impossible
