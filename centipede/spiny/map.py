@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Optional, Tuple, Type, override
+from typing import Any, Iterable, Iterator, Optional, Tuple, Type, Union, override
 
 from centipede.spiny.common import (
     Box,
@@ -14,9 +14,15 @@ from centipede.spiny.common import (
     compare,
 )
 
-_MISSING = object()
-
 __all__ = ["PMap"]
+
+
+@dataclass(frozen=True)
+class Missing:
+    pass
+
+
+_MISSING = Missing()
 
 
 # sealed
@@ -144,7 +150,7 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         """
         yield from self.iter()
 
-    def get(self, key: K, default: Optional[V] = None) -> V:
+    def get(self, key: K, default: Union[V, Missing] = _MISSING) -> V:
         """Get the value associated with a key.
 
         Time Complexity: O(log n)
@@ -343,13 +349,15 @@ class PMapBranch[K, V](PMap[K, V]):
     _right: PMap[K, V]
 
 
-def _pmap_get_with_default[K, V](pmap: PMap[K, V], key: K, default: Optional[V]) -> V:
+def _pmap_get_with_default[K, V](
+    pmap: PMap[K, V], key: K, default: Union[V, Missing]
+) -> V:
     match pmap:
         case PMapEmpty():
-            if default:
-                return default
-            else:
+            if isinstance(default, Missing):
                 raise KeyError(key)
+            else:
+                return default
         case PMapBranch(_, left, branch_key, branch_value, right):
             cmp = compare(key, branch_key)
             if cmp == Ordering.Eq:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterator, Optional, override
 
 from centipede.spiny.common import LexComparable, Sized
@@ -10,6 +11,7 @@ from centipede.spiny.map import PMap
 __all__ = ["Array"]
 
 
+@dataclass(frozen=True, eq=False)
 class Array[T](Sized, LexComparable[T, "Array[T]"]):
     """Fixed-size array backed by a PMap.
 
@@ -17,21 +19,24 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
     Supports get/set operations with bounds checking and resizing.
     """
 
-    def __init__(self, size: int, fill_element: T) -> None:
+    _size: int
+    _fill: T
+    _pmap: PMap[int, T]
+
+    @staticmethod
+    def new(size: int, fill: T) -> Array[T]:
         """Create a new Array with the given size and fill element.
 
         Args:
             size: The size of the array (must be >= 0)
-            fill_element: The element to return for unset indices
+            fill: The element to return for unset indices
 
         Raises:
             ValueError: If size is negative
         """
         if size < 0:
             raise ValueError("Array size must be non-negative")
-        self._size = size
-        self._fill_element = fill_element
-        self._pmap: PMap[int, T] = PMap.empty()
+        return Array(_size=size, _fill=fill, _pmap=PMap.empty())
 
     @override
     def size(self) -> int:
@@ -59,7 +64,7 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
         """
         for i in range(self._size):
             value = self.lookup(i)
-            yield value if value is not None else self._fill_element
+            yield value if value is not None else self._fill
 
     def get(self, index: int) -> T:
         """Get the element at the given index.
@@ -67,7 +72,7 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
         Args:
             index: The index to get (must be in range [0, size-1])
             default: Value to return if index is not found in the PMap.
-                    If not provided, returns fill_element for valid indices.
+                    If not provided, returns fill for valid indices.
 
         Returns:
             The element at the index, the default if provided and index not in PMap,
@@ -81,7 +86,7 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
                 f"Index {index} out of bounds for array of size {self._size}"
             )
 
-        return self._pmap.get(index, self._fill_element)
+        return self._pmap.get(index, self._fill)
 
     def lookup(self, index: int) -> Optional[T]:
         """Get the element at the given index, returning None if not found.
@@ -121,9 +126,9 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
                 f"Index {index} out of bounds for array of size {self._size}"
             )
 
-        new_array = Array(self._size, self._fill_element)
-        new_array._pmap = self._pmap.put(index, value)
-        return new_array
+        return Array(
+            _size=self._size, _fill=self._fill, _pmap=self._pmap.put(index, value)
+        )
 
     def resize(self, new_size: int) -> Array[T]:
         """Resize the array to a new size.
@@ -143,15 +148,14 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
         if new_size < 0:
             raise ValueError("Array size must be non-negative")
 
-        new_array = Array(new_size, self._fill_element)
-
         # Copy existing values that are still within bounds
+        pmap = self._pmap
         if new_size > 0:
             for index, value in self._pmap.items():
                 if 0 <= index < new_size:
-                    new_array._pmap = new_array._pmap.put(index, value)
+                    pmap = pmap.put(index, value)
 
-        return new_array
+        return Array(_size=new_size, _fill=self._fill, _pmap=pmap)
 
     def __getitem__(self, index: int) -> T:
         """Get element at index using array[index] syntax."""
