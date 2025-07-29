@@ -1421,3 +1421,247 @@ def test_assoc_efficiency_structure_preservation():
     # All values should be the same
     for key in keys:
         assert result_map.get(key) == "test"
+
+
+def test_filter_keys_empty():
+    """Test filtering keys on an empty map"""
+    empty = PMap.empty(int, str)
+    filtered = empty.filter_keys(lambda x: x > 0)
+    assert filtered.null()
+    assert list(filtered.items()) == []
+
+
+def test_filter_keys_single_match():
+    """Test filtering keys on a single entry that matches"""
+    single_map = PMap.singleton(5, "five")
+    filtered = single_map.filter_keys(lambda x: x > 0)
+    assert list(filtered.items()) == [(5, "five")]
+    assert filtered.size() == 1
+
+
+def test_filter_keys_single_no_match():
+    """Test filtering keys on a single entry that doesn't match"""
+    single_map = PMap.singleton(-5, "negative")
+    filtered = single_map.filter_keys(lambda x: x > 0)
+    assert filtered.null()
+    assert list(filtered.items()) == []
+
+
+def test_filter_keys_multiple():
+    """Test filtering keys on maps with multiple entries"""
+    map_obj = PMap.mk(
+        [(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five"), (6, "six")]
+    )
+    filtered = map_obj.filter_keys(lambda x: x % 2 == 0)  # Even keys
+    assert list(filtered.items()) == [(2, "two"), (4, "four"), (6, "six")]
+    assert filtered.size() == 3
+
+    # Original map unchanged
+    assert list(map_obj.items()) == [
+        (1, "one"),
+        (2, "two"),
+        (3, "three"),
+        (4, "four"),
+        (5, "five"),
+        (6, "six"),
+    ]
+
+
+def test_filter_keys_all_match():
+    """Test filtering keys where all keys match"""
+    map_obj = PMap.mk([(2, "two"), (4, "four"), (6, "six"), (8, "eight")])
+    filtered = map_obj.filter_keys(lambda x: x % 2 == 0)
+    assert list(filtered.items()) == [(2, "two"), (4, "four"), (6, "six"), (8, "eight")]
+    assert filtered.size() == 4
+
+
+def test_filter_keys_none_match():
+    """Test filtering keys where no keys match"""
+    map_obj = PMap.mk([(1, "one"), (3, "three"), (5, "five"), (7, "seven")])
+    filtered = map_obj.filter_keys(lambda x: x % 2 == 0)
+    assert filtered.null()
+    assert list(filtered.items()) == []
+
+
+def test_filter_keys_string_keys():
+    """Test filtering string keys"""
+    map_obj = PMap.mk(
+        [("apple", 1), ("banana", 2), ("cherry", 3), ("apricot", 4), ("blueberry", 5)]
+    )
+    filtered = map_obj.filter_keys(lambda s: s.startswith("a"))
+    assert list(filtered.items()) == [("apple", 1), ("apricot", 4)]
+    assert filtered.size() == 2
+
+
+def test_filter_keys_negative_numbers():
+    """Test filtering keys with negative numbers"""
+    map_obj = PMap.mk(
+        [
+            (-5, "neg_five"),
+            (-2, "neg_two"),
+            (0, "zero"),
+            (3, "three"),
+            (-1, "neg_one"),
+            (7, "seven"),
+        ]
+    )
+    filtered = map_obj.filter_keys(lambda x: x < 0)
+    assert list(filtered.items()) == [
+        (-5, "neg_five"),
+        (-2, "neg_two"),
+        (-1, "neg_one"),
+    ]
+    assert filtered.size() == 3
+
+
+def test_filter_keys_persistence():
+    """Test that filter_keys creates new maps without modifying originals"""
+    original = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")])
+    filtered = original.filter_keys(lambda x: x > 3)
+
+    # Original should be unchanged
+    assert list(original.items()) == [
+        (1, "one"),
+        (2, "two"),
+        (3, "three"),
+        (4, "four"),
+        (5, "five"),
+    ]
+    assert original.size() == 5
+
+    # Filtered should contain only matching entries
+    assert list(filtered.items()) == [(4, "four"), (5, "five")]
+    assert filtered.size() == 2
+
+
+def test_map_values_empty():
+    """Test mapping values on an empty map"""
+    empty = PMap.empty(int, str)
+    mapped = empty.map_values(lambda x: x.upper())
+    assert mapped.null()
+    assert list(mapped.items()) == []
+
+
+def test_map_values_single():
+    """Test mapping values on a single entry"""
+    single_map = PMap.singleton(5, "five")
+    mapped = single_map.map_values(lambda x: x.upper())
+    assert list(mapped.items()) == [(5, "FIVE")]
+    assert mapped.size() == 1
+
+
+def test_map_values_multiple():
+    """Test mapping values on maps with multiple entries"""
+    map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
+    mapped = map_obj.map_values(lambda x: x.upper())
+    assert list(mapped.items()) == [(1, "ONE"), (2, "TWO"), (3, "THREE")]
+    assert mapped.size() == 3
+
+    # Original map unchanged
+    assert list(map_obj.items()) == [(1, "one"), (2, "two"), (3, "three")]
+
+
+def test_map_values_type_change():
+    """Test mapping values that changes the value type"""
+    map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
+    mapped = map_obj.map_values(lambda x: len(x))  # String -> int
+    assert list(mapped.items()) == [(1, 3), (2, 3), (3, 5)]
+    assert mapped.size() == 3
+
+
+def test_map_values_preserves_structure():
+    """Test that map_values preserves the tree structure"""
+    # Create a large map to test structure preservation
+    map_obj = PMap.mk([(i, f"value_{i}") for i in range(20)])
+    mapped = map_obj.map_values(lambda x: x.upper())
+
+    # Should have same keys in same order
+    assert list(map_obj.keys()) == list(mapped.keys())
+    assert map_obj.size() == mapped.size()
+
+    # Values should be transformed
+    for i in range(20):
+        assert mapped.get(i) == f"VALUE_{i}"
+
+
+def test_map_values_numeric_transformation():
+    """Test mapping numeric values"""
+    map_obj = PMap.mk([("a", 1), ("b", 2), ("c", 3), ("d", 4)])
+    mapped = map_obj.map_values(lambda x: x * 10)
+    assert list(mapped.items()) == [("a", 10), ("b", 20), ("c", 30), ("d", 40)]
+    assert mapped.size() == 4
+
+
+def test_map_values_complex_transformation():
+    """Test mapping values with complex transformations"""
+    map_obj = PMap.mk([(1, ["a", "b"]), (2, ["c", "d", "e"]), (3, ["f"])])
+    mapped = map_obj.map_values(lambda x: len(x))  # List -> length
+    assert list(mapped.items()) == [(1, 2), (2, 3), (3, 1)]
+    assert mapped.size() == 3
+
+
+def test_map_values_persistence():
+    """Test that map_values creates new maps without modifying originals"""
+    original = PMap.mk([(1, "hello"), (2, "world"), (3, "test")])
+    mapped = original.map_values(lambda x: x.upper())
+
+    # Original should be unchanged
+    assert list(original.items()) == [(1, "hello"), (2, "world"), (3, "test")]
+    assert original.size() == 3
+
+    # Mapped should have transformed values
+    assert list(mapped.items()) == [(1, "HELLO"), (2, "WORLD"), (3, "TEST")]
+    assert mapped.size() == 3
+
+
+def test_method_chaining_filter_and_map():
+    """Test chaining filter_keys and map_values operations"""
+    map_obj = PMap.mk(
+        [(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five"), (6, "six")]
+    )
+
+    # Chain: filter even keys, then uppercase values
+    result = map_obj.filter_keys(
+        lambda x: x % 2 == 0
+    ).map_values(  # [(2, "two"), (4, "four"), (6, "six")]
+        lambda x: x.upper()
+    )  # [(2, "TWO"), (4, "FOUR"), (6, "SIX")]
+
+    assert list(result.items()) == [(2, "TWO"), (4, "FOUR"), (6, "SIX")]
+    assert result.size() == 3
+
+    # Original map unchanged
+    assert list(map_obj.items()) == [
+        (1, "one"),
+        (2, "two"),
+        (3, "three"),
+        (4, "four"),
+        (5, "five"),
+        (6, "six"),
+    ]
+
+
+def test_map_values_with_none_values():
+    """Test map_values behavior with None values"""
+    map_obj = PMap.mk([(1, None), (2, "hello"), (3, None)])
+    mapped = map_obj.map_values(lambda x: "empty" if x is None else x.upper())
+    assert list(mapped.items()) == [(1, "empty"), (2, "HELLO"), (3, "empty")]
+    assert mapped.size() == 3
+
+
+def test_filter_keys_large_map():
+    """Test filter_keys on large map"""
+    map_obj = PMap.mk([(i, f"value_{i}") for i in range(100)])
+    filtered = map_obj.filter_keys(lambda x: x % 10 == 0)  # Multiples of 10
+    expected = [(i, f"value_{i}") for i in range(100) if i % 10 == 0]
+    assert list(filtered.items()) == expected
+    assert filtered.size() == len(expected)
+
+
+def test_map_values_large_map():
+    """Test map_values on large map"""
+    map_obj = PMap.mk([(i, i) for i in range(50)])
+    mapped = map_obj.map_values(lambda x: x * 2)
+    expected = [(i, i * 2) for i in range(50)]
+    assert list(mapped.items()) == expected
+    assert mapped.size() == 50

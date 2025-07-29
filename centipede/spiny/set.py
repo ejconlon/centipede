@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Optional, Tuple, Type, override
+from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Box,
@@ -233,6 +233,17 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
             A new set containing elements in either set but not in both.
         """
         return self.union(other).difference(self.intersection(other))
+
+    def filter(self, predicate: Callable[[T], bool]) -> PSet[T]:
+        """Filter elements that satisfy the predicate.
+
+        Args:
+            predicate: A function that returns True for elements to keep.
+
+        Returns:
+            A new set containing only elements that satisfy the predicate.
+        """
+        return _pset_filter(self, predicate)
 
     def __rshift__(self, value: T) -> PSet[T]:
         """Alias for insert()."""
@@ -573,3 +584,11 @@ def _pset_difference[T](set1: PSet[T], set2: PSet[T]) -> PSet[T]:
                 return _pset_merge(left_difference, right_difference)
         case _:
             raise Impossible
+
+
+def _pset_filter[T](pset: PSet[T], predicate: Callable[[T], bool]) -> PSet[T]:
+    result: PSet[T] = PSet.empty()
+    for item in pset.iter():
+        if predicate(item):
+            result = result.insert(item)
+    return result

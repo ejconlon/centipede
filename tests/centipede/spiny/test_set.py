@@ -1001,3 +1001,109 @@ def test_python_set_operators_empty_sets():
     # Symmetric difference with empty
     assert (set1 ^ empty).list() == set1.list()
     assert (empty ^ set1).list() == set1.list()
+
+
+def test_filter_empty():
+    """Test filtering an empty set"""
+    empty = PSet.empty(int)
+    filtered = empty.filter(lambda x: x > 0)
+    assert filtered.null()
+    assert filtered.list() == []
+
+
+def test_filter_single_match():
+    """Test filtering a single element that matches"""
+    single_set = PSet.singleton(5)
+    filtered = single_set.filter(lambda x: x > 0)
+    assert filtered.list() == [5]
+    assert filtered.size() == 1
+
+
+def test_filter_single_no_match():
+    """Test filtering a single element that doesn't match"""
+    single_set = PSet.singleton(-5)
+    filtered = single_set.filter(lambda x: x > 0)
+    assert filtered.null()
+    assert filtered.list() == []
+
+
+def test_filter_multiple():
+    """Test filtering sets with multiple elements"""
+    set_obj = PSet.mk([1, 2, 3, 4, 5, 6])
+    filtered = set_obj.filter(lambda x: x % 2 == 0)  # Even numbers
+    assert filtered.list() == [2, 4, 6]
+    assert filtered.size() == 3
+
+    # Original set unchanged
+    assert set_obj.list() == [1, 2, 3, 4, 5, 6]
+
+
+def test_filter_all_match():
+    """Test filtering where all elements match"""
+    set_obj = PSet.mk([2, 4, 6, 8])
+    filtered = set_obj.filter(lambda x: x % 2 == 0)
+    assert filtered.list() == [2, 4, 6, 8]
+    assert filtered.size() == 4
+
+
+def test_filter_none_match():
+    """Test filtering where no elements match"""
+    set_obj = PSet.mk([1, 3, 5, 7])
+    filtered = set_obj.filter(lambda x: x % 2 == 0)
+    assert filtered.null()
+    assert filtered.list() == []
+
+
+def test_filter_string_elements():
+    """Test filtering string elements"""
+    set_obj = PSet.mk(["apple", "banana", "cherry", "apricot", "blueberry"])
+    filtered = set_obj.filter(lambda s: s.startswith("a"))
+    assert filtered.list() == ["apple", "apricot"]
+    assert filtered.size() == 2
+
+
+def test_filter_negative_numbers():
+    """Test filtering with negative numbers"""
+    set_obj = PSet.mk([-5, -2, 0, 3, -1, 7])
+    filtered = set_obj.filter(lambda x: x < 0)
+    assert filtered.list() == [-5, -2, -1]
+    assert filtered.size() == 3
+
+
+def test_filter_large_set():
+    """Test filtering on large set"""
+    set_obj = PSet.mk(range(100))
+    filtered = set_obj.filter(lambda x: x % 10 == 0)  # Multiples of 10
+    expected = [i for i in range(100) if i % 10 == 0]
+    assert filtered.list() == expected
+    assert filtered.size() == len(expected)
+
+
+def test_filter_persistence():
+    """Test that filter creates new sets without modifying originals"""
+    original = PSet.mk([1, 2, 3, 4, 5])
+    filtered = original.filter(lambda x: x > 3)
+
+    # Original should be unchanged
+    assert original.list() == [1, 2, 3, 4, 5]
+    assert original.size() == 5
+
+    # Filtered should contain only matching elements
+    assert filtered.list() == [4, 5]
+    assert filtered.size() == 2
+
+
+def test_filter_chaining():
+    """Test chaining filter operations"""
+    set_obj = PSet.mk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    # Chain: filter evens, then filter > 5
+    result = set_obj.filter(lambda x: x % 2 == 0).filter(  # [2, 4, 6, 8, 10]
+        lambda x: x > 5
+    )  # [6, 8, 10]
+
+    assert result.list() == [6, 8, 10]
+    assert result.size() == 3
+
+    # Original set unchanged
+    assert set_obj.list() == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

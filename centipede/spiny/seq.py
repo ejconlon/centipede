@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import (
     Any,
+    Callable,
     Iterable,
     Iterator,
     List,
@@ -210,6 +211,39 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
             A generator yielding elements from last to first.
         """
         return _seq_reversed(self)
+
+    def map[W](self, fn: Callable[[T], W]) -> PSeq[W]:
+        """Transform each element using the given function.
+
+        Args:
+            fn: A function that transforms elements from type T to type W.
+
+        Returns:
+            A new sequence with each element transformed by fn.
+        """
+        return _seq_map(self, fn)
+
+    def filter(self, predicate: Callable[[T], bool]) -> PSeq[T]:
+        """Filter elements that satisfy the predicate.
+
+        Args:
+            predicate: A function that returns True for elements to keep.
+
+        Returns:
+            A new sequence containing only elements that satisfy the predicate.
+        """
+        return _seq_filter(self, predicate)
+
+    def flat_map[W](self, fn: Callable[[T], PSeq[W]]) -> PSeq[W]:
+        """Transform each element to a sequence and flatten the results.
+
+        Args:
+            fn: A function that transforms elements to sequences.
+
+        Returns:
+            A new sequence with all transformed sequences concatenated.
+        """
+        return _seq_flat_map(self, fn)
 
     def __getitem__(self, ix: int) -> T:
         """Alias for get()."""
@@ -725,6 +759,36 @@ def _seq_iter[T](seq: PSeq[T]) -> Iterator[T]:
             yield from back
         case _:
             raise Impossible
+
+
+def _seq_map[T, W](seq: PSeq[T], fn: Callable[[T], W]) -> PSeq[W]:
+    match seq:
+        case PSeqEmpty():
+            return PSeq.empty()
+        case PSeqSingle(value):
+            return PSeqSingle(fn(value))
+        case PSeqDeep(size, front, between, back):
+            new_front = tuple(fn(x) for x in front)
+            new_between = _seq_map(between, lambda node: tuple(fn(x) for x in node))
+            new_back = tuple(fn(x) for x in back)
+            return PSeqDeep(size, new_front, new_between, new_back)  # type: ignore
+        case _:
+            raise Impossible
+
+
+def _seq_filter[T](seq: PSeq[T], predicate: Callable[[T], bool]) -> PSeq[T]:
+    result: PSeq[T] = PSeq.empty()
+    for item in _seq_iter(seq):
+        if predicate(item):
+            result = result.snoc(item)
+    return result
+
+
+def _seq_flat_map[T, W](seq: PSeq[T], fn: Callable[[T], PSeq[W]]) -> PSeq[W]:
+    result: PSeq[W] = PSeq.empty()
+    for item in _seq_iter(seq):
+        result = result.concat(fn(item))
+    return result
 
 
 def _seq_reversed[T](seq: PSeq[T]) -> Iterator[T]:

@@ -3,7 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Optional, Tuple, Type, Union, override
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    override,
+)
 
 from centipede.spiny.common import (
     Box,
@@ -345,6 +355,28 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
             Entries with the pivot key are excluded from both smaller and larger.
         """
         return _pmap_split(self, pivot_key)
+
+    def filter_keys(self, predicate: Callable[[K], bool]) -> PMap[K, V]:
+        """Filter entries based on their keys.
+
+        Args:
+            predicate: A function that returns True for keys to keep.
+
+        Returns:
+            A new map containing only entries whose keys satisfy the predicate.
+        """
+        return _pmap_filter_keys(self, predicate)
+
+    def map_values[W](self, fn: Callable[[V], W]) -> PMap[K, W]:
+        """Transform each value using the given function while preserving structure.
+
+        Args:
+            fn: A function that transforms values from type V to type W.
+
+        Returns:
+            A new map with each value transformed by fn, preserving the tree structure.
+        """
+        return _pmap_map_values(self, fn)
 
     def __rshift__(self, pair: Tuple[K, V]) -> PMap[K, V]:
         """Alias for put()."""
@@ -752,5 +784,28 @@ def _pset_to_pmap_with_value[K, V](pset: PSet[K], value: V) -> PMap[K, V]:
             left_map = _pset_to_pmap_with_value(left, value)
             right_map = _pset_to_pmap_with_value(right, value)
             return PMapBranch(_size, left_map, key, value, right_map)
+        case _:
+            raise Impossible
+
+
+def _pmap_filter_keys[K, V](
+    pmap: PMap[K, V], predicate: Callable[[K], bool]
+) -> PMap[K, V]:
+    result: PMap[K, V] = PMap.empty()
+    for key, value in pmap.iter():
+        if predicate(key):
+            result = result.put(key, value)
+    return result
+
+
+def _pmap_map_values[K, V, W](pmap: PMap[K, V], fn: Callable[[V], W]) -> PMap[K, W]:
+    match pmap:
+        case PMapEmpty():
+            return PMap.empty()
+        case PMapBranch(size, left, key, value, right):
+            new_left = _pmap_map_values(left, fn)
+            new_value = fn(value)
+            new_right = _pmap_map_values(right, fn)
+            return PMapBranch(size, new_left, key, new_value, new_right)
         case _:
             raise Impossible

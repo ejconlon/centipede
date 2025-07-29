@@ -423,3 +423,191 @@ def test_update_persistence():
     chained = original.update(0, 10).update(1, 20).update(2, 30)
     assert chained.list() == [10, 20, 30]
     assert original.list() == [1, 2, 3]  # Still unchanged
+
+
+def test_map_empty():
+    """Test mapping over an empty sequence"""
+    empty: PSeq[int] = PSeq.empty(int)
+    mapped = empty.map(lambda x: x * 2)
+    assert mapped.null()
+    assert mapped.list() == []
+
+
+def test_map_single():
+    """Test mapping over a single element sequence"""
+    single = PSeq.singleton(5)
+    mapped = single.map(lambda x: x * 2)
+    assert mapped.list() == [10]
+    assert mapped.size() == 1
+
+
+def test_map_multiple():
+    """Test mapping over sequences with multiple elements"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
+    mapped = seq.map(lambda x: x * 2)
+    assert mapped.list() == [2, 4, 6]
+    assert mapped.size() == 3
+
+    # Original sequence unchanged
+    assert seq.list() == [1, 2, 3]
+
+
+def test_map_type_change():
+    """Test mapping that changes the element type"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
+    mapped = seq.map(lambda x: str(x))
+    assert mapped.list() == ["1", "2", "3"]
+    assert mapped.size() == 3
+
+
+def test_map_deep_sequence():
+    """Test mapping over deep sequences"""
+    seq: PSeq[int] = PSeq.empty(int)
+    for i in range(20):
+        seq = seq.snoc(i)
+
+    mapped = seq.map(lambda x: x * 3)
+    expected = [i * 3 for i in range(20)]
+    assert mapped.list() == expected
+    assert mapped.size() == 20
+
+
+def test_map_cons_sequence():
+    """Test mapping over sequences built with cons"""
+    seq = PSeq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
+    mapped = seq.map(lambda x: x + 10)
+    assert mapped.list() == [13, 12, 11]
+
+
+def test_filter_empty():
+    """Test filtering an empty sequence"""
+    empty: PSeq[int] = PSeq.empty(int)
+    filtered = empty.filter(lambda x: x > 0)
+    assert filtered.null()
+    assert filtered.list() == []
+
+
+def test_filter_single_match():
+    """Test filtering a single element that matches"""
+    single = PSeq.singleton(5)
+    filtered = single.filter(lambda x: x > 0)
+    assert filtered.list() == [5]
+    assert filtered.size() == 1
+
+
+def test_filter_single_no_match():
+    """Test filtering a single element that doesn't match"""
+    single = PSeq.singleton(-5)
+    filtered = single.filter(lambda x: x > 0)
+    assert filtered.null()
+    assert filtered.list() == []
+
+
+def test_filter_multiple():
+    """Test filtering sequences with multiple elements"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4).snoc(5)
+    filtered = seq.filter(lambda x: x % 2 == 0)  # Even numbers
+    assert filtered.list() == [2, 4]
+    assert filtered.size() == 2
+
+    # Original sequence unchanged
+    assert seq.list() == [1, 2, 3, 4, 5]
+
+
+def test_filter_all_match():
+    """Test filtering where all elements match"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(2).snoc(4).snoc(6)
+    filtered = seq.filter(lambda x: x % 2 == 0)
+    assert filtered.list() == [2, 4, 6]
+    assert filtered.size() == 3
+
+
+def test_filter_none_match():
+    """Test filtering where no elements match"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(3).snoc(5)
+    filtered = seq.filter(lambda x: x % 2 == 0)
+    assert filtered.null()
+    assert filtered.list() == []
+
+
+def test_filter_deep_sequence():
+    """Test filtering deep sequences"""
+    seq: PSeq[int] = PSeq.empty(int)
+    for i in range(20):
+        seq = seq.snoc(i)
+
+    filtered = seq.filter(lambda x: x % 3 == 0)  # Multiples of 3
+    expected = [i for i in range(20) if i % 3 == 0]
+    assert filtered.list() == expected
+
+
+def test_flat_map_empty():
+    """Test flat_map over an empty sequence"""
+    empty: PSeq[int] = PSeq.empty(int)
+    flat_mapped = empty.flat_map(lambda x: PSeq.singleton(x).snoc(x + 1))
+    assert flat_mapped.null()
+    assert flat_mapped.list() == []
+
+
+def test_flat_map_single():
+    """Test flat_map over a single element"""
+    single = PSeq.singleton(5)
+    flat_mapped = single.flat_map(lambda x: PSeq.singleton(x).snoc(x * 2))
+    assert flat_mapped.list() == [5, 10]
+    assert flat_mapped.size() == 2
+
+
+def test_flat_map_multiple():
+    """Test flat_map over multiple elements"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
+    flat_mapped = seq.flat_map(lambda x: PSeq.singleton(x).snoc(x * 2))
+    assert flat_mapped.list() == [1, 2, 2, 4, 3, 6]
+    assert flat_mapped.size() == 6
+
+    # Original sequence unchanged
+    assert seq.list() == [1, 2, 3]
+
+
+def test_flat_map_empty_results():
+    """Test flat_map where some results are empty"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4)
+    flat_mapped = seq.flat_map(
+        lambda x: PSeq.singleton(x) if x % 2 == 0 else PSeq.empty()
+    )
+    assert flat_mapped.list() == [2, 4]
+    assert flat_mapped.size() == 2
+
+
+def test_flat_map_varying_lengths():
+    """Test flat_map with varying result lengths"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
+    flat_mapped = seq.flat_map(lambda x: PSeq.mk(range(x)))
+    # x=1 -> [0], x=2 -> [0,1], x=3 -> [0,1,2]
+    assert flat_mapped.list() == [0, 0, 1, 0, 1, 2]
+    assert flat_mapped.size() == 6
+
+
+def test_flat_map_type_change():
+    """Test flat_map that changes the element type"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2)
+    flat_mapped = seq.flat_map(lambda x: PSeq.singleton(str(x)).snoc(str(x * 2)))
+    assert flat_mapped.list() == ["1", "2", "2", "4"]
+    assert flat_mapped.size() == 4
+
+
+def test_method_chaining():
+    """Test chaining map, filter, and flat_map operations"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4).snoc(5)
+
+    # Chain: filter evens, map to double, flat_map to duplicate
+    result = (
+        seq.filter(lambda x: x % 2 == 0)  # [2, 4]
+        .map(lambda x: x * 2)  # [4, 8]
+        .flat_map(lambda x: PSeq.singleton(x).snoc(x))
+    )  # [4, 4, 8, 8]
+
+    assert result.list() == [4, 4, 8, 8]
+    assert result.size() == 4
+
+    # Original sequence unchanged
+    assert seq.list() == [1, 2, 3, 4, 5]
