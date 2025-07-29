@@ -8,11 +8,11 @@ from typing import Iterator, Optional, override
 from centipede.spiny.common import LexComparable, Sized
 from centipede.spiny.map import PMap
 
-__all__ = ["Array"]
+__all__ = ["PArray"]
 
 
 @dataclass(frozen=True, eq=False)
-class Array[T](Sized, LexComparable[T, "Array[T]"]):
+class PArray[T](Sized, LexComparable[T, "PArray[T]"]):
     """Fixed-size array backed by a PMap.
 
     Acts like a fixed-size array but is implemented using a PMap for efficiency.
@@ -24,8 +24,8 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
     _pmap: PMap[int, T]
 
     @staticmethod
-    def new(size: int, fill: T) -> Array[T]:
-        """Create a new Array with the given size and fill element.
+    def new(size: int, fill: T) -> PArray[T]:
+        """Create a new PArray with the given size and fill element.
 
         Args:
             size: The size of the array (must be >= 0)
@@ -35,8 +35,8 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
             ValueError: If size is negative
         """
         if size < 0:
-            raise ValueError("Array size must be non-negative")
-        return Array(_size=size, _fill=fill, _pmap=PMap.empty())
+            raise ValueError("PArray size must be non-negative")
+        return PArray(_size=size, _fill=fill, _pmap=PMap.empty())
 
     @override
     def size(self) -> int:
@@ -108,7 +108,7 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
 
         return self._pmap.lookup(index)
 
-    def set(self, index: int, value: T) -> Array[T]:
+    def set(self, index: int, value: T) -> PArray[T]:
         """Set the element at the given index.
 
         Args:
@@ -116,7 +116,7 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
             value: The value to set at the index
 
         Returns:
-            A new Array with the value set at the index
+            A new PArray with the value set at the index
 
         Raises:
             KeyError: If index is outside the valid range
@@ -126,11 +126,11 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
                 f"Index {index} out of bounds for array of size {self._size}"
             )
 
-        return Array(
+        return PArray(
             _size=self._size, _fill=self._fill, _pmap=self._pmap.put(index, value)
         )
 
-    def resize(self, new_size: int) -> Array[T]:
+    def resize(self, new_size: int) -> PArray[T]:
         """Resize the array to a new size.
 
         If the new size is larger, new indices will return the fill element.
@@ -140,13 +140,13 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
             new_size: The new size for the array (must be >= 0)
 
         Returns:
-            A new Array with the specified size
+            A new PArray with the specified size
 
         Raises:
             ValueError: If new_size is negative
         """
         if new_size < 0:
-            raise ValueError("Array size must be non-negative")
+            raise ValueError("PArray size must be non-negative")
 
         # Copy existing values that are still within bounds
         pmap = self._pmap
@@ -155,7 +155,7 @@ class Array[T](Sized, LexComparable[T, "Array[T]"]):
                 if 0 <= index < new_size:
                     pmap = pmap.put(index, value)
 
-        return Array(_size=new_size, _fill=self._fill, _pmap=pmap)
+        return PArray(_size=new_size, _fill=self._fill, _pmap=pmap)
 
     def __getitem__(self, index: int) -> T:
         """Get element at index using array[index] syntax."""

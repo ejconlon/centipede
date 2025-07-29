@@ -1,9 +1,9 @@
-"""Property-based tests for Array using Hypothesis."""
+"""Property-based tests for PArray using Hypothesis."""
 
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from centipede.spiny.array import Array
+from centipede.spiny.array import PArray
 from tests.centipede.spiny.hypo import configure_hypo
 
 configure_hypo()
@@ -11,10 +11,10 @@ configure_hypo()
 
 @st.composite
 def array_strategy(draw, element_strategy=st.integers(), max_size=20):
-    """Generate an Array with random size and fill element."""
+    """Generate an PArray with random size and fill element."""
     size = draw(st.integers(min_value=0, max_value=max_size))
     fill = draw(element_strategy)
-    arr = Array.new(size, fill)
+    arr = PArray.new(size, fill)
 
     # Randomly set some elements
     num_sets = draw(st.integers(min_value=0, max_value=min(size, 10)))
@@ -29,8 +29,8 @@ def array_strategy(draw, element_strategy=st.integers(), max_size=20):
 
 @given(st.integers(min_value=0, max_value=100), st.integers())
 def test_array_creation_properties(size, fill):
-    """Test basic properties of Array creation."""
-    arr = Array.new(size, fill)
+    """Test basic properties of PArray creation."""
+    arr = PArray.new(size, fill)
 
     assert arr.size() == size
     assert len(arr) == size
@@ -44,7 +44,7 @@ def test_array_creation_properties(size, fill):
 
 @given(array_strategy())
 def test_array_size_invariants(arr):
-    """Test that Array size is consistent across operations."""
+    """Test that PArray size is consistent across operations."""
     size = arr.size()
 
     assert len(arr) == size
@@ -172,7 +172,7 @@ def test_comparison_properties(arr1, arr2):
 @given(st.integers(min_value=0, max_value=20), st.integers())
 def test_empty_vs_filled_array(size, fill):
     """Test comparing empty vs filled arrays."""
-    empty_arr = Array.new(size, fill)
+    empty_arr = PArray.new(size, fill)
 
     if size > 0:
         filled_arr = (
@@ -181,7 +181,7 @@ def test_empty_vs_filled_array(size, fill):
             else empty_arr.set(0, fill - 1)
         )
 
-        # Arrays with different elements should not be equal
+        # PArrays with different elements should not be equal
         if list(empty_arr) != list(filled_arr):
             assert empty_arr != filled_arr
 
@@ -202,7 +202,7 @@ def test_roundtrip_properties(arr):
 @given(st.integers(min_value=1, max_value=20), st.integers())
 def test_set_get_consistency(size, fill):
     """Test that set and get operations are consistent."""
-    arr = Array.new(size, fill)
+    arr = PArray.new(size, fill)
 
     for i in range(size):
         new_value = fill + i + 1
@@ -221,7 +221,7 @@ def test_set_get_consistency(size, fill):
 @given(st.integers(min_value=0, max_value=20), st.integers())
 def test_magic_method_consistency(size, fill):
     """Test that magic methods are consistent with regular methods."""
-    arr = Array.new(size, fill)
+    arr = PArray.new(size, fill)
 
     # __len__ should match size()
     assert len(arr) == arr.size()

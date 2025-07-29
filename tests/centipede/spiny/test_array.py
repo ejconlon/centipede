@@ -1,13 +1,13 @@
-"""Tests for Array implementation"""
+"""Tests for PArray implementation"""
 
 from typing import Optional
 
-from centipede.spiny.array import Array
+from centipede.spiny.array import PArray
 
 
 def test_empty_array():
-    """Test creating an empty Array and asserting it is empty"""
-    arr = Array.new(0, "fill")
+    """Test creating an empty PArray and asserting it is empty"""
+    arr = PArray.new(0, "fill")
     assert arr.null()
     assert arr.size() == 0
     assert list(arr.iter()) == []
@@ -15,8 +15,8 @@ def test_empty_array():
 
 
 def test_non_empty_array():
-    """Test creating a non-empty Array with fill element"""
-    arr = Array.new(5, "default")
+    """Test creating a non-empty PArray with fill element"""
+    arr = PArray.new(5, "default")
     assert not arr.null()
     assert arr.size() == 5
     assert len(arr) == 5
@@ -31,22 +31,22 @@ def test_non_empty_array():
 
 
 def test_array_construction_validation():
-    """Test Array construction with invalid parameters"""
+    """Test PArray construction with invalid parameters"""
     # Test negative size
     try:
-        Array.new(-1, "fill")
+        PArray.new(-1, "fill")
         assert False, "Should raise ValueError for negative size"
     except ValueError as e:
         assert "non-negative" in str(e)
 
     # Test zero size is valid
-    arr = Array.new(0, "fill")
+    arr = PArray.new(0, "fill")
     assert arr.size() == 0
 
 
 def test_get_method():
-    """Test Array get method with various scenarios"""
-    arr = Array.new(5, "fill")
+    """Test PArray get method with various scenarios"""
+    arr = PArray.new(5, "fill")
 
     # Test getting from empty array (all indices should return fill)
     for i in range(5):
@@ -73,8 +73,8 @@ def test_get_method():
 
 
 def test_lookup_method():
-    """Test Array lookup method"""
-    arr = Array.new(5, "fill")
+    """Test PArray lookup method"""
+    arr = PArray.new(5, "fill")
 
     # Test lookup on empty array (all indices should return None)
     for i in range(5):
@@ -95,8 +95,8 @@ def test_lookup_method():
 
 
 def test_set_method():
-    """Test Array set method and immutability"""
-    arr = Array.new(3, "fill")
+    """Test PArray set method and immutability"""
+    arr = PArray.new(3, "fill")
 
     # Test setting values
     arr1 = arr.set(0, "first")
@@ -133,7 +133,7 @@ def test_set_method():
 
 def test_set_and_lookup_interaction():
     """Test interaction between set, get, and lookup methods"""
-    arr = Array.new(3, "fill")
+    arr = PArray.new(3, "fill")
     arr = arr.set(1, "middle")
 
     # Test get
@@ -148,8 +148,8 @@ def test_set_and_lookup_interaction():
 
 
 def test_resize_method():
-    """Test Array resize functionality"""
-    arr = Array.new(3, "fill")
+    """Test PArray resize functionality"""
+    arr = PArray.new(3, "fill")
     arr = arr.set(0, "first").set(2, "third")
 
     # Test resizing larger
@@ -187,8 +187,8 @@ def test_resize_method():
 
 
 def test_iteration():
-    """Test Array iteration methods"""
-    arr = Array.new(4, "default")
+    """Test PArray iteration methods"""
+    arr = PArray.new(4, "default")
     arr = arr.set(1, "one").set(3, "three")
 
     # Test iter()
@@ -201,14 +201,14 @@ def test_iteration():
     assert elements == expected
 
     # Test empty array iteration
-    empty_arr = Array.new(0, "fill")
+    empty_arr = PArray.new(0, "fill")
     assert list(empty_arr.iter()) == []
     assert list(empty_arr) == []
 
 
 def test_magic_methods():
     """Test Python magic methods"""
-    arr = Array.new(3, "fill")
+    arr = PArray.new(3, "fill")
     arr = arr.set(1, "middle")
 
     # Test __len__
@@ -234,12 +234,12 @@ def test_magic_methods():
 
 
 def test_lexicographic_comparison():
-    """Test lexicographic comparison of Arrays"""
-    arr1 = Array.new(3, "a")
-    arr2 = Array.new(3, "a")
-    arr3 = Array.new(3, "b")
-    arr4 = Array.new(2, "a")
-    arr5 = Array.new(4, "a")
+    """Test lexicographic comparison of PArrays"""
+    arr1 = PArray.new(3, "a")
+    arr2 = PArray.new(3, "a")
+    arr3 = PArray.new(3, "b")
+    arr4 = PArray.new(2, "a")
+    arr5 = PArray.new(4, "a")
 
     # Test equality
     assert arr1 == arr2
@@ -265,9 +265,9 @@ def test_lexicographic_comparison():
 
 
 def test_complex_operations():
-    """Test complex combinations of Array operations"""
+    """Test complex combinations of PArray operations"""
     # Create and populate an array
-    arr = Array.new(5, 0)
+    arr = PArray.new(5, 0)
     for i in range(5):
         arr = arr.set(i, i * i)  # Set to squares: [0, 1, 4, 9, 16]
 
@@ -298,7 +298,7 @@ def test_complex_operations():
 def test_edge_cases():
     """Test edge cases and boundary conditions"""
     # Test with None as fill element
-    arr_none: Array[Optional[str]] = Array.new(2, None)
+    arr_none: PArray[Optional[str]] = PArray.new(2, None)
     assert arr_none.get(0) is None
     assert arr_none.get(1) is None
     assert arr_none.lookup(0) is None  # Both None, but different meanings
@@ -310,16 +310,16 @@ def test_edge_cases():
     assert arr_none.lookup(1) is None
 
     # Test with different data types
-    arr_int = Array.new(2, 42)
-    arr_str = Array.new(2, "default")
-    arr_list: Array[list] = Array.new(2, [])
+    arr_int = PArray.new(2, 42)
+    arr_str = PArray.new(2, "default")
+    arr_list: PArray[list] = PArray.new(2, [])
 
     assert arr_int.get(0) == 42
     assert arr_str.get(0) == "default"
     assert arr_list.get(0) == []
 
     # Test large array
-    large_arr = Array.new(1000, "fill")
+    large_arr = PArray.new(1000, "fill")
     assert large_arr.size() == 1000
     assert large_arr.get(999) == "fill"
 
@@ -331,27 +331,27 @@ def test_edge_cases():
 
 
 def test_array_with_various_types():
-    """Test Array with different element types"""
+    """Test PArray with different element types"""
     # String array
-    str_arr = Array.new(3, "")
+    str_arr = PArray.new(3, "")
     str_arr = str_arr.set(1, "hello")
     assert str_arr.get(0) == ""
     assert str_arr.get(1) == "hello"
 
     # Integer array
-    int_arr = Array.new(3, -1)
+    int_arr = PArray.new(3, -1)
     int_arr = int_arr.set(2, 100)
     assert int_arr.get(0) == -1
     assert int_arr.get(2) == 100
 
     # Boolean array
-    bool_arr = Array.new(3, False)
+    bool_arr = PArray.new(3, False)
     bool_arr = bool_arr.set(0, True)
     assert bool_arr.get(0) is True
     assert bool_arr.get(1) is False
 
     # List array (mutable elements)
-    list_arr: Array[list] = Array.new(2, [])
+    list_arr: PArray[list] = PArray.new(2, [])
     list_arr = list_arr.set(0, [1, 2, 3])
     assert list_arr.get(0) == [1, 2, 3]
     assert list_arr.get(1) == []
