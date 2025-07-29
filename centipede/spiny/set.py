@@ -245,6 +245,21 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
         """
         return _pset_filter(self, predicate)
 
+    def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
+        """Fold the set from left to right with an accumulator.
+
+        Args:
+            fn: A function that takes an accumulator and element, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all elements.
+        """
+        result = acc
+        for item in self.iter():
+            result = fn(result, item)
+        return result
+
     def __rshift__(self, value: T) -> PSet[T]:
         """Alias for insert()."""
         return self.insert(value)

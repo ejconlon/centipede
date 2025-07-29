@@ -378,6 +378,21 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         """
         return _pmap_map_values(self, fn)
 
+    def fold_with_key[Z](self, fn: Callable[[Z, K, V], Z], acc: Z) -> Z:
+        """Fold the map from left to right with an accumulator, key, and value.
+
+        Args:
+            fn: A function that takes an accumulator, key, and value, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all key-value pairs.
+        """
+        result = acc
+        for key, value in self.items():
+            result = fn(result, key, value)
+        return result
+
     def __rshift__(self, pair: Tuple[K, V]) -> PMap[K, V]:
         """Alias for put()."""
         key, value = pair

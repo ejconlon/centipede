@@ -10,7 +10,7 @@ The heap can be used with Entry for map-like functionality.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Optional, Tuple, Type, override
+from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import Impossible, Iterating, Ordering, Sized, compare
 from centipede.spiny.seq import PSeq
@@ -166,6 +166,21 @@ class PHeap[T](Sized, Iterating[T]):
             Elements in ascending order.
         """
         return _heap_iter(self)
+
+    def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
+        """Fold the heap from left to right with an accumulator.
+
+        Args:
+            fn: A function that takes an accumulator and element, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all elements.
+        """
+        result = acc
+        for item in self.iter():
+            result = fn(result, item)
+        return result
 
     def __add__(self, other: PHeap[T]) -> PHeap[T]:
         """Alias for merge()."""

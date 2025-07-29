@@ -1,3 +1,5 @@
+from typing import List
+
 from centipede.spiny.set import PSet
 
 
@@ -1107,3 +1109,69 @@ def test_filter_chaining():
 
     # Original set unchanged
     assert set_obj.list() == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+
+def test_fold_empty():
+    """Test folding an empty set"""
+    empty = PSet.empty(int)
+    result = empty.fold(lambda acc, x: acc + x, 0)
+    assert result == 0
+
+
+def test_fold_single():
+    """Test folding a single element set"""
+    single = PSet.singleton(5)
+
+    # Sum operation
+    result = single.fold(lambda acc, x: acc + x, 0)
+    assert result == 5
+
+    # Product operation
+    result2 = single.fold(lambda acc, x: acc * x, 1)
+    assert result2 == 5
+
+
+def test_fold_multiple():
+    """Test folding sets with multiple elements"""
+    set_obj = PSet.mk([1, 2, 3, 4, 5])
+
+    # Sum operation
+    result = set_obj.fold(lambda acc, x: acc + x, 0)
+    assert result == 15
+
+    # Product operation
+    result2 = set_obj.fold(lambda acc, x: acc * x, 1)
+    assert result2 == 120
+
+    # Build list (should preserve sorted order)
+    result3: List[int] = set_obj.fold(lambda acc, x: acc + [x], [])
+    assert result3 == [1, 2, 3, 4, 5]
+
+    # Original set unchanged
+    assert set_obj.list() == [1, 2, 3, 4, 5]
+
+
+def test_fold_type_change():
+    """Test folding that changes the accumulator type"""
+    set_obj = PSet.mk([1, 2, 3])
+
+    # Convert numbers to string representation
+    result = set_obj.fold(lambda acc, x: acc + str(x), "")
+    assert result == "123"
+
+    # Count elements
+    result2 = set_obj.fold(lambda acc, x: acc + 1, 0)
+    assert result2 == 3
+
+
+def test_fold_string_set():
+    """Test folding sets of strings"""
+    set_obj = PSet.mk(["a", "b", "c"])
+
+    # String concatenation
+    result = set_obj.fold(lambda acc, x: acc + x, "")
+    assert result == "abc"  # Should be in sorted order
+
+    # Count characters
+    result2 = set_obj.fold(lambda acc, x: acc + len(x), 0)
+    assert result2 == 3

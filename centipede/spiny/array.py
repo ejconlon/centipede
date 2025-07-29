@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterator, Optional, override
+from typing import Callable, Iterator, Optional, override
 
 from centipede.spiny.common import LexComparable, Sized
 from centipede.spiny.map import PMap
@@ -168,3 +168,34 @@ class PArray[T](Sized, LexComparable[T, "PArray[T]"]):
     def __iter__(self) -> Iterator[T]:
         """Support iteration using for loops."""
         return self.iter()
+
+    def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
+        """Fold the array from left to right with an accumulator.
+
+        Args:
+            fn: A function that takes an accumulator and element, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all elements.
+        """
+        result = acc
+        for item in self.iter():
+            result = fn(result, item)
+        return result
+
+    def fold_with_index[Z](self, fn: Callable[[Z, int, T], Z], acc: Z) -> Z:
+        """Fold the array from left to right with an accumulator and element index.
+
+        Args:
+            fn: A function that takes an accumulator, index, and element, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all elements.
+        """
+        result = acc
+        for i in range(self._size):
+            item = self.get(i)
+            result = fn(result, i, item)
+        return result

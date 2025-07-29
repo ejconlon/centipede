@@ -1,6 +1,6 @@
 """Tests for PArray implementation"""
 
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from centipede.spiny.array import PArray
 
@@ -355,3 +355,142 @@ def test_array_with_various_types():
     list_arr = list_arr.set(0, [1, 2, 3])
     assert list_arr.get(0) == [1, 2, 3]
     assert list_arr.get(1) == []
+
+
+def test_fold_empty():
+    """Test folding an empty array"""
+    empty = PArray.new(0, "fill")
+    result = empty.fold(lambda acc, x: acc + len(x), 0)
+    assert result == 0
+
+
+def test_fold_single():
+    """Test folding a single element array"""
+    arr = PArray.new(1, "hello")
+
+    # Sum of string lengths
+    result = arr.fold(lambda acc, x: acc + len(x), 0)
+    assert result == 5
+
+    # String concatenation
+    result2 = arr.fold(lambda acc, x: acc + x, "prefix:")
+    assert result2 == "prefix:hello"
+
+
+def test_fold_multiple():
+    """Test folding arrays with multiple elements"""
+    arr = PArray.new(5, 0)
+    arr = arr.set(0, 1).set(1, 2).set(2, 3).set(3, 4).set(4, 5)
+
+    # Sum operation
+    result = arr.fold(lambda acc, x: acc + x, 0)
+    assert result == 15
+
+    # Product operation
+    result2 = arr.fold(lambda acc, x: acc * x, 1)
+    assert result2 == 120
+
+    # Build list (should preserve order)
+    result3: List[int] = arr.fold(lambda acc, x: acc + [x], [])
+    assert result3 == [1, 2, 3, 4, 5]
+
+
+def test_fold_with_fill_elements():
+    """Test folding arrays that include fill elements"""
+    arr = PArray.new(4, 10)  # Fill element is 10
+    arr = arr.set(1, 20).set(3, 30)  # [10, 20, 10, 30]
+
+    # Sum all elements including fill elements
+    result = arr.fold(lambda acc, x: acc + x, 0)
+    assert result == 70  # 10 + 20 + 10 + 30
+
+    # Count non-fill elements
+    result2 = arr.fold(lambda acc, x: acc + (1 if x != 10 else 0), 0)
+    assert result2 == 2  # Only positions 1 and 3 have non-fill values
+
+
+def test_fold_with_index_empty():
+    """Test fold_with_index on an empty array"""
+    empty = PArray.new(0, "fill")
+    result = empty.fold_with_index(lambda acc, i, x: acc + i + len(x), 0)
+    assert result == 0
+
+
+def test_fold_with_index_single():
+    """Test fold_with_index on a single element array"""
+    arr = PArray.new(1, "test")
+
+    # Add value length and index
+    result = arr.fold_with_index(lambda acc, i, x: acc + len(x) + i, 0)
+    assert result == 4  # 0 + 4 + 0
+
+    # Format with index
+    result2: List[str] = arr.fold_with_index(lambda acc, i, x: acc + [f"{i}:{x}"], [])
+    assert result2 == ["0:test"]
+
+
+def test_fold_with_index_multiple():
+    """Test fold_with_index on arrays with multiple elements"""
+    arr = PArray.new(3, "a")
+    arr = arr.set(0, "x").set(1, "y").set(2, "z")
+
+    # Sum string lengths plus indices
+    result = arr.fold_with_index(lambda acc, i, x: acc + len(x) + i, 0)
+    assert result == 6  # (1+0) + (1+1) + (1+2) = 6
+
+    # Build indexed list
+    result2: List[str] = arr.fold_with_index(lambda acc, i, x: acc + [f"{i}:{x}"], [])
+    assert result2 == ["0:x", "1:y", "2:z"]
+
+    # Create dictionary mapping indices to values
+    result3: Dict[int, str] = arr.fold_with_index(lambda acc, i, x: {**acc, i: x}, {})
+    assert result3 == {0: "x", 1: "y", 2: "z"}
+
+
+def test_fold_with_index_mixed_values():
+    """Test fold_with_index with mixed set and fill values"""
+    arr = PArray.new(4, 0)
+    arr = arr.set(1, 10).set(3, 30)  # [0, 10, 0, 30]
+
+    # Build list of (index, value) pairs for non-zero values
+    result: List[Tuple[int, int]] = arr.fold_with_index(
+        lambda acc, i, x: acc + [(i, x)] if x != 0 else acc, []
+    )
+    assert result == [(1, 10), (3, 30)]
+
+    # Sum values times their indices
+    result2 = arr.fold_with_index(lambda acc, i, x: acc + (x * i), 0)
+    assert result2 == 100  # (0*0) + (10*1) + (0*2) + (30*3) = 10 + 90 = 100
+
+
+def test_fold_type_change():
+    """Test fold operations that change accumulator types"""
+    arr = PArray.new(3, 1)
+    arr = arr.set(0, 5).set(1, 10).set(2, 15)
+
+    # Convert numbers to string representation
+    result = arr.fold(lambda acc, x: acc + str(x), "")
+    assert result == "51015"
+
+    # Count elements
+    result2 = arr.fold(lambda acc, x: acc + 1, 0)
+    assert result2 == 3
+
+
+def test_fold_persistence():
+    """Test that fold operations don't modify the original array"""
+    original = PArray.new(3, 1)
+    original = original.set(0, 2).set(1, 4).set(2, 6)
+
+    # Perform fold operations
+    sum_result = original.fold(lambda acc, x: acc + x, 0)
+    index_result: List[int] = original.fold_with_index(lambda acc, i, x: acc + [x], [])
+
+    assert sum_result == 12
+    assert index_result == [2, 4, 6]
+
+    # Original array should be unchanged
+    assert original.get(0) == 2
+    assert original.get(1) == 4
+    assert original.get(2) == 6
+    assert list(original.iter()) == [2, 4, 6]

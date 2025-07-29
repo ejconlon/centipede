@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Optional, Tuple, Type, override
+from typing import Callable, Iterable, Iterator, Optional, Tuple, Type, override
 
 from centipede.spiny.common import (
     Entry,
@@ -159,6 +159,21 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
             A new heap map containing entries from both heap maps.
         """
         return PHeapMap(self._heap.merge(other._heap))
+
+    def fold_with_key[Z](self, fn: Callable[[Z, K, V], Z], acc: Z) -> Z:
+        """Fold the heap map from left to right with an accumulator, key, and value.
+
+        Args:
+            fn: A function that takes an accumulator, key, and value, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all key-value pairs.
+        """
+        result = acc
+        for key, value in self.iter():
+            result = fn(result, key, value)
+        return result
 
     def __rshift__(self, pair: Tuple[K, V]) -> PHeapMap[K, V]:
         """Alias for insert()."""
