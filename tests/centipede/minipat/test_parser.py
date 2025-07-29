@@ -349,39 +349,37 @@ def test_parse_complex_sample_selection():
     assert second.unwrap.pattern.unwrap.selector == "1"
 
 
-# Integration tests with actual patterns
-class TestRealWorldPatterns:
-    """Test patterns that might be used in real Tidal compositions."""
+def test_kick_snare_pattern():
+    """Test basic kick-snare pattern."""
+    result = parse_pattern("bd sd bd sd")
+    assert isinstance(result.unwrap, PatSeq)
+    children = list(result.unwrap.children)
+    assert len(children) == 4
+    assert [child.unwrap.val for child in children] == ["bd", "sd", "bd", "sd"]
 
-    def test_kick_snare_pattern(self):
-        """Test basic kick-snare pattern."""
-        result = parse_pattern("bd sd bd sd")
-        assert isinstance(result.unwrap, PatSeq)
-        children = list(result.unwrap.children)
-        assert len(children) == 4
-        assert [child.unwrap.val for child in children] == ["bd", "sd", "bd", "sd"]
 
-    def test_hihat_subdivision(self):
-        """Test hihat subdivision pattern."""
-        result = parse_pattern("bd [hh hh] sd [hh hh]")
-        assert isinstance(result.unwrap, PatSeq)
-        children = list(result.unwrap.children)
-        assert len(children) == 4
+def test_hihat_subdivision():
+    """Test hihat subdivision pattern."""
+    result = parse_pattern("bd [hh hh] sd [hh hh]")
+    assert isinstance(result.unwrap, PatSeq)
+    children = list(result.unwrap.children)
+    assert len(children) == 4
 
-        # Check that the hihat groups are properly parsed
-        assert isinstance(children[1].unwrap, PatGroup)
-        assert isinstance(children[3].unwrap, PatGroup)
+    # Check that the hihat groups are properly parsed
+    assert isinstance(children[1].unwrap, PatGroup)
+    assert isinstance(children[3].unwrap, PatGroup)
 
-    def test_polyrhythmic_pattern(self):
-        """Test polyrhythmic pattern."""
-        result = parse_pattern("{bd sd, hh*8}")
-        assert isinstance(result.unwrap, PatPolymetric)
 
-        patterns = list(result.unwrap.patterns)
-        assert len(patterns) == 2
+def test_polyrhythmic_pattern():
+    """Test polyrhythmic pattern."""
+    result = parse_pattern("{bd sd, hh*8}")
+    assert isinstance(result.unwrap, PatPolymetric)
 
-        # First should be "bd sd" sequence
-        assert isinstance(patterns[0].unwrap, PatSeq)
+    patterns = list(result.unwrap.patterns)
+    assert len(patterns) == 2
 
-        # Second should be "hh*8" (repetition)
-        assert isinstance(patterns[1].unwrap, PatRepetition)
+    # First should be "bd sd" sequence
+    assert isinstance(patterns[0].unwrap, PatSeq)
+
+    # Second should be "hh*8" (repetition)
+    assert isinstance(patterns[1].unwrap, PatRepetition)

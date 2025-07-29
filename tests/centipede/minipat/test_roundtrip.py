@@ -153,118 +153,110 @@ def test_whitespace_normalization():
         round_trip_test(original, expected)
 
 
-class TestNonPrintablePatterns:
-    """Test patterns that cannot be printed."""
+def test_patpar_now_printable():
+    """Test that PatPar patterns can now be printed as parallel notation."""
+    # Create a PatPar pattern directly (not through parsing)
+    from centipede.minipat.pat import Pat
 
-    def test_patpar_now_printable(self):
-        """Test that PatPar patterns can now be printed as parallel notation."""
-        # Create a PatPar pattern directly (not through parsing)
-        from centipede.minipat.pat import Pat
+    pat = Pat.par([Pat.pure("bd"), Pat.pure("sd")])
 
-        pat = Pat.par([Pat.pure("bd"), Pat.pure("sd")])
-
-        # Should print as parallel notation [a, b]
-        result = print_pattern(pat)
-        assert result == "[bd, sd]"
-
-    def test_custom_probability_not_printable(self):
-        """Test that custom probability values raise NotImplementedError."""
-        from centipede.minipat.pat import Pat
-
-        pat = Pat.probability(Pat.pure("bd"), 0.75)
-
-        with pytest.raises(NotImplementedError, match="custom probability"):
-            print_pattern(pat)
+    # Should print as parallel notation [a, b]
+    result = print_pattern(pat)
+    assert result == "[bd, sd]"
 
 
-class TestParsingEdgeCases:
-    """Test edge cases in parsing that might affect round-tripping."""
+def test_custom_probability_not_printable():
+    """Test that custom probability values raise NotImplementedError."""
+    from centipede.minipat.pat import Pat
 
-    def test_empty_pattern_fails(self):
-        """Test that empty patterns fail to parse."""
+    pat = Pat.probability(Pat.pure("bd"), 0.75)
+
+    with pytest.raises(NotImplementedError, match="custom probability"):
+        print_pattern(pat)
+
+
+def test_empty_pattern_fails():
+    """Test that empty patterns fail to parse."""
+    with pytest.raises(Exception):
+        parse_pattern("")
+
+
+def test_invalid_syntax_fails():
+    """Test that invalid syntax fails to parse."""
+    invalid_patterns = [
+        "bd(",
+        "bd)",
+        "[bd",
+        "bd]",
+        "{bd",
+        "bd}",
+        "bd|",
+        "|bd",
+        "bd:",
+        ":bd",
+        "bd*",
+        "*bd",
+        "bd/",
+        "/bd",
+    ]
+
+    for pattern in invalid_patterns:
         with pytest.raises(Exception):
-            parse_pattern("")
-
-    def test_invalid_syntax_fails(self):
-        """Test that invalid syntax fails to parse."""
-        invalid_patterns = [
-            "bd(",
-            "bd)",
-            "[bd",
-            "bd]",
-            "{bd",
-            "bd}",
-            "bd|",
-            "|bd",
-            "bd:",
-            ":bd",
-            "bd*",
-            "*bd",
-            "bd/",
-            "/bd",
-        ]
-
-        for pattern in invalid_patterns:
-            with pytest.raises(Exception):
-                parse_pattern(pattern)
+            parse_pattern(pattern)
 
 
-class TestPatternEquivalence:
-    """Test that semantically equivalent patterns round-trip correctly."""
-
-    def test_single_element_sequences(self):
-        """Test that single-element sequences are simplified."""
-        # A sequence with one element should print as just that element
-        parsed = parse_pattern("bd")
-        printed = print_pattern(parsed)
-        assert printed == "bd"
-
-    def test_nested_sequences_preserve_grouping(self):
-        """Test behavior with nested sequences."""
-        # Sequences should preserve explicit grouping
-        round_trip_test("bd sd")
-        round_trip_test("[bd sd] cp")  # Preserve grouping
+def test_single_element_sequences():
+    """Test that single-element sequences are simplified."""
+    # A sequence with one element should print as just that element
+    parsed = parse_pattern("bd")
+    printed = print_pattern(parsed)
+    assert printed == "bd"
 
 
-# Integration tests with real-world patterns
-class TestRealWorldPatterns:
-    """Test patterns that might be used in actual compositions."""
+def test_nested_sequences_preserve_grouping():
+    """Test behavior with nested sequences."""
+    # Sequences should preserve explicit grouping
+    round_trip_test("bd sd")
+    round_trip_test("[bd sd] cp")  # Preserve grouping
 
-    def test_drum_patterns(self):
-        """Test typical drum patterns."""
-        drum_patterns = [
-            ("bd ~ sd ~", None),
-            ("bd bd ~ sd", None),
-            ("[bd bd] sd [bd sd]", None),  # Preserve grouping
-            ("bd*2 sd cp*3", None),
-            ("{bd, sd*2, hh*8}", None),
-            ("bd(3,8) sd(5,8)", None),
-        ]
 
-        for pattern, expected in drum_patterns:
-            round_trip_test(pattern, expected)
+def test_drum_patterns():
+    """Test typical drum patterns."""
+    drum_patterns = [
+        ("bd ~ sd ~", None),
+        ("bd bd ~ sd", None),
+        ("[bd bd] sd [bd sd]", None),  # Preserve grouping
+        ("bd*2 sd cp*3", None),
+        ("{bd, sd*2, hh*8}", None),
+        ("bd(3,8) sd(5,8)", None),
+    ]
 
-    def test_melodic_patterns(self):
-        """Test patterns that might represent melodies."""
-        melodic_patterns = [
-            ("c4 e4 g4 c5", None),
-            ("c:0 e:1 g:2", None),
-            ("[c e g] [d f a]", None),  # Preserve grouping
-            ("c*2 e g/2", None),
-            ("c? e g? c", None),
-        ]
+    for pattern, expected in drum_patterns:
+        round_trip_test(pattern, expected)
 
-        for pattern, expected in melodic_patterns:
-            round_trip_test(pattern, expected)
 
-    def test_complex_compositions(self):
-        """Test complex compositional patterns."""
-        complex_patterns = [
-            ("bd*2 [sd cp] ~ {hh*4, oh}", None),  # Preserve grouping
-            ("{bd(3,8), sd?, hh*8/2}", None),
-            ("bd:0*2 [sd | cp] hh:1", None),  # Choice patterns keep their brackets
-            ("bass:0 bass:1? ~ [bass:2 bass:3]/2", None),  # Preserve grouping
-        ]
+def test_melodic_patterns():
+    """Test patterns that might represent melodies."""
+    melodic_patterns = [
+        ("c4 e4 g4 c5", None),
+        ("c:0 e:1 g:2", None),
+        ("[c e g] [d f a]", None),  # Preserve grouping
+        ("c*2 e g/2", None),
+        ("c? e g? c", None),
+    ]
 
-        for pattern, expected in complex_patterns:
-            round_trip_test(pattern, expected)
+    for pattern, expected in melodic_patterns:
+        round_trip_test(pattern, expected)
+
+
+def test_complex_compositions():
+    """Test complex compositional patterns."""
+    complex_patterns = [
+        ("bd*2 [sd cp] ~ {hh*4, oh}", None),  # Preserve grouping
+        ("{bd(3,8), sd?, hh*8/2}", None),
+        ("bd:0*2 [sd | cp] hh:1", None),  # Choice patterns keep their brackets
+        ("bass:0 bass:1? ~ [bass:2 bass:3]/2", None),  # Preserve grouping
+    ]
+
+    for pattern, expected in complex_patterns:
+        round_trip_test(pattern, expected)
