@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from centipede.spiny.seq import PSeq
 
@@ -611,3 +611,206 @@ def test_method_chaining():
 
     # Original sequence unchanged
     assert seq.list() == [1, 2, 3, 4, 5]
+
+
+def test_fold_empty():
+    """Test folding an empty sequence"""
+    empty: PSeq[int] = PSeq.empty(int)
+    result = empty.fold(lambda acc, x: acc + x, 0)
+    assert result == 0
+
+    # Test with different accumulator
+    result2 = empty.fold(lambda acc, x: acc * x, 1)
+    assert result2 == 1
+
+
+def test_fold_single():
+    """Test folding a single element sequence"""
+    single = PSeq.singleton(5)
+
+    # Sum operation
+    result = single.fold(lambda acc, x: acc + x, 0)
+    assert result == 5
+
+    # Product operation
+    result2 = single.fold(lambda acc, x: acc * x, 1)
+    assert result2 == 5
+
+    # String concatenation
+    single_str = PSeq.singleton("hello")
+    result3 = single_str.fold(lambda acc, x: acc + x, "")
+    assert result3 == "hello"
+
+
+def test_fold_multiple():
+    """Test folding sequences with multiple elements"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4).snoc(5)
+
+    # Sum operation
+    result = seq.fold(lambda acc, x: acc + x, 0)
+    assert result == 15
+
+    # Product operation
+    result2 = seq.fold(lambda acc, x: acc * x, 1)
+    assert result2 == 120
+
+    # Build list (should preserve order)
+    result3: List[int] = seq.fold(lambda acc, x: acc + [x], [])
+    assert result3 == [1, 2, 3, 4, 5]
+
+    # Original sequence unchanged
+    assert seq.list() == [1, 2, 3, 4, 5]
+
+
+def test_fold_cons_sequence():
+    """Test folding sequences built with cons"""
+    seq = PSeq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
+
+    # Sum operation
+    result = seq.fold(lambda acc, x: acc + x, 0)
+    assert result == 6
+
+    # Build list (should preserve cons order)
+    result2: List[int] = seq.fold(lambda acc, x: acc + [x], [])
+    assert result2 == [3, 2, 1]
+
+
+def test_fold_type_change():
+    """Test folding that changes the accumulator type"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
+
+    # Convert numbers to string representation
+    result = seq.fold(lambda acc, x: acc + str(x), "")
+    assert result == "123"
+
+    # Count elements
+    result2 = seq.fold(lambda acc, x: acc + 1, 0)
+    assert result2 == 3
+
+
+def test_fold_deep_sequence():
+    """Test folding deep sequences"""
+    seq: PSeq[int] = PSeq.empty(int)
+    for i in range(20):
+        seq = seq.snoc(i)
+
+    # Sum all elements
+    result = seq.fold(lambda acc, x: acc + x, 0)
+    expected_sum = sum(range(20))
+    assert result == expected_sum
+
+    # Count elements
+    count = seq.fold(lambda acc, x: acc + 1, 0)
+    assert count == 20
+
+
+def test_fold_with_index_empty():
+    """Test fold_with_index on an empty sequence"""
+    empty: PSeq[int] = PSeq.empty(int)
+    result = empty.fold_with_index(lambda acc, i, x: acc + x + i, 0)
+    assert result == 0
+
+    # Test with different accumulator
+    result2: List[str] = empty.fold_with_index(lambda acc, i, x: acc + [f"{i}:{x}"], [])
+    assert result2 == []
+
+
+def test_fold_with_index_single():
+    """Test fold_with_index on a single element sequence"""
+    single = PSeq.singleton(5)
+
+    # Add value and index
+    result = single.fold_with_index(lambda acc, i, x: acc + x + i, 0)
+    assert result == 5  # 0 + 5 + 0
+
+    # Format with index
+    result2: List[str] = single.fold_with_index(
+        lambda acc, i, x: acc + [f"{i}:{x}"], []
+    )
+    assert result2 == ["0:5"]
+
+
+def test_fold_with_index_multiple():
+    """Test fold_with_index on sequences with multiple elements"""
+    seq: PSeq[int] = PSeq.empty(int).snoc(10).snoc(20).snoc(30)
+
+    # Sum values and indices
+    result = seq.fold_with_index(lambda acc, i, x: acc + x + i, 0)
+    assert result == 63  # 0 + (10+0) + (20+1) + (30+2) = 63
+
+    # Build indexed list
+    result2: List[str] = seq.fold_with_index(lambda acc, i, x: acc + [f"{i}:{x}"], [])
+    assert result2 == ["0:10", "1:20", "2:30"]
+
+    # Verify index order matches element order
+    indexed_pairs: List[Tuple[int, int]] = seq.fold_with_index(
+        lambda acc, i, x: acc + [(i, x)], []
+    )
+    assert indexed_pairs == [(0, 10), (1, 20), (2, 30)]
+
+    # Original sequence unchanged
+    assert seq.list() == [10, 20, 30]
+
+
+def test_fold_with_index_cons_sequence():
+    """Test fold_with_index on sequences built with cons"""
+    seq = PSeq.empty(int).cons(10).cons(20).cons(30)  # [30, 20, 10]
+
+    # Build indexed list
+    result: List[str] = seq.fold_with_index(lambda acc, i, x: acc + [f"{i}:{x}"], [])
+    assert result == ["0:30", "1:20", "2:10"]
+
+    # Verify indices correspond to iteration order, not construction order
+    indexed_pairs: List[Tuple[int, int]] = seq.fold_with_index(
+        lambda acc, i, x: acc + [(i, x)], []
+    )
+    assert indexed_pairs == [(0, 30), (1, 20), (2, 10)]
+
+
+def test_fold_with_index_type_change():
+    """Test fold_with_index that changes accumulator type"""
+    seq: PSeq[str] = PSeq.empty(str).snoc("a").snoc("b").snoc("c")
+
+    # Create dictionary mapping indices to values
+    result: Dict[int, str] = seq.fold_with_index(lambda acc, i, x: {**acc, i: x}, {})
+    assert result == {0: "a", 1: "b", 2: "c"}
+
+    # Count characters including index contribution
+    result2 = seq.fold_with_index(lambda acc, i, x: acc + len(x) + i, 0)
+    assert result2 == 6  # (1+0) + (1+1) + (1+2) = 6
+
+
+def test_fold_with_index_deep_sequence():
+    """Test fold_with_index on deep sequences"""
+    seq: PSeq[int] = PSeq.empty(int)
+    for i in range(10):
+        seq = seq.snoc(i * 10)  # [0, 10, 20, ..., 90]
+
+    # Sum values plus their indices
+    result = seq.fold_with_index(lambda acc, i, x: acc + x + i, 0)
+    # Sum of values: 0+10+20+...+90 = 450
+    # Sum of indices: 0+1+2+...+9 = 45
+    # Total: 495
+    assert result == 495
+
+    # Verify all indices are correct
+    indices: List[int] = seq.fold_with_index(lambda acc, i, x: acc + [i], [])
+    assert indices == list(range(10))
+
+
+def test_fold_with_index_mixed_operations():
+    """Test fold_with_index on sequences built with mixed operations"""
+    # [30, 40, 50, 60] from mixed cons/snoc
+    seq: PSeq[int] = PSeq.empty(int).snoc(50).snoc(60).cons(40).cons(30)
+
+    # Build detailed info with indices
+    result: List[Dict[str, int]] = seq.fold_with_index(
+        lambda acc, i, x: acc + [{"index": i, "value": x, "product": i * x}], []
+    )
+    expected = [
+        {"index": 0, "value": 30, "product": 0},
+        {"index": 1, "value": 40, "product": 40},
+        {"index": 2, "value": 50, "product": 100},
+        {"index": 3, "value": 60, "product": 180},
+    ]
+    assert result == expected

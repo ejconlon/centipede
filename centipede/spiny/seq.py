@@ -245,6 +245,30 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
         """
         return _seq_flat_map(self, fn)
 
+    def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
+        """Fold the sequence from left to right with an accumulator.
+
+        Args:
+            fn: A function that takes an accumulator and element, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all elements.
+        """
+        return _seq_fold(self, fn, acc)
+
+    def fold_with_index[Z](self, fn: Callable[[Z, int, T], Z], acc: Z) -> Z:
+        """Fold the sequence from left to right with an accumulator and element index.
+
+        Args:
+            fn: A function that takes an accumulator, index, and element, returns new accumulator.
+            acc: The initial accumulator value.
+
+        Returns:
+            The final accumulator value after processing all elements.
+        """
+        return _seq_fold_with_index(self, fn, acc)
+
     def __getitem__(self, ix: int) -> T:
         """Alias for get()."""
         return self.get(ix)
@@ -804,3 +828,19 @@ def _seq_reversed[T](seq: PSeq[T]) -> Iterator[T]:
             yield from reversed(front)
         case _:
             raise Impossible
+
+
+def _seq_fold[T, Z](seq: PSeq[T], fn: Callable[[Z, T], Z], acc: Z) -> Z:
+    result = acc
+    for item in _seq_iter(seq):
+        result = fn(result, item)
+    return result
+
+
+def _seq_fold_with_index[T, Z](seq: PSeq[T], fn: Callable[[Z, int, T], Z], acc: Z) -> Z:
+    result = acc
+    index = 0
+    for item in _seq_iter(seq):
+        result = fn(result, index, item)
+        index += 1
+    return result
