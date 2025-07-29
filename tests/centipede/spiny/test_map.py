@@ -249,8 +249,8 @@ def test_get_nonexistent_key():
     """Test getting a key that doesn't exist"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
 
-    assert map_obj.get(4) is None
-    assert map_obj.get(0) is None
+    assert map_obj.lookup(4) is None
+    assert map_obj.lookup(0) is None
     assert not map_obj.contains(4)
     assert not map_obj.contains(0)
 
@@ -274,7 +274,7 @@ def test_remove_existing_key():
     # Remove middle key
     result = map_obj.remove(2)
     assert result.size() == 3
-    assert result.get(2) is None
+    assert result.lookup(2) is None
     assert result.get(1) == "one"
     assert result.get(3) == "three"
     assert result.get(4) == "four"
@@ -282,7 +282,7 @@ def test_remove_existing_key():
     # Remove first key
     result2 = result.remove(1)
     assert result2.size() == 2
-    assert result2.get(1) is None
+    assert result2.lookup(1) is None
     assert result2.get(3) == "three"
     assert result2.get(4) == "four"
 
@@ -1075,7 +1075,7 @@ def test_edge_cases():
     """Test various edge cases"""
     # Empty map operations
     empty = PMap.empty(int, str)
-    assert empty.get(1) is None
+    assert empty.lookup(1) is None
     assert not empty.contains(1)
     assert empty.remove(1).null()
 
@@ -1086,9 +1086,9 @@ def test_edge_cases():
 
     # Test with None values
     map_with_none = PMap.mk([(1, None), (2, "two")])
-    assert map_with_none.get(1) is None
+    assert map_with_none.lookup(1) is None
     assert map_with_none.contains(1)  # Should still contain the key
-    assert map_with_none.get(3) is None
+    assert map_with_none.lookup(3) is None
     assert not map_with_none.contains(3)  # Should not contain non-existent key
 
 

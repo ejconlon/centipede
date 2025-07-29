@@ -164,7 +164,7 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
             The element at the given index.
 
         Raises:
-            KeyError: If the index is out of bounds.
+            IndexError: If index is out of bounds.
         """
         return _seq_get(self, ix)
 
@@ -178,8 +178,8 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
             The element at the given index, or None if index is out of bounds.
         """
         try:
-            return _seq_get(self, ix)
-        except KeyError:
+            return self.get(ix)
+        except IndexError:
             return None
 
     def update(self, ix: int, value: T) -> PSeq[T]:
@@ -559,18 +559,18 @@ def _seq_concat_middle[T](
 
 def _seq_get[T](seq: PSeq[T], ix: int) -> T:
     if ix < 0:
-        raise KeyError(ix)
+        raise IndexError(ix)
     match seq:
         case PSeqEmpty():
-            raise KeyError(ix)
+            raise IndexError(ix)
         case PSeqSingle(value):
             if ix == 0:
                 return value
             else:
-                raise KeyError(ix)
+                raise IndexError(ix)
         case PSeqDeep(size, front, between, back):
             if ix >= size:
-                raise KeyError(ix)
+                raise IndexError(ix)
             front_size = len(front)
             if ix < front_size:
                 return front[ix]
@@ -582,7 +582,7 @@ def _seq_get[T](seq: PSeq[T], ix: int) -> T:
             ix -= between_total_size
             if ix < back_size:
                 return back[ix]
-            raise KeyError(ix)
+            raise IndexError(ix)
         case _:
             raise Impossible
 

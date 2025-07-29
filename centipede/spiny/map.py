@@ -14,6 +14,8 @@ from centipede.spiny.common import (
     compare,
 )
 
+_MISSING = object()
+
 __all__ = ["PMap"]
 
 
@@ -142,8 +144,28 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         """
         yield from self.iter()
 
-    def get(self, key: K) -> Optional[V]:
+    def get(self, key: K, default: Optional[V] = None) -> V:
         """Get the value associated with a key.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for recursion stack
+
+        Args:
+            key: The key to look up.
+            default: Value to return if key is not found. If not provided and key
+                    is not found, raises KeyError.
+
+        Returns:
+            The value associated with the key, or default if key is not found
+            and default is provided.
+
+        Raises:
+            KeyError: If key is not found and no default is provided.
+        """
+        return _pmap_get_with_default(self, key, default)
+
+    def lookup(self, key: K) -> Optional[V]:
+        """Get the value associated with a key, returning None if not found.
 
         Time Complexity: O(log n)
         Space Complexity: O(log n) for recursion stack
@@ -154,7 +176,10 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
         Returns:
             The value associated with the key, or None if the key is not found.
         """
-        return _pmap_get(self, key)
+        try:
+            return self.get(key)
+        except KeyError:
+            return None
 
     def contains(self, key: K) -> bool:
         """Check if the map contains the given key.
@@ -316,6 +341,25 @@ class PMapBranch[K, V](PMap[K, V]):
     _key: K
     _value: V
     _right: PMap[K, V]
+
+
+def _pmap_get_with_default[K, V](pmap: PMap[K, V], key: K, default: Optional[V]) -> V:
+    match pmap:
+        case PMapEmpty():
+            if default:
+                return default
+            else:
+                raise KeyError(key)
+        case PMapBranch(_, left, branch_key, branch_value, right):
+            cmp = compare(key, branch_key)
+            if cmp == Ordering.Eq:
+                return branch_value
+            elif cmp == Ordering.Lt:
+                return _pmap_get_with_default(left, key, default)
+            else:
+                return _pmap_get_with_default(right, key, default)
+        case _:
+            raise Impossible
 
 
 def _pmap_get[K, V](pmap: PMap[K, V], key: K) -> Optional[V]:

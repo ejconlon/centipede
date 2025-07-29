@@ -96,14 +96,14 @@ def test_put_overwrites_existing_key(pmap, key, value1, value2):
 def test_get_nonexistent_key_returns_none(pmap, key):
     """Getting a nonexistent key should return None."""
     assume(not pmap.contains(key))
-    assert pmap.get(key) is None
+    assert pmap.lookup(key) is None
 
 
 @given(map_strategy(), st.integers())
 def test_contains_consistency_with_get(pmap, key):
-    """contains() should be consistent with get() returning non-None."""
+    """contains() should be consistent with lookup() returning non-None."""
     has_key = pmap.contains(key)
-    value = pmap.get(key)
+    value = pmap.lookup(key)
 
     assert has_key == (value is not None)
 
@@ -116,7 +116,7 @@ def test_remove_existing_key(pmap, key):
         new_pmap = pmap.remove(key)
 
         assert not new_pmap.contains(key)
-        assert new_pmap.get(key) is None
+        assert new_pmap.lookup(key) is None
         assert new_pmap.size() == original_size - 1
 
 
