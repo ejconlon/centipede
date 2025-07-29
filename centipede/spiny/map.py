@@ -324,6 +324,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def delete_min(self) -> Optional[PMap[K, V]]:
         """Remove the minimum key-value pair from the map.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
             None if the map is empty, otherwise a new map with the
             minimum entry removed.
@@ -333,6 +336,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
 
     def delete_max(self) -> Optional[PMap[K, V]]:
         """Remove the maximum key-value pair from the map.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Returns:
             None if the map is empty, otherwise a new map with the
@@ -359,6 +365,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def filter_keys(self, predicate: Callable[[K], bool]) -> PMap[K, V]:
         """Filter entries based on their keys.
 
+        Time Complexity: O(n log n) where n is the number of filtered entries
+        Space Complexity: O(n) for the resulting map structure
+
         Args:
             predicate: A function that returns True for keys to keep.
 
@@ -370,6 +379,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def map_values[W](self, fn: Callable[[V], W]) -> PMap[K, W]:
         """Transform each value using the given function while preserving structure.
 
+        Time Complexity: O(n) for transformation plus cost of fn
+        Space Complexity: O(n) for the new map structure
+
         Args:
             fn: A function that transforms values from type V to type W.
 
@@ -377,6 +389,20 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
             A new map with each value transformed by fn, preserving the tree structure.
         """
         return _pmap_map_values(self, fn)
+
+    def map_with_key[W](self, fn: Callable[[K, V], W]) -> PMap[K, W]:
+        """Transform each value using the given function with access to the key.
+
+        Time Complexity: O(n) for transformation plus cost of fn
+        Space Complexity: O(n) for the new map structure
+
+        Args:
+            fn: A function that takes a key and value, returns a new value.
+
+        Returns:
+            A new map with each value transformed by fn(key, value), preserving structure.
+        """
+        return _pmap_map_with_key(self, fn)
 
     def fold_with_key[Z](self, fn: Callable[[Z, K, V], Z], acc: Z) -> Z:
         """Fold the map from left to right with an accumulator, key, and value.
@@ -824,6 +850,19 @@ def _pmap_map_values[K, V, W](pmap: PMap[K, V], fn: Callable[[V], W]) -> PMap[K,
             new_left = _pmap_map_values(left, fn)
             new_value = fn(value)
             new_right = _pmap_map_values(right, fn)
+            return PMapBranch(size, new_left, key, new_value, new_right)
+        case _:
+            raise Impossible
+
+
+def _pmap_map_with_key[K, V, W](pmap: PMap[K, V], fn: Callable[[K, V], W]) -> PMap[K, W]:
+    match pmap:
+        case PMapEmpty():
+            return PMap.empty()
+        case PMapBranch(size, left, key, value, right):
+            new_left = _pmap_map_with_key(left, fn)
+            new_value = fn(key, value)
+            new_right = _pmap_map_with_key(right, fn)
             return PMapBranch(size, new_left, key, new_value, new_right)
         case _:
             raise Impossible

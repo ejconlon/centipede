@@ -118,6 +118,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def delete_min(self) -> Optional[PSet[T]]:
         """Remove the minimum element from the set.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
             None if the set is empty, otherwise a new set with the
             minimum element removed.
@@ -140,6 +143,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
 
     def delete_max(self) -> Optional[PSet[T]]:
         """Remove the maximum element from the set.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Returns:
             None if the set is empty, otherwise a new set with the
@@ -226,6 +232,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def symdiff(self, other: PSet[T]) -> PSet[T]:
         """Symmetric difference.
 
+        Time Complexity: O(m log(n/m+1) + n log(m/n+1)) where m, n are set sizes
+        Space Complexity: O(log(m + n)) for recursion and path copying
+
         Args:
             other: The set to compute symmetric difference with.
 
@@ -236,6 +245,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
 
     def filter(self, predicate: Callable[[T], bool]) -> PSet[T]:
         """Filter elements that satisfy the predicate.
+
+        Time Complexity: O(n log m) where n is total elements, m is filtered elements
+        Space Complexity: O(log m) for the resulting set structure
 
         Args:
             predicate: A function that returns True for elements to keep.

@@ -71,6 +71,9 @@ class PHeap[T](Sized, Iterating[T]):
     def mk(values: Iterable[T]) -> PHeap[T]:
         """Create a heap from an iterable of elements.
 
+        Time Complexity: O(n log n) where n is the number of elements
+        Space Complexity: O(log n) for the heap structure
+
         Args:
             values: Iterable of elements to insert into the heap.
 
@@ -151,6 +154,9 @@ class PHeap[T](Sized, Iterating[T]):
     def delete_min(self) -> Optional[PHeap[T]]:
         """Remove the minimum element from the heap.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
+
         Returns:
             None if the heap is empty, otherwise a new heap with the
             minimum element removed.
@@ -161,6 +167,9 @@ class PHeap[T](Sized, Iterating[T]):
     @override
     def iter(self) -> Iterator[T]:
         """Iterate through the heap in ascending order.
+
+        Time Complexity: O(n log n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
 
         Yields:
             Elements in ascending order.

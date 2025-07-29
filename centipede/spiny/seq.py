@@ -41,6 +41,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def empty(_ty: Optional[Type[T]] = None) -> PSeq[T]:
         """Create an empty sequence.
 
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+
         Args:
             _ty: Optional type hint (unused).
 
@@ -53,6 +56,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def singleton(value: T) -> PSeq[T]:
         """Create a sequence containing a single element.
 
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+
         Args:
             value: The single element for the sequence.
 
@@ -64,6 +70,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     @staticmethod
     def mk(values: Iterable[T]) -> PSeq[T]:
         """Create a sequence from an iterable of values.
+
+        Time Complexity: O(n) where n is the number of values
+        Space Complexity: O(log n) for the finger tree structure
 
         Args:
             values: Iterable of values to include in the sequence.
@@ -80,6 +89,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def null(self) -> bool:
         """Check if the sequence is empty.
 
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+
         Returns:
             True if the sequence contains no elements, False otherwise.
         """
@@ -92,6 +104,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     @override
     def size(self) -> int:
         """Get the number of elements in the sequence.
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
 
         Returns:
             The number of elements in the sequence.
@@ -109,6 +124,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def uncons(self) -> Optional[Tuple[T, PSeq[T]]]:
         """Remove and return the first element and remaining sequence.
 
+        Time Complexity: O(1) amortized
+        Space Complexity: O(log n) for path copying in worst case
+
         Returns:
             None if sequence is empty, otherwise (first_element, rest_of_sequence).
         """
@@ -116,6 +134,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
 
     def cons(self, value: T) -> PSeq[T]:
         """Add an element to the front of the sequence.
+
+        Time Complexity: O(1) amortized
+        Space Complexity: O(log n) for path copying in worst case
 
         Args:
             value: The element to add.
@@ -128,6 +149,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def unsnoc(self) -> Optional[Tuple[PSeq[T], T]]:
         """Remove and return the last element and remaining sequence.
 
+        Time Complexity: O(1) amortized
+        Space Complexity: O(log n) for path copying in worst case
+
         Returns:
             None if sequence is empty, otherwise (rest_of_sequence, last_element).
         """
@@ -135,6 +159,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
 
     def snoc(self, value: T) -> PSeq[T]:
         """Add an element to the end of the sequence.
+
+        Time Complexity: O(1) amortized
+        Space Complexity: O(log n) for path copying in worst case
 
         Args:
             value: The element to add.
@@ -147,6 +174,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def concat(self, other: PSeq[T]) -> PSeq[T]:
         """Concatenate this sequence with another sequence.
 
+        Time Complexity: O(log(min(m,n))) where m, n are sequence sizes
+        Space Complexity: O(log(min(m,n))) for path copying
+
         Args:
             other: The sequence to concatenate with this one.
 
@@ -157,6 +187,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
 
     def get(self, ix: int) -> T:
         """Get the element at the specified index.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for recursion stack
 
         Args:
             ix: The index of the element to retrieve.
@@ -172,6 +205,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def lookup(self, ix: int) -> Optional[T]:
         """Get the element at the specified index, returning None if out of bounds.
 
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for recursion stack
+
         Args:
             ix: The index of the element to retrieve.
 
@@ -185,6 +221,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
 
     def update(self, ix: int, value: T) -> PSeq[T]:
         """Return a new sequence with the element at the given index updated.
+
+        Time Complexity: O(log n)
+        Space Complexity: O(log n) for path copying
 
         Args:
             ix: The index of the element to update.

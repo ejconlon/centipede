@@ -241,6 +241,27 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
         # Create new heap from transformed entries
         return PHeapMap(PHeap.mk(transformed_entries))
 
+    def map_with_key[W](self, fn: Callable[[K, V], W]) -> PHeapMap[K, W]:
+        """Transform each value using the given function with access to the key.
+
+        Time Complexity: O(n log n) where n is the number of entries
+        Space Complexity: O(log n) for the resulting heap structure
+
+        Args:
+            fn: A function that takes a key and value, returns a new value.
+
+        Returns:
+            A new heap map with each value transformed by fn(key, value), preserving heap order.
+        """
+        # Collect transformed entries
+        transformed_entries = []
+        for entry in self._heap.iter():
+            new_entry = Entry(entry.key, fn(entry.key, entry.value))
+            transformed_entries.append(new_entry)
+        
+        # Create new heap from transformed entries
+        return PHeapMap(PHeap.mk(transformed_entries))
+
     def __rshift__(self, pair: Tuple[K, V]) -> PHeapMap[K, V]:
         """Alias for insert()."""
         key, value = pair
