@@ -76,6 +76,10 @@ class Pat[T]:
     def group(pattern: Pat[T]) -> Pat[T]:
         return Pat(PatGroup(pattern))
 
+    @staticmethod
+    def alternating(patterns: Iterable[Pat[T]]) -> Pat[T]:
+        return Pat(PatAlternating(PSeq.mk(patterns)))
+
     def mask(self, arc: Arc) -> Pat[T]:
         if arc.null():
             return Pat.silence()
@@ -256,6 +260,11 @@ class PatGroup[T, R](PatF[T, R]):
     pattern: R
 
 
+@dataclass(frozen=True)
+class PatAlternating[T, R](PatF[T, R]):
+    patterns: PSeq[R]
+
+
 def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[T]], Z]:
     def wrapper(env: V, pat: Pat[T]) -> Z:
         pf = pat.unwrap
@@ -303,6 +312,9 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatGroup(p):
                 pz = wrapper(env, p)
                 return fn(env, PatGroup(pz))
+            case PatAlternating(ps):
+                pzs = PSeq.mk(wrapper(env, p) for p in ps)
+                return fn(env, PatAlternating(pzs))
             case _:
                 raise PartialMatchException(pf)
 
@@ -360,6 +372,8 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatSelect(p, selector))
             case PatGroup(p):
                 return Pat(PatGroup(p))
+            case PatAlternating(ps):
+                return Pat(PatAlternating(ps))
             case _:
                 raise PartialMatchException(pf)
 

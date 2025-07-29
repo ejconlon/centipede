@@ -59,6 +59,7 @@ def test_sample_selection():
     round_trip_test("sd:1")
     round_trip_test("hh:2")
     round_trip_test("bd:0 sd:1")
+    round_trip_test("foo:bar")
 
 
 def test_repetition_patterns():
@@ -89,6 +90,20 @@ def test_choice_patterns():
     round_trip_test("[x | y]", "[x | y]")
     round_trip_test("[bd | sd | cp]", "[bd | sd | cp]")
     round_trip_test("[bd | sd]", "[bd | sd]")
+
+
+def test_parallel_patterns():
+    """Test parallel patterns."""
+    round_trip_test("[x, y]", "[x, y]")
+    round_trip_test("[bd, sd, cp]", "[bd, sd, cp]")
+    round_trip_test("[bd, sd]", "[bd, sd]")
+
+
+def test_alternating_patterns():
+    """Test alternating patterns."""
+    round_trip_test("<x y>", "<x y>")
+    round_trip_test("<bd sd cp>", "<bd sd cp>")
+    round_trip_test("<bd sd>", "<bd sd>")
 
 
 def test_euclidean_patterns():
@@ -141,15 +156,16 @@ def test_whitespace_normalization():
 class TestNonPrintablePatterns:
     """Test patterns that cannot be printed."""
 
-    def test_patpar_not_printable(self):
-        """Test that PatPar patterns raise NotImplementedError."""
+    def test_patpar_now_printable(self):
+        """Test that PatPar patterns can now be printed as parallel notation."""
         # Create a PatPar pattern directly (not through parsing)
         from centipede.minipat.pat import Pat
 
         pat = Pat.par([Pat.pure("bd"), Pat.pure("sd")])
 
-        with pytest.raises(NotImplementedError, match="PatPar cannot be printed"):
-            print_pattern(pat)
+        # Should print as parallel notation [a, b]
+        result = print_pattern(pat)
+        assert result == "[bd, sd]"
 
     def test_custom_probability_not_printable(self):
         """Test that custom probability values raise NotImplementedError."""

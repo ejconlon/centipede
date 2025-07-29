@@ -2,10 +2,12 @@ import pytest
 
 from centipede.minipat.parser import parse_pattern
 from centipede.minipat.pat import (
+    PatAlternating,
     PatChoice,
     PatElongation,
     PatEuclidean,
     PatGroup,
+    PatPar,
     PatPolymetric,
     PatProbability,
     PatPure,
@@ -66,6 +68,21 @@ def test_parse_sample_selection():
     assert children[1].unwrap.selector == "0"
 
 
+def test_parse_sample_selection_strings():
+    """Test parsing sample selection with string selectors."""
+    result = parse_pattern("bd:kick sd:snare")
+    assert isinstance(result.unwrap, PatSeq)
+
+    children = list(result.unwrap.children)
+    assert len(children) == 2
+    assert isinstance(children[0].unwrap, PatSelect)
+    assert children[0].unwrap.pattern.unwrap.val == "bd"
+    assert children[0].unwrap.selector == "kick"
+    assert isinstance(children[1].unwrap, PatSelect)
+    assert children[1].unwrap.pattern.unwrap.val == "sd"
+    assert children[1].unwrap.selector == "snare"
+
+
 def test_parse_group_brackets():
     """Test parsing grouped patterns with brackets."""
     result = parse_pattern("[bd sd] cp")
@@ -112,6 +129,30 @@ def test_parse_choice_pattern():
     assert choices[0].unwrap.val == "bd"
     assert choices[1].unwrap.val == "sd"
     assert choices[2].unwrap.val == "cp"
+
+
+def test_parse_parallel_pattern():
+    """Test parsing parallel patterns [a,b,c]."""
+    result = parse_pattern("[bd,sd,cp]")
+    # Should return parallel pattern
+    assert isinstance(result.unwrap, PatPar)
+    patterns = list(result.unwrap.children)
+    assert len(patterns) == 3
+    assert patterns[0].unwrap.val == "bd"
+    assert patterns[1].unwrap.val == "sd"
+    assert patterns[2].unwrap.val == "cp"
+
+
+def test_parse_alternating_pattern():
+    """Test parsing alternating patterns <a b c>."""
+    result = parse_pattern("<bd sd cp>")
+    # Should return alternating pattern
+    assert isinstance(result.unwrap, PatAlternating)
+    patterns = list(result.unwrap.patterns)
+    assert len(patterns) == 3
+    assert patterns[0].unwrap.val == "bd"
+    assert patterns[1].unwrap.val == "sd"
+    assert patterns[2].unwrap.val == "cp"
 
 
 def test_parse_repetition_multiply():
@@ -266,6 +307,19 @@ def test_parse_numeric_symbols():
     assert len(children) == 2
     assert children[0].unwrap.val == "bd909"
     assert children[1].unwrap.val == "tr808"
+
+
+def test_parse_symbols_with_underscores_and_dashes():
+    """Test parsing symbols with underscores and dashes."""
+    result = parse_pattern("bd_kick snare-roll hi_hat_open bass-drum_1")
+    assert isinstance(result.unwrap, PatSeq)
+
+    children = list(result.unwrap.children)
+    assert len(children) == 4
+    assert children[0].unwrap.val == "bd_kick"
+    assert children[1].unwrap.val == "snare-roll"
+    assert children[2].unwrap.val == "hi_hat_open"
+    assert children[3].unwrap.val == "bass-drum_1"
 
 
 def test_parse_complex_sample_selection():

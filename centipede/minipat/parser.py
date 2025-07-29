@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from lark import Lark, Transformer
 
-from centipede.minipat.pat import Pat, RepetitionOp
+from centipede.minipat.pat import Pat, PatSeq, RepetitionOp
 
 # Grammar for pattern parsing
 PATTERN_GRAMMAR = """
@@ -13,18 +13,21 @@ pattern: element+
 
 // Elements can be various types
 element: probability | elongation | repetition | base_element
-base_element: atom | group | choice | euclidean | polymetric
+base_element: atom | group | choice | parallel | alternating | euclidean | polymetric
 
 // Basic atoms
 atom: sample_selection | symbol | silence
 symbol: SYMBOL
 silence: "~"
-sample_selection: SYMBOL ":" NUMBER
+sample_selection: SYMBOL ":" (NUMBER | SYMBOL)
 
 // Grouping structures
 group: "[" pattern "]" | "." pattern "."
 choice: "[" choice_list "]"
 choice_list: pattern ("|" pattern)+
+parallel: "[" parallel_list "]"
+parallel_list: pattern ("," pattern)+
+alternating: "<" pattern+ ">"
 
 // Euclidean rhythms: symbol(hits,steps) or symbol(hits,steps,rotation)
 euclidean: atom "(" NUMBER "," NUMBER ("," NUMBER)? ")"
@@ -46,7 +49,7 @@ AT: "@"
 probability: atom "?"
 
 // Tokens
-SYMBOL: /[a-zA-Z0-9\\-]+/
+SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
 NUMBER: /\\d+/
 
 %import common.WS
@@ -89,16 +92,22 @@ class PatternTransformer(Transformer):
         return Pat.silence()
 
     def sample_selection(self, items):
-        """Transform sample selection like 'bd:2'."""
-        symbol_token, number = items
-        # Create a pattern from the symbol token and use the number as selector
+        """Transform sample selection like 'bd:2' or 'bd:bar'."""
+        symbol_token, selector_token = items
+        # Create a pattern from the symbol token and use the selector as string
         # Extract the actual symbol string if it's already transformed
         if hasattr(symbol_token, "unwrap") and hasattr(symbol_token.unwrap, "val"):
             symbol_str = symbol_token.unwrap.val
         else:
             symbol_str = str(symbol_token)
         symbol_pat = Pat.pure(symbol_str)
-        selector = str(number)
+
+        # Extract selector value - could be number or string
+        if hasattr(selector_token, "unwrap") and hasattr(selector_token.unwrap, "val"):
+            selector = selector_token.unwrap.val
+        else:
+            selector = str(selector_token)
+
         return Pat.select(symbol_pat, selector)
 
     # Grouping structures
@@ -114,6 +123,24 @@ class PatternTransformer(Transformer):
     def choice_list(self, items):
         """Transform choice list a|b|c."""
         return items
+
+    def parallel(self, items):
+        """Transform parallel patterns [a,b,c]."""
+        patterns = items[0]
+        return Pat.par(patterns)
+
+    def parallel_list(self, items):
+        """Transform parallel list a,b,c."""
+        return items
+
+    def alternating(self, items):
+        """Transform alternating patterns <a b c>."""
+        # If we get a single item that's a sequence, extract its children
+        if len(items) == 1 and isinstance(items[0].unwrap, PatSeq):
+            patterns = list(items[0].unwrap.children)
+            return Pat.alternating(patterns)
+        else:
+            return Pat.alternating(items)
 
     # Euclidean rhythms
     def euclidean(self, items):

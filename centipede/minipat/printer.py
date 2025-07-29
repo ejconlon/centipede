@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from centipede.minipat.pat import (
     Pat,
+    PatAlternating,
     PatChoice,
     PatElongation,
     PatEuclidean,
@@ -57,10 +58,9 @@ def print_pattern(pat: Pat[str]) -> str:
             return " ".join(parts)
 
         case PatPar(children):
-            # This is the old parallel notation - not directly supported in mini notation
-            raise NotImplementedError(
-                "PatPar cannot be printed - use PatPolymetric for {a,b,c} notation"
-            )
+            # Parallel patterns use [a,b,c] notation
+            pattern_strs = [print_pattern(pattern) for pattern in children]
+            return f"[{', '.join(pattern_strs)}]"
 
         case PatChoice(choices):
             choice_strs = [print_pattern(choice) for choice in choices]
@@ -104,6 +104,10 @@ def print_pattern(pat: Pat[str]) -> str:
         case PatGroup(pattern):
             pattern_str = print_pattern(pattern)
             return f"[{pattern_str}]"
+
+        case PatAlternating(patterns):
+            pattern_strs = [print_pattern(pattern) for pattern in patterns]
+            return f"<{' '.join(pattern_strs)}>"
 
         case _:
             pattern_type = type(pat.unwrap).__name__
