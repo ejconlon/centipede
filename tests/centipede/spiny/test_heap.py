@@ -1,3 +1,5 @@
+from typing import List
+
 from centipede.spiny.heap import PHeap
 
 
@@ -195,3 +197,76 @@ def test_string_values():
 
     sorted_words = list(heap.iter())
     assert sorted_words == sorted(words)
+
+
+def test_filter_empty():
+    """Test filtering an empty heap"""
+    empty = PHeap.empty(int)
+    filtered = empty.filter(lambda x: x > 0)
+    assert filtered.null()
+    assert list(filtered.iter()) == []
+
+
+def test_filter_single():
+    """Test filtering a single element heap"""
+    heap = PHeap.singleton(5)
+
+    # Element matches predicate
+    filtered_match = heap.filter(lambda x: x > 0)
+    assert filtered_match.size() == 1
+    assert list(filtered_match.iter()) == [5]
+
+    # Element doesn't match predicate
+    filtered_no_match = heap.filter(lambda x: x > 10)
+    assert filtered_no_match.null()
+    assert list(filtered_no_match.iter()) == []
+
+
+def test_filter_multiple():
+    """Test filtering heaps with multiple elements"""
+    heap = PHeap.mk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    # Filter even numbers
+    evens = heap.filter(lambda x: x % 2 == 0)
+    assert evens.size() == 5
+    assert list(evens.iter()) == [2, 4, 6, 8, 10]
+
+    # Filter numbers > 5
+    greater_than_5 = heap.filter(lambda x: x > 5)
+    assert greater_than_5.size() == 5
+    assert list(greater_than_5.iter()) == [6, 7, 8, 9, 10]
+
+    # Original heap unchanged
+    assert heap.size() == 10
+    assert list(heap.iter()) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+
+def test_filter_none_match():
+    """Test filtering where no elements match"""
+    heap = PHeap.mk([1, 2, 3])
+    filtered = heap.filter(lambda x: x > 10)
+    assert filtered.null()
+    assert list(filtered.iter()) == []
+
+
+def test_filter_all_match():
+    """Test filtering where all elements match"""
+    heap = PHeap.mk([2, 4, 6, 8])
+    filtered = heap.filter(lambda x: x % 2 == 0)
+    assert filtered.size() == 4
+    assert list(filtered.iter()) == [2, 4, 6, 8]
+
+
+def test_filter_strings():
+    """Test filtering string heap"""
+    heap = PHeap.mk(["apple", "banana", "apricot", "cherry"])
+
+    # Filter strings starting with 'a'
+    filtered = heap.filter(lambda s: s.startswith("a"))
+    result: List[str] = list(filtered.iter())
+    assert result == ["apple", "apricot"]
+
+    # Filter strings with length > 5
+    long_strings = heap.filter(lambda s: len(s) > 5)
+    long_result: List[str] = list(long_strings.iter())
+    assert long_result == ["apricot", "banana", "cherry"]

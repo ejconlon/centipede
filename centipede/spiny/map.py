@@ -381,6 +381,9 @@ class PMap[K, V](Sized, LexComparable[Tuple[K, V], "PMap[K, V]"]):
     def fold_with_key[Z](self, fn: Callable[[Z, K, V], Z], acc: Z) -> Z:
         """Fold the map from left to right with an accumulator, key, and value.
 
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(log n) for recursion stack during iteration
+
         Args:
             fn: A function that takes an accumulator, key, and value, returns new accumulator.
             acc: The initial accumulator value.

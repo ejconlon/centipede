@@ -1,5 +1,7 @@
 """Tests for PHeapMap implementation."""
 
+from typing import List
+
 from centipede.spiny.heapmap import PHeapMap
 
 
@@ -297,3 +299,131 @@ class TestPHeapMapEdgeCases:
         assert result is not None
         assert result[0] == 1
         assert result[1] == "same"
+
+
+def test_filter_keys_empty():
+    """Test filter_keys on an empty heap map"""
+    empty = PHeapMap.empty(str, int)
+    filtered = empty.filter_keys(lambda k: len(k) > 3)
+    assert filtered.null()
+    assert list(filtered.iter()) == []
+
+
+def test_filter_keys_single():
+    """Test filter_keys on a single element heap map"""
+    hm = PHeapMap.singleton("test", 42)
+
+    # Key matches predicate
+    filtered_match = hm.filter_keys(lambda k: len(k) == 4)
+    assert filtered_match.size() == 1
+    assert list(filtered_match.iter()) == [("test", 42)]
+
+    # Key doesn't match predicate
+    filtered_no_match = hm.filter_keys(lambda k: len(k) > 10)
+    assert filtered_no_match.null()
+    assert list(filtered_no_match.iter()) == []
+
+
+def test_filter_keys_multiple():
+    """Test filter_keys on heap maps with multiple elements"""
+    hm = PHeapMap.mk([("apple", 1), ("banana", 2), ("apricot", 3), ("cherry", 4)])
+
+    # Filter keys starting with 'a'
+    filtered_a = hm.filter_keys(lambda k: k.startswith("a"))
+    result_a: List = list(filtered_a.iter())
+    assert result_a == [("apple", 1), ("apricot", 3)]
+
+    # Filter keys with length > 5
+    filtered_long = hm.filter_keys(lambda k: len(k) > 5)
+    result_long: List = list(filtered_long.iter())
+    assert result_long == [("apricot", 3), ("banana", 2), ("cherry", 4)]
+
+    # Original heap map unchanged
+    assert hm.size() == 4
+    assert list(hm.iter()) == [
+        ("apple", 1),
+        ("apricot", 3),
+        ("banana", 2),
+        ("cherry", 4),
+    ]
+
+
+def test_filter_keys_none_match():
+    """Test filter_keys where no keys match"""
+    hm = PHeapMap.mk([("a", 1), ("b", 2), ("c", 3)])
+    filtered = hm.filter_keys(lambda k: k.startswith("z"))
+    assert filtered.null()
+    assert list(filtered.iter()) == []
+
+
+def test_filter_keys_all_match():
+    """Test filter_keys where all keys match"""
+    hm = PHeapMap.mk([("a1", 1), ("a2", 2), ("a3", 3)])
+    filtered = hm.filter_keys(lambda k: k.startswith("a"))
+    assert filtered.size() == 3
+    assert list(filtered.iter()) == [("a1", 1), ("a2", 2), ("a3", 3)]
+
+
+def test_map_values_empty():
+    """Test map_values on an empty heap map"""
+    empty = PHeapMap.empty(str, int)
+    mapped = empty.map_values(lambda v: v * 2)
+    assert mapped.null()
+    assert list(mapped.iter()) == []
+
+
+def test_map_values_single():
+    """Test map_values on a single element heap map"""
+    hm = PHeapMap.singleton("test", 5)
+    mapped = hm.map_values(lambda v: v * 10)
+    assert mapped.size() == 1
+    assert list(mapped.iter()) == [("test", 50)]
+
+
+def test_map_values_multiple():
+    """Test map_values on heap maps with multiple elements"""
+    hm = PHeapMap.mk([("c", 3), ("a", 1), ("b", 2)])
+
+    # Double all values
+    doubled = hm.map_values(lambda v: v * 2)
+    assert doubled.size() == 3
+    result: List = list(doubled.iter())
+    assert result == [("a", 2), ("b", 4), ("c", 6)]
+
+    # Convert values to strings
+    str_values = hm.map_values(lambda v: f"value_{v}")
+    str_result: List = list(str_values.iter())
+    assert str_result == [("a", "value_1"), ("b", "value_2"), ("c", "value_3")]
+
+    # Original heap map unchanged
+    assert hm.size() == 3
+    original_result: List = list(hm.iter())
+    assert original_result == [("a", 1), ("b", 2), ("c", 3)]
+
+
+def test_map_values_type_change():
+    """Test map_values with type change"""
+    hm = PHeapMap.mk([("x", 1), ("y", 2), ("z", 3)])
+
+    # Transform int values to strings
+    str_mapped = hm.map_values(lambda v: str(v))
+    result: List = list(str_mapped.iter())
+    assert result == [("x", "1"), ("y", "2"), ("z", "3")]
+
+    # Transform to lists
+    list_mapped = hm.map_values(lambda v: [v, v])
+    list_result: List = list(list_mapped.iter())
+    assert list_result == [("x", [1, 1]), ("y", [2, 2]), ("z", [3, 3])]
+
+
+def test_map_values_heap_order_preserved():
+    """Test that map_values preserves heap order"""
+    # Create heap map with specific key order
+    hmap = PHeapMap.mk([("zebra", 26), ("apple", 1), ("banana", 2)])
+
+    # Transform values
+    mapped = hmap.map_values(lambda v: v + 100)
+
+    # Order should be preserved (sorted by key)
+    result: List = list(mapped.iter())
+    assert result == [("apple", 101), ("banana", 102), ("zebra", 126)]

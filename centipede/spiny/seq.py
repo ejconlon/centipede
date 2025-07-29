@@ -248,6 +248,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
     def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
         """Fold the sequence from left to right with an accumulator.
 
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(log n) for recursion stack during iteration
+
         Args:
             fn: A function that takes an accumulator and element, returns new accumulator.
             acc: The initial accumulator value.
@@ -259,6 +262,9 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
 
     def fold_with_index[Z](self, fn: Callable[[Z, int, T], Z], acc: Z) -> Z:
         """Fold the sequence from left to right with an accumulator and element index.
+
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(log n) for recursion stack during iteration
 
         Args:
             fn: A function that takes an accumulator, index, and element, returns new accumulator.

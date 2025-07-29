@@ -60,6 +60,9 @@ class PArray[T](Sized, LexComparable[T, "PArray[T]"]):
     def iter(self) -> Iterator[T]:
         """Iterate over all elements in the array.
 
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(1) additional space
+
         Yields elements in index order from 0 to size-1.
         """
         for i in range(self._size):
@@ -172,6 +175,9 @@ class PArray[T](Sized, LexComparable[T, "PArray[T]"]):
     def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
         """Fold the array from left to right with an accumulator.
 
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(1) additional space
+
         Args:
             fn: A function that takes an accumulator and element, returns new accumulator.
             acc: The initial accumulator value.
@@ -186,6 +192,9 @@ class PArray[T](Sized, LexComparable[T, "PArray[T]"]):
 
     def fold_with_index[Z](self, fn: Callable[[Z, int, T], Z], acc: Z) -> Z:
         """Fold the array from left to right with an accumulator and element index.
+
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(1) additional space
 
         Args:
             fn: A function that takes an accumulator, index, and element, returns new accumulator.

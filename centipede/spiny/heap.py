@@ -170,6 +170,9 @@ class PHeap[T](Sized, Iterating[T]):
     def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
         """Fold the heap from left to right with an accumulator.
 
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(log n) for recursion stack during iteration
+
         Args:
             fn: A function that takes an accumulator and element, returns new accumulator.
             acc: The initial accumulator value.
@@ -180,6 +183,24 @@ class PHeap[T](Sized, Iterating[T]):
         result = acc
         for item in self.iter():
             result = fn(result, item)
+        return result
+
+    def filter(self, predicate: Callable[[T], bool]) -> PHeap[T]:
+        """Filter elements that satisfy the predicate.
+
+        Time Complexity: O(n log m) where n is total elements, m is filtered elements
+        Space Complexity: O(log m) for the resulting heap structure
+
+        Args:
+            predicate: A function that returns True for elements to keep.
+
+        Returns:
+            A new heap containing only elements that satisfy the predicate.
+        """
+        result: PHeap[T] = PHeap.empty()
+        for item in self.iter():
+            if predicate(item):
+                result = result.insert(item)
         return result
 
     def __add__(self, other: PHeap[T]) -> PHeap[T]:

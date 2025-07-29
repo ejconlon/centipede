@@ -248,6 +248,9 @@ class PSet[T](Sized, LexComparable[T, "PSet[T]"]):
     def fold[Z](self, fn: Callable[[Z, T], Z], acc: Z) -> Z:
         """Fold the set from left to right with an accumulator.
 
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(log n) for recursion stack during iteration
+
         Args:
             fn: A function that takes an accumulator and element, returns new accumulator.
             acc: The initial accumulator value.

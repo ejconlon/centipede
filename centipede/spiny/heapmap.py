@@ -31,6 +31,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     ) -> PHeapMap[K, V]:
         """Create an empty heap map.
 
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+
         Args:
             _kty: Optional key type hint (unused).
             _vty: Optional value type hint (unused).
@@ -43,6 +46,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     @staticmethod
     def singleton(key: K, value: V) -> PHeapMap[K, V]:
         """Create a heap map containing a single key-value pair.
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
 
         Args:
             key: The key for the entry.
@@ -57,6 +63,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     @staticmethod
     def mk(pairs: Iterable[Tuple[K, V]]) -> PHeapMap[K, V]:
         """Create a heap map from an iterable of key-value pairs.
+
+        Time Complexity: O(n log n) where n is the number of pairs
+        Space Complexity: O(log n) for the heap structure
 
         Args:
             pairs: Iterable of (key, value) tuples.
@@ -79,17 +88,29 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
 
     @override
     def iter(self) -> Iterator[Tuple[K, V]]:
-        """Iterate over all key-value pairs in the heap map in heap order (sorted by key)."""
+        """Iterate over all key-value pairs in the heap map in heap order (sorted by key).
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         for entry in self._heap.iter():
             yield (entry.key, entry.value)
 
     def keys(self) -> Iterator[K]:
-        """Iterate over all keys in the heap map in sorted order."""
+        """Iterate over all keys in the heap map in sorted order.
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         for key, _ in self.iter():
             yield key
 
     def values(self) -> Iterator[V]:
-        """Iterate over all values in the heap map in key order."""
+        """Iterate over all values in the heap map in key order.
+
+        Time Complexity: O(n) for complete iteration
+        Space Complexity: O(log n) for recursion stack
+        """
         for _, value in self.iter():
             yield value
 
@@ -163,6 +184,9 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
     def fold_with_key[Z](self, fn: Callable[[Z, K, V], Z], acc: Z) -> Z:
         """Fold the heap map from left to right with an accumulator, key, and value.
 
+        Time Complexity: O(n) for iteration plus cost of fn
+        Space Complexity: O(log n) for recursion stack during iteration
+
         Args:
             fn: A function that takes an accumulator, key, and value, returns new accumulator.
             acc: The initial accumulator value.
@@ -174,6 +198,48 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
         for key, value in self.iter():
             result = fn(result, key, value)
         return result
+
+    def filter_keys(self, predicate: Callable[[K], bool]) -> PHeapMap[K, V]:
+        """Filter entries based on their keys.
+
+        Time Complexity: O(n + m log m) where n is total entries, m is filtered entries
+        Space Complexity: O(log m) for the resulting heap structure
+
+        Args:
+            predicate: A function that returns True for keys to keep.
+
+        Returns:
+            A new heap map containing only entries whose keys satisfy the predicate.
+        """
+        # Collect filtered entries
+        filtered_entries = []
+        for entry in self._heap.iter():
+            if predicate(entry.key):
+                filtered_entries.append(entry)
+
+        # Create new heap from filtered entries
+        return PHeapMap(PHeap.mk(filtered_entries))
+
+    def map_values[W](self, fn: Callable[[V], W]) -> PHeapMap[K, W]:
+        """Transform each value using the given function while preserving heap structure.
+
+        Time Complexity: O(n log n) where n is the number of entries
+        Space Complexity: O(log n) for the resulting heap structure
+
+        Args:
+            fn: A function that transforms values from type V to type W.
+
+        Returns:
+            A new heap map with each value transformed by fn, preserving the heap order.
+        """
+        # Collect transformed entries
+        transformed_entries = []
+        for entry in self._heap.iter():
+            new_entry = Entry(entry.key, fn(entry.value))
+            transformed_entries.append(new_entry)
+
+        # Create new heap from transformed entries
+        return PHeapMap(PHeap.mk(transformed_entries))
 
     def __rshift__(self, pair: Tuple[K, V]) -> PHeapMap[K, V]:
         """Alias for insert()."""
