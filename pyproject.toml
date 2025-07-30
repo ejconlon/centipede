@@ -13,6 +13,7 @@ dependencies = [
     # "python-rtmidi>=1.5.8",
     # "polars>=1.31.0",
     # "pygame>=2.6.1",
+    "supriya>=25.7b3",
 ]
 
 [dependency-groups]
