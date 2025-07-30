@@ -13,16 +13,16 @@ pattern: element+
 
 // Elements can be various types
 element: probability | elongation | repetition | base_element
-base_element: atom | group | choice | parallel | alternating | euclidean | polymetric
+base_element: atom | seq | choice | parallel | alternating | euclidean | polymetric
 
 // Basic atoms
-atom: sample_selection | symbol | silence
+atom: select | symbol | silence
 symbol: SYMBOL
 silence: "~"
-sample_selection: SYMBOL ":" (NUMBER | SYMBOL)
+select: SYMBOL ":" (NUMBER | SYMBOL)
 
 // Grouping structures
-group: "[" pattern "]" | "." pattern "."
+seq: "[" pattern "]" | "." pattern "."
 choice: "[" choice_list "]"
 choice_list: pattern ("|" pattern)+
 parallel: "[" parallel_list "]"
@@ -87,11 +87,11 @@ class PatternTransformer(Transformer):
         """Transform a symbol."""
         return items[0]
 
-    def silence(self, items):
+    def silence(self, _items):
         """Transform silence into empty pattern."""
         return Pat.silence()
 
-    def sample_selection(self, items):
+    def select(self, items):
         """Transform sample selection like 'bd:2' or 'bd:bar'."""
         symbol_token, selector_token = items
         # Create a pattern from the symbol token and use the selector as string
@@ -110,10 +110,15 @@ class PatternTransformer(Transformer):
 
         return Pat.select(symbol_pat, selector)
 
-    # Grouping structures
-    def group(self, items):
+    def seq(self, items):
         """Transform grouping [...] or .pattern."""
-        return Pat.group(items[0])
+        pattern = items[0]
+        # If the pattern is already a sequence, wrap it in a group
+        # Otherwise, create a group with the single pattern
+        if isinstance(pattern.unwrap, PatSeq):
+            return Pat.group(pattern.unwrap.children)
+        else:
+            return Pat.group([pattern])
 
     def choice(self, items):
         """Transform choice patterns [a|b|c]."""

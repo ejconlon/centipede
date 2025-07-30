@@ -258,7 +258,7 @@ class PHeapMap[K, V](Sized, LexComparable[Tuple[K, V], "PHeapMap[K, V]"]):
         for entry in self._heap.iter():
             new_entry = Entry(entry.key, fn(entry.key, entry.value))
             transformed_entries.append(new_entry)
-        
+
         # Create new heap from transformed entries
         return PHeapMap(PHeap.mk(transformed_entries))
 

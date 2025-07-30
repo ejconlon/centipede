@@ -855,7 +855,9 @@ def _pmap_map_values[K, V, W](pmap: PMap[K, V], fn: Callable[[V], W]) -> PMap[K,
             raise Impossible
 
 
-def _pmap_map_with_key[K, V, W](pmap: PMap[K, V], fn: Callable[[K, V], W]) -> PMap[K, W]:
+def _pmap_map_with_key[K, V, W](
+    pmap: PMap[K, V], fn: Callable[[K, V], W]
+) -> PMap[K, W]:
     match pmap:
         case PMapEmpty():
             return PMap.empty()

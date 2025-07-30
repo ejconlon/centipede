@@ -7,8 +7,7 @@ from functools import partial
 from typing import Any, Callable, Tuple
 
 from centipede.common import PartialMatchException, ignore_arg
-from centipede.minipat.arc import Arc
-from centipede.minipat.common import Delta, Factor
+from centipede.minipat.common import Factor
 from centipede.spiny import Box, PSeq
 
 
@@ -73,32 +72,12 @@ class Pat[T]:
         return Pat(PatSelect(pattern, selector))
 
     @staticmethod
-    def group(pattern: Pat[T]) -> Pat[T]:
-        return Pat(PatGroup(pattern))
-
-    @staticmethod
     def alternating(patterns: Iterable[Pat[T]]) -> Pat[T]:
         return Pat(PatAlternating(PSeq.mk(patterns)))
 
-    def mask(self, arc: Arc) -> Pat[T]:
-        if arc.null():
-            return Pat.silence()
-        else:
-            match self.unwrap:
-                case PatMask(a, p):
-                    return p.mask(a.intersect(arc))
-                case _:
-                    return Pat(PatMask(arc, self))
-
-    def shift(self, delta: Delta) -> Pat[T]:
-        if delta == 0:
-            return self
-        else:
-            match self.unwrap:
-                case PatShift(d, p):
-                    return p.shift(d + delta)
-                case _:
-                    return Pat(PatShift(delta, self))
+    @staticmethod
+    def group(pats: Iterable[Pat[T]]) -> Pat[T]:
+        return Pat(PatGroup(PSeq.mk(pats)))
 
     def scale(self, factor: Factor) -> Pat[T]:
         if factor <= 0:
@@ -111,18 +90,6 @@ class Pat[T]:
                     return p.scale(f * factor)
                 case _:
                     return Pat(PatScale(factor, self))
-
-    def clip(self, factor: Factor) -> Pat[T]:
-        if factor <= 0:
-            return Pat.silence()
-        elif factor == 1:
-            return self
-        else:
-            match self.unwrap:
-                case PatClip(f, p):
-                    return p.clip(f * factor)
-                case _:
-                    return Pat(PatClip(factor, self))
 
     def map[U](self, fn: Callable[[T], U]) -> Pat[U]:
         return pat_map(fn)(self)
@@ -153,57 +120,20 @@ class PatPure[T](PatF[T, Any]):
 
 
 @dataclass(frozen=True)
-class PatMask[T, R](PatF[T, R]):
-    arc: Arc
-    child: R
-
-    # @override
-    # def active(self, bounds: Arc) -> Arc:
-    #     sub_bounds = bounds.intersect(self.mask)
-    #     if sub_bounds.null():
-    #         return sub_bounds
-    #     else:
-    #         return self.sub_pat.active(sub_bounds)
-    #
-    # @override
-    # def rep(self, bounds: Arc) -> Generator[Ev[T]]:
-    #     sub_bounds = bounds.intersect(self.mask)
-    #     if sub_bounds.null():
-    #         return
-    #     else:
-    #         yield from self.sub_pat.rep(sub_bounds)
-
-
-@dataclass(frozen=True)
-class PatShift[T, R](PatF[T, R]):
-    delta: Delta
-    child: R
-
-    # @override
-    # def active(self, bounds: Arc) -> Arc:
-    #     return self.sub_pat.active(bounds.shift(self.delta)).shift(-self.delta)
-    #
-    # @override
-    # def rep(self, bounds: Arc) -> Generator[Ev[T]]:
-    #     yield from map(
-    #         lambda ev: ev.shift(-self.delta), self.sub_pat.rep(bounds.shift(self.delta))
-    #     )
-
-
-@dataclass(frozen=True)
 class PatScale[T, R](PatF[T, R]):
     factor: Factor
     child: R
 
 
 @dataclass(frozen=True)
-class PatClip[T, R](PatF[T, R]):
-    factor: Factor
-    child: R
+class PatSeq[T, R](PatF[T, R]):
+    children: PSeq[R]
 
 
 @dataclass(frozen=True)
-class PatSeq[T, R](PatF[T, R]):
+class PatGroup[T, R](PatF[T, R]):
+    """A sequence that was explicitly grouped with brackets []."""
+
     children: PSeq[R]
 
 
@@ -256,11 +186,6 @@ class PatSelect[T, R](PatF[T, R]):
 
 
 @dataclass(frozen=True)
-class PatGroup[T, R](PatF[T, R]):
-    pattern: R
-
-
-@dataclass(frozen=True)
 class PatAlternating[T, R](PatF[T, R]):
     patterns: PSeq[R]
 
@@ -273,18 +198,15 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
                 return fn(env, pf)
             case PatPure(_):
                 return fn(env, pf)
-            case PatClip(f, c):
-                cz = wrapper(env, c)
-                return fn(env, PatClip(f, cz))
-            case PatMask(a, c):
-                cz = wrapper(env, c)
-                return fn(env, PatMask(a, cz))
             case PatScale(f, c):
                 cz = wrapper(env, c)
                 return fn(env, PatScale(f, cz))
             case PatSeq(cs):
                 czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatSeq(czs))
+            case PatGroup(cs):
+                czs = PSeq.mk(wrapper(env, c) for c in cs)
+                return fn(env, PatGroup(czs))
             case PatPar(cs):
                 czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatPar(czs))
@@ -309,9 +231,6 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatSelect(p, selector):
                 pz = wrapper(env, p)
                 return fn(env, PatSelect(pz, selector))
-            case PatGroup(p):
-                pz = wrapper(env, p)
-                return fn(env, PatGroup(pz))
             case PatAlternating(ps):
                 pzs = PSeq.mk(wrapper(env, p) for p in ps)
                 return fn(env, PatAlternating(pzs))
@@ -346,14 +265,12 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat.silence()
             case PatPure(val):
                 return Pat(PatPure(fn(val)))
-            case PatClip(f, c):
-                return Pat(PatClip(f, c))
-            case PatMask(a, c):
-                return Pat(PatMask(a, c))
             case PatScale(f, c):
                 return Pat(PatScale(f, c))
             case PatSeq(cs):
                 return Pat(PatSeq(cs))
+            case PatGroup(cs):
+                return Pat(PatGroup(cs))
             case PatPar(cs):
                 return Pat(PatPar(cs))
             case PatChoice(cs):
@@ -370,8 +287,6 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatProbability(p, prob))
             case PatSelect(p, selector):
                 return Pat(PatSelect(p, selector))
-            case PatGroup(p):
-                return Pat(PatGroup(p))
             case PatAlternating(ps):
                 return Pat(PatAlternating(ps))
             case _:

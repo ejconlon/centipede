@@ -26,7 +26,7 @@ class NotImplementedError(Exception):
     pass
 
 
-def print_pattern(pat: Pat[str]) -> str:
+def print_pattern(pat: Pat[str], *, _top_level: bool = True) -> str:
     """Print a Pat pattern back to mini notation string format.
 
     Args:
@@ -47,48 +47,68 @@ def print_pattern(pat: Pat[str]) -> str:
 
         case PatSeq(children):
             if len(children) == 1:
-                return print_pattern(children[0])
+                return print_pattern(children[0], _top_level=False)
+
             parts = []
             for child in children:
                 # If the child is a sequence with multiple elements, bracket it
+                # Groups already have their own brackets
                 if isinstance(child.unwrap, PatSeq) and len(child.unwrap.children) > 1:
-                    parts.append(f"[{print_pattern(child)}]")
+                    parts.append(f"[{print_pattern(child, _top_level=False)}]")
                 else:
-                    parts.append(print_pattern(child))
+                    parts.append(print_pattern(child, _top_level=False))
             return " ".join(parts)
+
+        case PatGroup(children):
+            # Groups always preserve their brackets
+            if len(children) == 1:
+                return f"[{print_pattern(children[0], _top_level=False)}]"
+            parts = [print_pattern(child, _top_level=False) for child in children]
+            return f"[{' '.join(parts)}]"
 
         case PatPar(children):
             # Parallel patterns use [a,b,c] notation
-            pattern_strs = [print_pattern(pattern) for pattern in children]
+            pattern_strs = [
+                print_pattern(pattern, _top_level=False) for pattern in children
+            ]
             return f"[{', '.join(pattern_strs)}]"
 
         case PatChoice(choices):
-            choice_strs = [print_pattern(choice) for choice in choices]
+            choice_strs = [
+                print_pattern(choice, _top_level=False) for choice in choices
+            ]
             return f"[{' | '.join(choice_strs)}]"
 
         case PatEuclidean(atom, hits, steps, rotation):
-            atom_str = print_pattern(atom)
+            atom_str = print_pattern(atom, _top_level=False)
             if rotation == 0:
                 return f"{atom_str}({hits},{steps})"
             else:
                 return f"{atom_str}({hits},{steps},{rotation})"
 
         case PatPolymetric(patterns):
-            pattern_strs = [print_pattern(pattern) for pattern in patterns]
+            pattern_strs = [
+                print_pattern(pattern, _top_level=False) for pattern in patterns
+            ]
             return f"{{{', '.join(pattern_strs)}}}"
 
         case PatRepetition(pattern, operator, count):
-            pattern_str = print_pattern(pattern)
+            # If the pattern being repeated is a multi-element sequence, it needs brackets
+            # PatGroup already has brackets, so no need to add more
+            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
+                pattern_str = f"[{print_pattern(pattern, _top_level=False)}]"
+            else:
+                pattern_str = print_pattern(pattern, _top_level=False)
             op_str = operator.value
             return f"{pattern_str}{op_str}{count}"
 
         case PatElongation(pattern, count):
-            pattern_str = print_pattern(pattern)
+            pattern_str = print_pattern(pattern, _top_level=False)
             # Use underscore for elongation (count is the actual number of underscores)
             return f"{pattern_str}{'_' * count}"
 
         case PatProbability(pattern, probability):
-            pattern_str = print_pattern(pattern)
+            pattern_str = print_pattern(pattern, _top_level=False)
             if probability == 0.5:
                 return f"{pattern_str}?"
             else:
@@ -98,15 +118,13 @@ def print_pattern(pat: Pat[str]) -> str:
                 )
 
         case PatSelect(pattern, selector):
-            pattern_str = print_pattern(pattern)
+            pattern_str = print_pattern(pattern, _top_level=False)
             return f"{pattern_str}:{selector}"
 
-        case PatGroup(pattern):
-            pattern_str = print_pattern(pattern)
-            return f"[{pattern_str}]"
-
         case PatAlternating(patterns):
-            pattern_strs = [print_pattern(pattern) for pattern in patterns]
+            pattern_strs = [
+                print_pattern(pattern, _top_level=False) for pattern in patterns
+            ]
             return f"<{' '.join(pattern_strs)}>"
 
         case _:
@@ -123,6 +141,6 @@ def print_pattern_grouped(pat: Pat[str]) -> str:
     in certain contexts.
     """
     if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.children) > 1:
-        return f"[{print_pattern(pat)}]"
+        return f"[{print_pattern(pat, _top_level=False)}]"
     else:
-        return print_pattern(pat)
+        return print_pattern(pat, _top_level=False)
