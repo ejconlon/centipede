@@ -29,5 +29,9 @@ def ev_heap_empty[T]() -> EvHeap[T]:
     return PHeapMap.empty()
 
 
+def ev_heap_singleton[T](ev: Ev[T]) -> EvHeap[T]:
+    return PHeapMap.singleton(ev.arc, ev)
+
+
 def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
     return heap.insert(ev.arc, ev)
