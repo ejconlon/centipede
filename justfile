@@ -48,3 +48,7 @@ main ARGS="":
 docs:
   rm -rf docs
   .venv/bin/python3 -m pdoc -o docs -d markdown --include-undocumented centipede
+
+# Start fluidsynth as midi target
+fluid:
+  fluidsynth -qsi
