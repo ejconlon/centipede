@@ -1,3 +1,5 @@
+python := ".venv/bin/python3 -Xgil=0"
+
 # No default tasks
 default:
   just --list
@@ -9,25 +11,25 @@ freeze:
 # Create the virtual environment
 venv:
   python3.13 -m venv --upgrade-deps .venv
-  .venv/bin/python3 -m pip install -r dev-requirements.txt
+  {{python}} -m pip install -r dev-requirements.txt
 
 # Format - sort with isort and format with ruff
 format:
-  .venv/bin/python3 -m isort --settings-path=pyproject.toml centipede tests
-  .venv/bin/python3 -m ruff format
+  {{python}} -m isort --settings-path=pyproject.toml centipede tests
+  {{python}} -m ruff format
 
 # Typecheck with mypy
 typecheck:
-  .venv/bin/python3 -m mypy --config-file=pyproject.toml -p centipede
-  .venv/bin/python3 -m mypy --config-file=pyproject.toml -p tests
+  {{python}} -m mypy --config-file=pyproject.toml -p centipede
+  {{python}} -m mypy --config-file=pyproject.toml -p tests
 
 # Lint with ruff
 lint:
-  .venv/bin/python3 -m ruff check
+  {{python}} -m ruff check
 
 # Unit test with pytest
 unit:
-  .venv/bin/python3 -m pytest tests
+  {{python}} -m pytest tests
 
 # Run all tests
 test: typecheck unit
@@ -36,18 +38,18 @@ test: typecheck unit
 clean:
   rm -rf .venv .mypy_cache .pytest_cache *.egg-info
 
-# Enter an IPython REPL
+# Enter an Python REPL
 repl:
-  .venv/bin/ipython
+  {{python}}
 
 # Run the main entrypoint
 main ARGS="":
-  .venv/bin/python3 -m centipede.main {{ARGS}}
+  {{python}} -m centipede.main {{ARGS}}
 
 # Generate HTML documentation
 docs:
   rm -rf docs
-  .venv/bin/python3 -m pdoc -o docs -d markdown --include-undocumented centipede
+  {{python}} -m pdoc -o docs -d markdown --include-undocumented centipede
 
 # Start fluidsynth as midi target
 fluid:

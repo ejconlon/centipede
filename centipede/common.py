@@ -6,7 +6,7 @@ from logging import Logger
 from threading import Event, Lock, Thread
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from spiny.common import Box
+from centipede.spiny.common import Box
 
 
 class PartialMatchException(Exception):

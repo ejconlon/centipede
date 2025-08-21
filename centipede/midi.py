@@ -7,9 +7,9 @@ from typing import Optional, Tuple, override
 
 import mido
 from mido.frozen import FrozenMessage
-from spiny.heapmap import PHeapMap
 
 from centipede.common import LockBox, Task
+from centipede.spiny.heapmap import PHeapMap
 
 
 def _assert_pos_lt(x, n):
