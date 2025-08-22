@@ -8,10 +8,12 @@ from queue import Queue
 from threading import Lock
 from typing import Any, NewType, Optional, TypeVar
 
+from centipede.spiny.common import Box
+
 T = TypeVar("T")
 
 
-def is_fatal_exception(exc: Exception):
+def is_fatal_exception(exc: Exception) -> bool:
     return isinstance(exc, SystemExit) or isinstance(exc, KeyboardInterrupt)
 
 
@@ -73,17 +75,17 @@ class Sender[T]:
         raise NotImplementedError
 
     @abstractmethod
-    def stop(self):
+    def stop(self) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def send(self, msg: T):
+    def send(self, msg: T) -> None:
         raise NotImplementedError
 
 
 class Control(metaclass=ABCMeta):
     @abstractmethod
-    def stop(self):
+    def stop(self) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -99,16 +101,18 @@ class ActorEnv:
 
 class Actor[T](metaclass=ABCMeta):
     @abstractmethod
-    def on_message(self, env: ActorEnv, value: T):
+    def on_message(self, env: ActorEnv, value: T) -> None:
         return
 
-    def on_handle(self, env: ActorEnv, exc: Exception):
+    def on_handle(self, env: ActorEnv, exc: Exception) -> None:
         raise exc
 
-    def on_stop(self, env: ActorEnv):
+    def on_stop(self, env: ActorEnv) -> None:
         return
 
-    def on_report(self, env: ActorEnv, child: ActorId, exc: Optional[Exception]):
+    def on_report(
+        self, env: ActorEnv, child_id: ActorId, exc: Optional[Exception]
+    ) -> None:
         return
 
 
@@ -129,74 +133,79 @@ class ActorRunner[T]:
         while True:
             self._step()
 
-    def _stop(self, saved_exc: Optional[ActionException]) -> Optional[ActionException]:
+    def _handle(self, saved_exc: Box[Optional[ActionException]]) -> None:
+        if saved_exc.value is None:
+            return
+
+        try:
+            self._actor.on_handle(env=self._env, exc=saved_exc.value.exc)
+        except Exception as exc:
+            saved_exc.value = ActionException(
+                action=Action.Handle, exc=exc, saved_exc=saved_exc.value
+            )
+
+        if saved_exc.value is not None:
+            self._stop(saved_exc=saved_exc)
+
+    def _stop(self, saved_exc: Box[Optional[ActionException]]) -> None:
         self._own_q.shutdown(immediate=True)
 
         try:
             self._actor.on_stop(env=self._env)
         except Exception as exc:
-            saved_exc = ActionException(
-                action=Action.Stop, exc=exc, saved_exc=saved_exc
+            saved_exc.value = ActionException(
+                action=Action.Stop, exc=exc, saved_exc=saved_exc.value
             )
 
         try:
-            self._report_parent(saved_exc=saved_exc)
+            self._report_parent(saved_exc=saved_exc.value)
         except Exception as exc:
-            saved_exc = ActionException(
-                action=Action.ReportParent, exc=exc, saved_exc=saved_exc
+            saved_exc.value = ActionException(
+                action=Action.ReportParent, exc=exc, saved_exc=saved_exc.value
             )
 
-        return saved_exc
-
-    def _message(self, value: T) -> Optional[ActionException]:
-        message_exc: Optional[ActionException] = None
-
+    def _message(self, saved_exc: Box[Optional[ActionException]], value: T) -> None:
         try:
             self._actor.on_message(env=self._env, value=value)
         except Exception as exc:
-            message_exc = ActionException(
-                action=Action.Message, exc=exc, saved_exc=None
+            saved_exc.value = ActionException(
+                action=Action.Message, exc=exc, saved_exc=saved_exc.value
             )
 
-        if message_exc is None:
-            return None
-
-        handle_exc: Optional[ActionException] = None
-
-        try:
-            self._actor.on_handle(env=self._env, exc=message_exc.exc)
-        except Exception as exc:
-            handle_exc = ActionException(
-                action=Action.Handle, exc=exc, saved_exc=handle_exc
-            )
-
-        if handle_exc is None:
-            return None
-        else:
-            return self._stop(saved_exc=handle_exc)
+        self._handle(saved_exc=saved_exc)
 
     def _report_self(
-        self, child_id: ActorId, child_exc: Optional[ActionException]
-    ) -> Optional[ActionException]:
-        raise NotImplementedError
+        self,
+        saved_exc: Box[Optional[ActionException]],
+        child_id: ActorId,
+        child_exc: Optional[ActionException],
+    ) -> None:
+        try:
+            self._actor.on_report(env=self._env, child_id=child_id, exc=child_exc)
+        except Exception as exc:
+            saved_exc.value = ActionException(
+                action=Action.ReportSelf, exc=exc, saved_exc=saved_exc.value
+            )
+
+        self._handle(saved_exc=saved_exc)
 
     def _report_parent(self, saved_exc: Optional[ActionException]) -> None:
         raise NotImplementedError
 
     def _step(self) -> None:
-        saved_exc: Optional[ActionException] = None
+        saved_exc: Box[Optional[ActionException]] = Box(None)
         try:
             pack = self._own_q.get()
             match pack:
                 case StopPacket():
-                    saved_exc = self._stop(saved_exc=None)
+                    self._stop(saved_exc=saved_exc)
                 case MessagePacket(value):
-                    saved_exc = self._message(value=value)
+                    self._message(saved_exc=saved_exc, value=value)
                 case ReportPacket(child_id, child_exc):
-                    saved_exc = self._report_self(
-                        child_id=child_id, child_exc=child_exc
+                    self._report_self(
+                        saved_exc=saved_exc, child_id=child_id, child_exc=child_exc
                     )
         finally:
             self._own_q.task_done()
-            if saved_exc is not None and is_fatal_exception(saved_exc):
-                raise saved_exc
+            if saved_exc.value is not None and is_fatal_exception(saved_exc.value):
+                raise saved_exc.value
