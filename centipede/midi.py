@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from logging import Logger
-from threading import Event
-from typing import Optional, Tuple, override
+from typing import Optional, Tuple
 
 import mido
 from mido.frozen import FrozenMessage
 
-from centipede.common import LockBox, Task
+from centipede.common import LockBox
 from centipede.spiny.heapmap import PHeapMap
 
 
@@ -16,41 +14,23 @@ def _assert_pos_lt(x, n):
     assert x >= 0 and x < n
 
 
-@dataclass(eq=False)
-class SendPort:
-    _handle: mido.ports.BaseOutput
+def msg_note_on(channel: int, note: int, velocity: int) -> FrozenMessage:
+    _assert_pos_lt(channel, 16)
+    _assert_pos_lt(note, 128)
+    _assert_pos_lt(velocity, 128)
+    return FrozenMessage("note_on", channel=channel, note=note, velocity=velocity)
 
-    @staticmethod
-    def connect(name: str) -> SendPort:
-        return SendPort(_handle=mido.open_output(name))  # pyright: ignore
 
-    def panic(self):
-        self._handle.panic()
+def msg_note_off(channel: int, note: int) -> FrozenMessage:
+    _assert_pos_lt(channel, 16)
+    _assert_pos_lt(note, 128)
+    return FrozenMessage("note_off", channel=channel, note=note)
 
-    def reset(self):
-        self._handle.reset()
 
-    def note_on(self, channel: int, note: int, velocity: int):
-        _assert_pos_lt(channel, 16)
-        _assert_pos_lt(note, 128)
-        _assert_pos_lt(velocity, 128)
-        m = FrozenMessage("note_on", channel=channel, note=note, velocity=velocity)
-        self._handle.send(m)
-
-    def note_off(self, channel: int, note: int):
-        _assert_pos_lt(channel, 16)
-        _assert_pos_lt(note, 128)
-        m = FrozenMessage("note_off", channel=channel, note=note)
-        self._handle.send(m)
-
-    def pc(self, channel: int, program: int):
-        _assert_pos_lt(channel, 16)
-        _assert_pos_lt(program, 128)
-        m = FrozenMessage("program_change", channel=channel, program=program)
-        self._handle.send(m)
-
-    def close(self):
-        self._handle.close()
+def msg_pc(self, channel: int, program: int) -> FrozenMessage:
+    _assert_pos_lt(channel, 16)
+    _assert_pos_lt(program, 128)
+    return FrozenMessage("program_change", channel=channel, program=program)
 
 
 type MsgHeap = PHeapMap[float, FrozenMessage]
@@ -103,7 +83,7 @@ class MsgHeapBox:
 
     @staticmethod
     def empty() -> MsgHeapBox:
-        return MsgHeapBox(_lb=LockBox.new(mh_empty()))
+        return MsgHeapBox(_lb=LockBox(mh_empty()))
 
     def push_note(
         self, start: float, end: float, channel: int, note: int, velocity: int
@@ -137,15 +117,37 @@ class MsgHeapBox:
             return kv
 
 
-@dataclass(eq=False)
-class SendTask(Task):
-    _port: SendPort
-    _mhb: MsgHeapBox
+def connect_fn(name: str) -> mido.ports.BaseOutput:
+    return mido.open_output(name=name)  # pyright: ignore
 
-    @override
-    def run(self, logger: Logger, start_exit: Event):
-        raise NotImplementedError
 
-    @override
-    def cleanup(self, logger: Logger):
-        self._port.close()
+# @dataclass(frozen=True, eq=False)
+# class ConnectTask(Task):
+#     name: str
+#     fut: MutFuture[mido.ports.BaseOutput]
+#
+#     @override
+#     def run(self, env: TaskEnv):
+#         applied_connect_fn = partial(connect_fn, self.name)
+#         while not env.start_exit.is_set():
+#             self.fut.attempt(applied_connect_fn)
+#             self.fut.wait_empty()
+#
+#     @override
+#     def cleanup(self, env: TaskEnv, exc: Optional[Exception]):
+#         self.fut.close()
+#         tagged = self.fut.raw_unwrap()
+#         output = tagged.as_resolve()
+#         if output is not None:
+#             output.close()
+#
+#
+# @dataclass(frozen=True, eq=False)
+# class ConsumeTask(Task):
+#     fut: MutFuture[mido.ports.BaseOutput]
+#     queue: Queue[FrozenMessage]
+#
+#     @override
+#     def run(self, env: TaskEnv):
+#         while not env.start_exit.is_set():
+#             msg = queue.get_nowait()
