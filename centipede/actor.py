@@ -26,43 +26,20 @@ from centipede.spiny.common import Box
 T = TypeVar("T")
 
 
-class ActorLogger(Logger):
-    """Logger that automatically prefixes messages with actor context."""
+UniqId = NewType("UniqId", int)
 
-    def __init__(self, base_logger: Logger, name: str, uniq_id: UniqId):
-        """Initialize with base logger and actor info.
 
-        Args:
-            base_logger: The base logger to delegate to.
-            name: The actor's name.
-            uniq_id: The actor's unique ID.
-        """
-        # Create a unique logger name to avoid conflicts
-        logger_name = f"{base_logger.name}.{fmt_uniq_name(name, uniq_id)}"
-        super().__init__(logger_name, base_logger.level)
+def fmt_uniq_name(name: str, uniq_id: UniqId) -> str:
+    """Format a unique name by combining name and unique ID.
 
-        self._base_logger = base_logger
-        self._actor_name = fmt_uniq_name(name, uniq_id)
+    Args:
+        name: The base name.
+        uniq_id: The unique identifier.
 
-        # Copy handlers from base logger
-        for handler in base_logger.handlers:
-            self.addHandler(handler)
-
-    def _log(
-        self,
-        level,
-        msg,
-        args,
-        exc_info=None,
-        extra=None,
-        stack_info=False,
-        stacklevel=1,
-    ):
-        """Override _log to add actor context."""
-        formatted_msg = f"[{self._actor_name}] {msg}"
-        return super()._log(
-            level, formatted_msg, args, exc_info, extra, stack_info, stacklevel + 1
-        )
+    Returns:
+        Formatted string combining name and ID.
+    """
+    return f"{name}#{uniq_id}"
 
 
 def create_contextual_logger(base_logger: Logger, name: str, uniq_id: UniqId) -> Logger:
@@ -76,7 +53,24 @@ def create_contextual_logger(base_logger: Logger, name: str, uniq_id: UniqId) ->
     Returns:
         A Logger that automatically prefixes messages with actor context.
     """
-    return ActorLogger(base_logger, name, uniq_id)
+    # Use proper getChild() for hierarchy
+    child_name = fmt_uniq_name(name, uniq_id)
+    child_logger = base_logger.getChild(child_name)
+
+    # Override the _log method to add context
+    original_log = child_logger._log
+
+    def _log_with_context(
+        level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1
+    ):
+        formatted_msg = f"[{child_name}] {msg}"
+        return original_log(
+            level, formatted_msg, args, exc_info, extra, stack_info, stacklevel + 1
+        )
+
+    # Replace the _log method
+    child_logger._log = _log_with_context  # type: ignore
+    return child_logger
 
 
 class Mutex[T]:
@@ -213,22 +207,6 @@ class Action(Enum):
     Report = 5
     Supervise = 6
     Run = 7
-
-
-UniqId = NewType("UniqId", int)
-
-
-def fmt_uniq_name(name: str, uniq_id: UniqId) -> str:
-    """Format a unique name by combining name and unique ID.
-
-    Args:
-        name: The base name.
-        uniq_id: The unique identifier.
-
-    Returns:
-        Formatted string combining name and ID.
-    """
-    return f"{name}#{uniq_id}"
 
 
 @dataclass(frozen=True)
@@ -549,8 +527,8 @@ class ActorLoop[T]:
         queue: Queue[Packet[T]],
     ):
         self._node = node
-        self._logger = create_contextual_logger(logger, node.name, node.uniq_id)
-        self._env = ActorEnv(logger=self._logger, control=control)
+        self._logger = logger
+        self._env = ActorEnv(logger=logger, control=control)
         self._stopped = False
         self._actor = actor
         self._queue = queue
@@ -974,7 +952,7 @@ class ControlImpl(Control):
                 parent_id = self._node.uniq_id
                 child_queue: Queue[Packet[T]] = Queue([Packet.start()])
                 child_uname = fmt_uniq_name(name, child_id)
-                child_logger = self._logger.getChild(child_uname)
+                child_logger = create_contextual_logger(self._logger, name, child_id)
                 child_node = Node(
                     name=name,
                     uniq_id=child_id,
@@ -1011,7 +989,7 @@ class ControlImpl(Control):
             else:
                 parent_id = self._node.uniq_id
                 child_uname = fmt_uniq_name(name, child_id)
-                child_logger = self._logger.getChild(child_uname)
+                child_logger = create_contextual_logger(self._logger, name, child_id)
                 child_node = Node(
                     name=name,
                     uniq_id=child_id,
