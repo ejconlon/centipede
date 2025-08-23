@@ -146,7 +146,7 @@ class Queue[T]:
                 self._items.append(item)
                 self._cv.notify_all()
 
-    def drain(self, item: T, immediate: bool) -> None:
+    def drain(self, item: T, immediate: bool = False) -> None:
         """Put queue into draining state and optionally add a final item.
 
         Args:
@@ -368,7 +368,7 @@ class Sender[T](metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         """Stop the recipient.
 
         Args:
@@ -422,7 +422,7 @@ class Control(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         """Stop the actor system.
 
         Args:
@@ -993,7 +993,7 @@ class QueueSender[T](Sender[T]):
         return self._child_node.uniq_id
 
     @override
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         self._child_queue.drain(Packet.stop(), immediate=immediate)
 
     @override
@@ -1027,7 +1027,7 @@ class TaskSender(Sender[Never]):
         return self._child_node.uniq_id
 
     @override
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         self._child_halt.set()
 
     @override
@@ -1060,7 +1060,7 @@ class NullSender[T](Sender[T]):
         return self._child_id
 
     @override
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         pass
 
     @override
@@ -1099,7 +1099,7 @@ class ControlImpl(Control):
         self._queue = queue
 
     @override
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         self._queue.drain(Packet.stop(), immediate=immediate)
 
     @override
@@ -1230,7 +1230,7 @@ class System(Control):
         return self._control.spawn_task(name, task)
 
     @override
-    def stop(self, immediate: bool) -> None:
+    def stop(self, immediate: bool = False) -> None:
         """Stop the actor system.
 
         Args:
