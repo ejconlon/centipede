@@ -27,8 +27,12 @@ typecheck:
 lint:
   {{python}} -m ruff check
 
-# Unit test with pytest
+# Unit test with pytest in parallel
 unit:
+  {{python}} -m pytest tests -n auto
+
+# Unit test with pytest (single-threaded)
+unit-single-threaded:
   {{python}} -m pytest tests
 
 # Run all tests

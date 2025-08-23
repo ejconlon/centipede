@@ -21,6 +21,7 @@ dev = [
     "mypy>=1.16.1",
     "pdoc>=15.0.4",
     "pytest>=8.4.1",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.12.1",
 ]
 
@@ -45,6 +46,11 @@ ignore = []
 venvPath = "."
 venv = ".venv"
 include = ["centipede", "tests"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning"
+]
 
 [tool.uv.sources]
 python-rtmidi = { git = "https://github.com/ejconlon/python-rtmidi", rev = "20d89ceb79fc4c18af197aaf6a8223a06160bf17" }

@@ -161,7 +161,7 @@ def test_message_passing():
     assert actor.messages == messages
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_multiple_actors():
@@ -189,7 +189,7 @@ def test_multiple_actors():
         assert actor.messages == [f"message-{i}"]
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_spawn_task_basic():
@@ -209,7 +209,7 @@ def test_spawn_task_basic():
     assert not task.was_halted
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_task_halt():
@@ -232,7 +232,7 @@ def test_task_halt():
     assert not task.completed
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_producer_consumer():
@@ -256,7 +256,7 @@ def test_producer_consumer():
     assert consumer.messages == messages
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_actor_stop_immediate():
@@ -277,7 +277,7 @@ def test_actor_stop_immediate():
     time.sleep(0.05)
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
     assert actor.stopped
 
@@ -297,7 +297,7 @@ def test_actor_stop_graceful():
     time.sleep(0.05)
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
     assert actor.stopped
 
@@ -360,7 +360,7 @@ def test_concurrent_message_sending():
     assert actor.total == expected_total
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_sender_destination():
@@ -376,7 +376,7 @@ def test_sender_destination():
     assert dest_id >= 0
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_empty_system_shutdown():
@@ -408,4 +408,4 @@ def test_multiple_message_types():
     assert actor.messages == messages
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)

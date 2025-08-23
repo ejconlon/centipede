@@ -225,7 +225,7 @@ class ActionException(Exception):
     saved_exc: Optional[ActionException]
 
 
-def is_fatal_exception(exc: Exception) -> bool:
+def is_fatal_exception(exc: BaseException) -> bool:
     """Check if an exception should be treated as fatal.
 
     Fatal exceptions cause the actor system to shutdown.
@@ -1073,17 +1073,27 @@ class System(Control):
         """
         self._control.stop(immediate)
 
-    def wait(self) -> List[ActionException]:
+    def wait(self, timeout: Optional[float] = None) -> List[ActionException]:
         """Wait for the actor system to shutdown.
 
         Blocks until all actors and tasks have completed and returns
         any fatal exceptions that occurred during execution.
 
+        Args:
+            timeout: Maximum time to wait in seconds. If None, waits indefinitely.
+
         Returns:
             List of fatal exceptions that occurred during system execution.
+
+        Raises:
+            TimeoutError: If the timeout expires before system shutdown completes.
         """
         # Wait for the root thread to complete
-        self._root_thread.join()
+        self._root_thread.join(timeout=timeout)
+
+        # Check if thread is still alive (timeout occurred)
+        if self._root_thread.is_alive():
+            raise TimeoutError(f"System did not shut down within {timeout} seconds")
 
         # Return any saved exceptions
         with self._global_state as gs:

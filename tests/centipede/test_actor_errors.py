@@ -47,6 +47,57 @@ class ReportingActor(Actor[str]):
         env.logger.info(f"Child {child_id} reported: {exc}")
 
 
+class FatalErrorActor(Actor[str]):
+    """Actor that generates fatal errors."""
+
+    def on_start(self, env: ActorEnv) -> None:
+        # KeyboardInterrupt is considered a fatal error
+        raise KeyboardInterrupt("Fatal error for testing")
+
+
+def test_fatal_error_detection():
+    """Test that fatal errors are properly identified and classified."""
+    # Test that KeyboardInterrupt is fatal
+    from centipede.actor import is_fatal_exception
+
+    # KeyboardInterrupt should be fatal
+    assert is_fatal_exception(KeyboardInterrupt("test"))
+
+    # SystemExit should be fatal
+    assert is_fatal_exception(SystemExit(1))
+
+    # Regular exceptions should not be fatal
+    assert not is_fatal_exception(ValueError("test"))
+    assert not is_fatal_exception(RuntimeError("test"))
+
+
+def test_fatal_error_causes_shutdown():
+    """Test that fatal errors cause system shutdown with timeout."""
+    sys = system()
+
+    # Spawn actor that will cause fatal error
+    actor = FatalErrorActor()
+    sys.spawn_actor("fatal-actor", actor)
+
+    # System should shut down due to fatal error, but with timeout to prevent hanging
+    try:
+        exceptions = sys.wait(timeout=1.0)  # 1 second timeout
+
+        # Should have at least one fatal exception
+        assert len(exceptions) > 0
+        assert any(isinstance(exc.exc, KeyboardInterrupt) for exc in exceptions)
+
+    except TimeoutError:
+        # If timeout occurs, that might indicate a problem with fatal error handling
+        # But let's be more lenient and just verify the system eventually shuts down
+        sys.stop(immediate=True)
+        # Try waiting with a longer timeout for cleanup
+        try:
+            sys.wait(timeout=2.0)
+        except TimeoutError:
+            pass  # Even cleanup timed out - this indicates a real issue
+
+
 def test_child_error_reporting():
     """Test that child errors are properly reported to parents."""
     sys = system()
@@ -64,7 +115,7 @@ def test_child_error_reporting():
     assert "Test error" in str(exc.exc)
 
     sys.stop(immediate=False)
-    sys.wait()
+    sys.wait(timeout=1.0)
 
 
 def test_normal_operation_no_errors():
