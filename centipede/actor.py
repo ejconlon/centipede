@@ -89,6 +89,7 @@ class Queue[T]:
         with self._cv:
             if not self._draining:
                 self._items.append(item)
+                self._cv.notify_all()
 
     def drain(self, item: T, immediate: bool) -> None:
         """Put queue into draining state and optionally add a final item.
@@ -106,20 +107,14 @@ class Queue[T]:
             elif not self._draining:
                 self._draining = True
                 self._items.append(item)
+            self._cv.notify_all()
 
     def seal(self) -> None:
         """Seal the queue by setting draining state and clearing all items."""
         with self._cv:
             self._draining = True
             self._items.clear()
-
-    def _resume_get(self) -> bool:
-        """Check if get operation should resume.
-
-        Returns:
-            True if queue is draining or has items.
-        """
-        return self._draining or bool(self._items)
+            self._cv.notify_all()
 
     def get(self) -> Optional[T]:
         """Get the next item from the queue, blocking if empty.
@@ -128,8 +123,8 @@ class Queue[T]:
             The next item from the queue, or None if queue is sealed.
         """
         with self._cv:
-            if not self._items:
-                self._cv.wait_for(self._resume_get)
+            while not self._items and not self._draining:
+                self._cv.wait()
             if self._items:
                 return self._items.popleft()
             else:
@@ -514,7 +509,7 @@ class ActorLoop[T]:
             Box containing any exception that occurred.
         """
         saved_exc: Box[Optional[ActionException]] = Box(None)
-        while saved_exc.value is None:
+        while saved_exc.value is None and not self._stopped:
             self._step(saved_exc=saved_exc)
         if not self._stopped:
             self._stop(saved_exc=saved_exc)
@@ -618,31 +613,15 @@ class ActorLoop[T]:
         )
 
 
+@dataclass(frozen=True, eq=False)
 class Context(metaclass=ABCMeta):
     """Abstract base class for runtime contexts.
 
     Contexts represent different types of execution units in the actor system.
     """
 
-    @property
-    @abstractmethod
-    def node(self) -> Node:
-        """Get the node information for this context.
-
-        Returns:
-            The node containing name, ID, and parent information.
-        """
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
-    def thread(self) -> Thread:
-        """Get the thread for this context.
-
-        Returns:
-            The thread executing this context.
-        """
-        raise NotImplementedError
+    node: Node
+    thread: Thread
 
 
 @dataclass(frozen=True, eq=False)
@@ -754,7 +733,7 @@ class ActorLifecycle[T]:
                 if child_id in gs.contexts:
                     child_ctx = gs.contexts[child_id]
                     if isinstance(child_ctx, ActorContext):
-                        child_ctx.queue.drain(Packet.stop(), immediate=fatal)
+                        child_ctx.queue.drain(Packet.stop(), immediate=True)
                         child_threads.append(child_ctx.thread)
                     elif isinstance(child_ctx, TaskContext):
                         child_ctx.halt.set()
@@ -1007,6 +986,88 @@ class ControlImpl(Control):
                 return TaskSender(child_node=child_node, child_halt=child_halt)
 
 
+class System(Control):
+    """Enhanced Control interface for managing an actor system.
+
+    Provides additional functionality beyond the basic Control interface,
+    including waiting for shutdown and monitoring system status.
+    """
+
+    def __init__(
+        self, global_state: GlobalState, root_thread: Thread, control: Control
+    ):
+        """Initialize the system.
+
+        Args:
+            global_state: The global system state.
+            root_thread: The root actor thread.
+            control: The underlying control implementation.
+        """
+        self._global_state = global_state
+        self._root_thread = root_thread
+        self._control = control
+
+    @override
+    def spawn_actor(self, name: str, actor: Actor[T]) -> Sender[T]:
+        """Spawn a new actor.
+
+        Args:
+            name: The name for the new actor.
+            actor: The actor instance to spawn.
+
+        Returns:
+            A sender for communicating with the spawned actor.
+        """
+        return self._control.spawn_actor(name, actor)
+
+    @override
+    def spawn_task(self, name: str, task: Task) -> Sender[Never]:
+        """Spawn a new task.
+
+        Args:
+            name: The name for the new task.
+            task: The task instance to spawn.
+
+        Returns:
+            A sender for controlling the spawned task.
+        """
+        return self._control.spawn_task(name, task)
+
+    @override
+    def stop(self, immediate: bool) -> None:
+        """Stop the actor system.
+
+        Args:
+            immediate: If True, stop immediately; if False, allow graceful shutdown.
+        """
+        self._control.stop(immediate)
+
+    def wait(self) -> List[ActionException]:
+        """Wait for the actor system to shutdown.
+
+        Blocks until all actors and tasks have completed and returns
+        any fatal exceptions that occurred during execution.
+
+        Returns:
+            List of fatal exceptions that occurred during system execution.
+        """
+        # Wait for the root thread to complete
+        self._root_thread.join()
+
+        # Return any saved exceptions
+        with self._global_state as gs:
+            return gs.saved_excs.copy()
+
+    def thread_count(self) -> int:
+        """Get the number of currently running threads.
+
+        Returns:
+            The number of active actor and task threads.
+        """
+        with self._global_state as gs:
+            return len(gs.contexts)
+
+
 class RootActor(Actor[Never]):
     """Root actor that manages the actor system lifecycle.
 
@@ -1032,14 +1093,14 @@ class RootActor(Actor[Never]):
             gs.draining = True
 
 
-def system(logger: Optional[Logger] = None) -> Control:
+def system(logger: Optional[Logger] = None) -> System:
     """Create and start a new actor system.
 
     Args:
         logger: Optional logger to use. If None, creates a default logger.
 
     Returns:
-        A Control interface for the actor system.
+        A System interface for the actor system.
     """
     global_state = Mutex(GlobalMutState.empty(logger=logger))
     root_name = "root"
@@ -1067,11 +1128,16 @@ def system(logger: Optional[Logger] = None) -> Control:
         )
         gs.contexts[root_id] = context
         thread.start()
-        return ControlImpl(
+        control = ControlImpl(
             global_state=global_state,
             node=root_node,
             logger=root_logger,
             queue=root_queue,
+        )
+        return System(
+            global_state=global_state,
+            root_thread=thread,
+            control=control,
         )
 
 
