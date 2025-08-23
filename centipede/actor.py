@@ -773,18 +773,15 @@ class GlobalMutState:
     logger: Logger
 
     @staticmethod
-    def empty(logger: Optional[Logger] = None) -> GlobalMutState:
+    def empty(logger: Logger) -> GlobalMutState:
         """Create an empty global state.
 
         Args:
-            logger: Optional logger to use.
+            logger: Logger to use.
 
         Returns:
             New empty global state.
         """
-        if logger is None:
-            logging.basicConfig(level=logging.CRITICAL)
-            logger = logging.getLogger()
         return GlobalMutState(
             id_src=UniqId(0),
             contexts={},
