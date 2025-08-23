@@ -576,9 +576,23 @@ class ActorLoop[T]:
         Args:
             saved_exc: Box to store any cleanup exceptions.
         """
+        self._logger.debug(
+            "Actor %s#%d cleaning up", self._node.name, self._node.uniq_id
+        )
         try:
             self._actor.on_cleanup(logger=self._logger)
+            self._logger.debug(
+                "Actor %s#%d cleaned up successfully",
+                self._node.name,
+                self._node.uniq_id,
+            )
         except Exception as exc:
+            self._logger.debug(
+                "Actor %s#%d failed to clean up: %s",
+                self._node.name,
+                self._node.uniq_id,
+                exc,
+            )
             saved_exc.value = self._except(
                 action=Action.Cleanup, exc=exc, saved_exc=saved_exc.value
             )
@@ -601,9 +615,19 @@ class ActorLoop[T]:
                     self._stop(saved_exc=saved_exc)
 
     def _start(self, saved_exc: Box[Optional[ActionException]]) -> None:
+        self._logger.debug("Actor %s#%d starting", self._node.name, self._node.uniq_id)
         try:
             self._actor.on_start(env=self._env)
+            self._logger.debug(
+                "Actor %s#%d started successfully", self._node.name, self._node.uniq_id
+            )
         except Exception as exc:
+            self._logger.debug(
+                "Actor %s#%d failed to start: %s",
+                self._node.name,
+                self._node.uniq_id,
+                exc,
+            )
             saved_exc.value = self._except(
                 action=Action.Start, exc=exc, saved_exc=saved_exc.value
             )
@@ -611,9 +635,26 @@ class ActorLoop[T]:
         self._handle(saved_exc=saved_exc)
 
     def _message(self, saved_exc: Box[Optional[ActionException]], value: T) -> None:
+        self._logger.debug(
+            "Actor %s#%d processing message: %s",
+            self._node.name,
+            self._node.uniq_id,
+            value,
+        )
         try:
             self._actor.on_message(env=self._env, value=value)
+            self._logger.debug(
+                "Actor %s#%d processed message successfully",
+                self._node.name,
+                self._node.uniq_id,
+            )
         except Exception as exc:
+            self._logger.debug(
+                "Actor %s#%d failed to process message: %s",
+                self._node.name,
+                self._node.uniq_id,
+                exc,
+            )
             saved_exc.value = self._except(
                 action=Action.Message, exc=exc, saved_exc=saved_exc.value
             )
@@ -626,9 +667,27 @@ class ActorLoop[T]:
         child_id: UniqId,
         child_exc: Optional[ActionException],
     ) -> None:
+        self._logger.debug(
+            "Actor %s#%d handling report from child %d: %s",
+            self._node.name,
+            self._node.uniq_id,
+            child_id,
+            child_exc,
+        )
         try:
             self._actor.on_report(env=self._env, child_id=child_id, exc=child_exc)
+            self._logger.debug(
+                "Actor %s#%d handled child report successfully",
+                self._node.name,
+                self._node.uniq_id,
+            )
         except Exception as exc:
+            self._logger.debug(
+                "Actor %s#%d failed to handle child report: %s",
+                self._node.name,
+                self._node.uniq_id,
+                exc,
+            )
             saved_exc.value = self._except(
                 action=Action.Report, exc=exc, saved_exc=saved_exc.value
             )
@@ -637,17 +696,44 @@ class ActorLoop[T]:
 
     def _handle(self, saved_exc: Box[Optional[ActionException]]) -> None:
         if saved_exc.value is not None and not is_fatal_exception(saved_exc.value):
+            self._logger.debug(
+                "Actor %s#%d handling exception: %s",
+                self._node.name,
+                self._node.uniq_id,
+                saved_exc.value.exc,
+            )
             try:
                 self._actor.on_handle(env=self._env, exc=saved_exc.value.exc)
+                self._logger.debug(
+                    "Actor %s#%d handled exception successfully",
+                    self._node.name,
+                    self._node.uniq_id,
+                )
             except Exception as exc:
+                self._logger.debug(
+                    "Actor %s#%d failed to handle exception: %s",
+                    self._node.name,
+                    self._node.uniq_id,
+                    exc,
+                )
                 saved_exc.value = self._except(
                     action=Action.Handle, exc=exc, saved_exc=saved_exc.value
                 )
 
     def _stop(self, saved_exc: Box[Optional[ActionException]]) -> None:
+        self._logger.debug("Actor %s#%d stopping", self._node.name, self._node.uniq_id)
         try:
             self._actor.on_stop(logger=self._logger)
+            self._logger.debug(
+                "Actor %s#%d stopped successfully", self._node.name, self._node.uniq_id
+            )
         except Exception as exc:
+            self._logger.debug(
+                "Actor %s#%d failed to stop: %s",
+                self._node.name,
+                self._node.uniq_id,
+                exc,
+            )
             saved_exc.value = self._except(
                 action=Action.Stop, exc=exc, saved_exc=saved_exc.value
             )
@@ -1160,15 +1246,27 @@ class System(Control):
             TimeoutError: If the timeout expires before system shutdown completes.
         """
         # Wait for the root thread to complete
+        with self._global_state as gs:
+            gs.logger.debug("Waiting for system shutdown (timeout=%s)", timeout)
+
         self._root_thread.join(timeout=timeout)
 
         # Check if thread is still alive (timeout occurred)
         if self._root_thread.is_alive():
+            with self._global_state as gs:
+                gs.logger.debug("System shutdown timed out after %s seconds", timeout)
             raise TimeoutError(f"System did not shut down within {timeout} seconds")
 
         # Return any saved exceptions
         with self._global_state as gs:
-            return gs.saved_excs.copy()
+            saved_excs = gs.saved_excs.copy()
+            if saved_excs:
+                gs.logger.debug(
+                    "System shutdown with %d saved exceptions", len(saved_excs)
+                )
+            else:
+                gs.logger.debug("System shutdown cleanly with no exceptions")
+            return saved_excs
 
     def thread_count(self) -> int:
         """Get the number of currently running threads.
@@ -1218,6 +1316,7 @@ def system(logger: Optional[Logger] = None) -> System:
     root_name = "root"
     root_actor = RootActor(global_state)
     with global_state as gs:
+        gs.logger.debug("Creating actor system")
         root_id = gs.id_src
         gs.id_src = UniqId(gs.id_src + 1)
         root_queue: Queue[Packet[Never]] = Queue([Packet.start()])
@@ -1239,6 +1338,7 @@ def system(logger: Optional[Logger] = None) -> System:
             child_ids=set(),
         )
         gs.contexts[root_id] = context
+        gs.logger.debug("Starting root actor thread: %s", root_uname)
         thread.start()
         control = ControlImpl(
             global_state=global_state,
@@ -1246,6 +1346,7 @@ def system(logger: Optional[Logger] = None) -> System:
             logger=root_logger,
             queue=root_queue,
         )
+        gs.logger.debug("Actor system created successfully")
         return System(
             global_state=global_state,
             root_thread=thread,
