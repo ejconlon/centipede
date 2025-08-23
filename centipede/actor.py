@@ -374,30 +374,6 @@ class GlobalMutState:
 type GlobalState = Mutex[GlobalMutState]
 
 
-class TaskLifecycle:
-    def __init__(
-        self,
-        global_state: GlobalState,
-        uniq_id: UniqId,
-        logger: Logger,
-        halt: Event,
-        task: Task,
-    ):
-        self._global_state = global_state
-        self._uniq_id = uniq_id
-        self._logger = logger
-        self._halt = halt
-        self._task = task
-
-    def run(self):
-        try:
-            self._task.run(logger=self._logger, halt=self._halt)
-        finally:
-            with self._global_state as gs:
-                # Remove from tasks
-                pass
-
-
 class ActorLifecycle[T]:
     def __init__(
         self,
@@ -474,6 +450,25 @@ class ActorLifecycle[T]:
                 gs.saved_excs.append(saved_exc.value)
             # Cleanup context
             del gs.actors[uniq_id]
+
+
+class TaskLifecycle:
+    def __init__(
+        self,
+        global_state: GlobalState,
+        node: Node,
+        logger: Logger,
+        task: Task,
+        halt: Event,
+    ):
+        self._global_state = global_state
+        self._node = node
+        self._logger = logger
+        self._task = task
+        self._halt = halt
+
+    def run(self) -> None:
+        raise Exception("TODO")
 
 
 class QueueSender[T](Sender[T]):
@@ -556,8 +551,8 @@ class ControlImpl(Control):
             else:
                 parent_id = self._node.uniq_id
                 child_queue: Queue[Packet[T]] = Queue([StartPacket()])
-                uniq_name = fmt_uniq_name(name, child_id)
-                logger = self._logger.getChild(uniq_name)
+                child_uname = fmt_uniq_name(name, child_id)
+                child_logger = self._logger.getChild(child_uname)
                 child_node = Node(
                     name=name,
                     uniq_id=child_id,
@@ -566,11 +561,11 @@ class ControlImpl(Control):
                 lifecycle = ActorLifecycle(
                     global_state=self._global_state,
                     node=child_node,
-                    logger=logger,
+                    logger=child_logger,
                     actor=actor,
                     queue=child_queue,
                 )
-                thread = Thread(name=uniq_name, target=lifecycle.run)
+                thread = Thread(name=child_uname, target=lifecycle.run)
                 context = ActorContext(
                     node=child_node,
                     thread=thread,
@@ -590,18 +585,32 @@ class ControlImpl(Control):
             if gs.draining:
                 return NullSender(child_id=child_id)
             else:
-                raise Exception("TODO")
-                # parent_id = self._state.actor_id
-                # uname = qual_name(name, child_id)
-                # logger = self._state.logger.getChild(uname)
-                # thread = Thread(name=uname, target=task.run, args=(logger,))
-                # context = TaskContext(
-                #     thread=thread,
-                # )
-                # gs.contexts[child_id] = context
-                # gs.contexts[parent_id].child_ids.add(child_id)
-                # thread.start()
-                # return TaskSender(child_state)
+                parent_id = self._node.uniq_id
+                child_uname = fmt_uniq_name(name, child_id)
+                child_logger = self._logger.getChild(child_uname)
+                child_node = Node(
+                    name=name,
+                    uniq_id=child_id,
+                    parent_id=parent_id,
+                )
+                child_halt = Event()
+                lifecycle = TaskLifecycle(
+                    global_state=self._global_state,
+                    node=child_node,
+                    logger=child_logger,
+                    task=task,
+                    halt=child_halt,
+                )
+                thread = Thread(name=child_uname, target=lifecycle.run)
+                context = TaskContext(
+                    node=child_node,
+                    thread=thread,
+                    halt=child_halt,
+                )
+                gs.tasks[child_id] = context
+                gs.actors[parent_id].child_ids.add(child_id)
+                thread.start()
+                return TaskSender(child_node=child_node, child_halt=child_halt)
 
 
 class RootActor(Actor[None]):
