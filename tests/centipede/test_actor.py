@@ -10,7 +10,7 @@ from centipede.actor import (
     ActorEnv,
     Sender,
     Task,
-    system,
+    new_system,
 )
 
 
@@ -91,7 +91,7 @@ class ProducerTask(Task):
 def test_system_startup_shutdown():
     """Test basic system startup and shutdown."""
     # Create system
-    sys = system()
+    sys = new_system()
 
     # Verify system is running
     assert sys.thread_count() == 1  # Just the root actor
@@ -106,7 +106,7 @@ def test_system_startup_shutdown():
 
 def test_system_immediate_shutdown():
     """Test immediate system shutdown."""
-    sys = system()
+    sys = new_system()
 
     # Stop system immediately
     sys.stop(immediate=True)
@@ -118,7 +118,7 @@ def test_system_immediate_shutdown():
 
 def test_spawn_actor_basic():
     """Test basic actor spawning and lifecycle."""
-    sys = system()
+    sys = new_system()
 
     # Create test actor
     actor = SimpleActor()
@@ -144,7 +144,7 @@ def test_spawn_actor_basic():
 
 def test_message_passing():
     """Test sending messages to actors."""
-    sys = system()
+    sys = new_system()
 
     actor = SimpleActor()
     sender = sys.spawn_actor("test-actor", actor)
@@ -166,7 +166,7 @@ def test_message_passing():
 
 def test_multiple_actors():
     """Test spawning multiple actors."""
-    sys = system()
+    sys = new_system()
 
     # Spawn multiple actors
     actors = [SimpleActor() for _ in range(3)]
@@ -194,7 +194,7 @@ def test_multiple_actors():
 
 def test_spawn_task_basic():
     """Test basic task spawning."""
-    sys = system()
+    sys = new_system()
 
     # Create and spawn task
     task = SimpleTask(duration=0.1)
@@ -214,7 +214,7 @@ def test_spawn_task_basic():
 
 def test_task_halt():
     """Test halting a task before completion."""
-    sys = system()
+    sys = new_system()
 
     # Create long-running task
     task = SimpleTask(duration=1.0)  # 1 second
@@ -237,7 +237,7 @@ def test_task_halt():
 
 def test_producer_consumer():
     """Test producer task sending messages to consumer actor."""
-    sys = system()
+    sys = new_system()
 
     # Create consumer actor
     consumer = SimpleActor()
@@ -261,7 +261,7 @@ def test_producer_consumer():
 
 def test_actor_stop_immediate():
     """Test stopping an actor immediately."""
-    sys = system()
+    sys = new_system()
 
     actor = SimpleActor()
     sender = sys.spawn_actor("test-actor", actor)
@@ -284,7 +284,7 @@ def test_actor_stop_immediate():
 
 def test_actor_stop_graceful():
     """Test stopping an actor gracefully."""
-    sys = system()
+    sys = new_system()
 
     actor = SimpleActor()
     sender = sys.spawn_actor("test-actor", actor)
@@ -309,7 +309,7 @@ def test_system_with_custom_logger():
     logger.setLevel(logging.DEBUG)
 
     # Create system with custom logger
-    sys = system(logger=logger)
+    sys = new_system(logger=logger)
 
     actor = SimpleActor()
     sys.spawn_actor("test-actor", actor)
@@ -324,7 +324,7 @@ def test_system_with_custom_logger():
 
 def test_concurrent_message_sending():
     """Test concurrent message sending to the same actor."""
-    sys = system()
+    sys = new_system()
 
     actor = CountingActor()
     sender = sys.spawn_actor("counting-actor", actor)
@@ -365,7 +365,7 @@ def test_concurrent_message_sending():
 
 def test_sender_destination():
     """Test getting sender destination ID."""
-    sys = system()
+    sys = new_system()
 
     actor = SimpleActor()
     sender = sys.spawn_actor("test-actor", actor)
@@ -381,7 +381,7 @@ def test_sender_destination():
 
 def test_empty_system_shutdown():
     """Test shutting down system with no spawned actors or tasks."""
-    sys = system()
+    sys = new_system()
 
     # Immediately stop without spawning anything
     sys.stop(immediate=False)
@@ -393,7 +393,7 @@ def test_empty_system_shutdown():
 
 def test_multiple_message_types():
     """Test actor handling different message content."""
-    sys = system()
+    sys = new_system()
 
     actor = SimpleActor()
     sender = sys.spawn_actor("test-actor", actor)

@@ -9,7 +9,7 @@ from centipede.actor import (
     ActorEnv,
     Task,
     UniqId,
-    system,
+    new_system,
 )
 
 
@@ -74,7 +74,7 @@ def test_fatal_error_detection():
 
 def test_fatal_error_causes_shutdown():
     """Test that fatal errors cause system shutdown with timeout."""
-    sys = system()
+    sys = new_system()
 
     # Spawn actor that will cause fatal error
     actor = FatalErrorActor()
@@ -101,7 +101,7 @@ def test_fatal_error_causes_shutdown():
 
 def test_child_error_reporting():
     """Test that child errors are properly reported to parents."""
-    sys = system()
+    sys = new_system()
 
     parent = ReportingActor()
     sys.spawn_actor("parent", parent)
@@ -121,7 +121,7 @@ def test_child_error_reporting():
 
 def test_normal_operation_no_errors():
     """Test that normal operation produces no fatal errors."""
-    sys = system()
+    sys = new_system()
 
     actor = ErrorActor()
     sender = sys.spawn_actor("normal-actor", actor)
@@ -145,7 +145,7 @@ def test_normal_operation_no_errors():
 
 def test_system_resilience():
     """Test that the system can handle multiple actors with mixed success."""
-    sys = system()
+    sys = new_system()
 
     # Spawn several normal actors
     actors = []
@@ -208,7 +208,7 @@ def test_sender_wait_timeout():
         def run(self, logger, halt) -> None:
             halt.wait(timeout=self.duration)
 
-    sys = system()
+    sys = new_system()
 
     # Test actor sender wait
     actor = ErrorActor()

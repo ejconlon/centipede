@@ -38,6 +38,9 @@ unit-single-threaded:
 # Run all tests
 test: typecheck unit
 
+# Run all checks
+check: format lint test
+
 # Clean most generated files (+ venv)
 clean:
   rm -rf .venv .mypy_cache .pytest_cache *.egg-info

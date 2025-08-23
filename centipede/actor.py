@@ -26,6 +26,14 @@ from centipede.spiny.common import Box
 T = TypeVar("T")
 
 
+def create_basic_logger(name: str, level: Optional[int] = None) -> Logger:
+    logger = logging.getLogger(name)
+    if level is None:
+        level = logging.INFO
+    logging.basicConfig(level=level)
+    return logger
+
+
 UniqId = NewType("UniqId", int)
 
 
@@ -1303,7 +1311,7 @@ class RootActor(Actor[Never]):
             gs.draining = True
 
 
-def system(logger: Optional[Logger] = None) -> System:
+def new_system(logger: Optional[Logger] = None) -> System:
     """Create and start a new actor system.
 
     Args:
