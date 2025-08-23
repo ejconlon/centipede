@@ -1,6 +1,5 @@
 """Tests for the actor system basic functionality."""
 
-import logging
 import threading
 import time
 from typing import List
@@ -300,26 +299,6 @@ def test_actor_stop_graceful():
     sys.wait(timeout=1.0)
 
     assert actor.stopped
-
-
-def test_system_with_custom_logger():
-    """Test system creation with custom logger."""
-    # Create custom logger
-    logger = logging.getLogger("test-actor-system")
-    logger.setLevel(logging.DEBUG)
-
-    # Create system with custom logger
-    sys = new_system(logger=logger)
-
-    actor = SimpleActor()
-    sys.spawn_actor("test-actor", actor)
-
-    time.sleep(0.05)
-
-    sys.stop(immediate=False)
-    exceptions = sys.wait()
-
-    assert len(exceptions) == 0
 
 
 def test_concurrent_message_sending():

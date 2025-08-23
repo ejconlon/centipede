@@ -26,14 +26,6 @@ from centipede.spiny.common import Box
 T = TypeVar("T")
 
 
-def create_basic_logger(name: str, level: Optional[int] = None) -> Logger:
-    logger = logging.getLogger(name)
-    if level is None:
-        level = logging.INFO
-    logging.basicConfig(level=level)
-    return logger
-
-
 UniqId = NewType("UniqId", int)
 
 
@@ -48,37 +40,6 @@ def fmt_uniq_name(name: str, uniq_id: UniqId) -> str:
         Formatted string combining name and ID.
     """
     return f"{name}#{uniq_id}"
-
-
-def create_contextual_logger(base_logger: Logger, name: str, uniq_id: UniqId) -> Logger:
-    """Create a contextual logger that prefixes messages with actor name.
-
-    Args:
-        base_logger: The base logger to derive from.
-        name: The actor's name.
-        uniq_id: The actor's unique ID.
-
-    Returns:
-        A Logger that automatically prefixes messages with actor context.
-    """
-    # Use proper getChild() for hierarchy
-    child_name = fmt_uniq_name(name, uniq_id)
-    child_logger = base_logger.getChild(child_name)
-
-    # Override the _log method to add context
-    original_log = child_logger._log
-
-    def _log_with_context(
-        level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1
-    ):
-        formatted_msg = f"[{child_name}] {msg}"
-        return original_log(
-            level, formatted_msg, args, exc_info, extra, stack_info, stacklevel + 1
-        )
-
-    # Replace the _log method
-    child_logger._log = _log_with_context  # type: ignore
-    return child_logger
 
 
 class Mutex[T]:
@@ -1113,7 +1074,7 @@ class ControlImpl(Control):
                 parent_id = self._node.uniq_id
                 child_queue: Queue[Packet[T]] = Queue([Packet.start()])
                 child_uname = fmt_uniq_name(name, child_id)
-                child_logger = create_contextual_logger(self._logger, name, child_id)
+                child_logger = gs.logger.getChild(fmt_uniq_name(name, child_id))
                 child_node = Node(
                     name=name,
                     uniq_id=child_id,
@@ -1152,7 +1113,7 @@ class ControlImpl(Control):
             else:
                 parent_id = self._node.uniq_id
                 child_uname = fmt_uniq_name(name, child_id)
-                child_logger = create_contextual_logger(self._logger, name, child_id)
+                child_logger = gs.logger.getChild(fmt_uniq_name(name, child_id))
                 child_node = Node(
                     name=name,
                     uniq_id=child_id,
@@ -1311,15 +1272,13 @@ class RootActor(Actor[Never]):
             gs.draining = True
 
 
-def new_system(logger: Optional[Logger] = None) -> System:
+def new_system(name: str = "system") -> System:
     """Create and start a new actor system.
-
-    Args:
-        logger: Optional logger to use. If None, creates a default logger.
 
     Returns:
         A System interface for the actor system.
     """
+    logger = logging.getLogger(name)
     global_state = Mutex(GlobalMutState.empty(logger=logger))
     root_name = "root"
     root_actor = RootActor(global_state)
@@ -1329,7 +1288,7 @@ def new_system(logger: Optional[Logger] = None) -> System:
         gs.id_src = UniqId(gs.id_src + 1)
         root_queue: Queue[Packet[Never]] = Queue([Packet.start()])
         root_uname = fmt_uniq_name(root_name, root_id)
-        root_logger = gs.logger.getChild(root_uname)
+        root_logger = gs.logger.getChild(fmt_uniq_name(root_name, root_id))
         root_node = Node(name=root_name, uniq_id=root_id, parent_id=None)
         lifecycle = ActorLifecycle(
             global_state=global_state,

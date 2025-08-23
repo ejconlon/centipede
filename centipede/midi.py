@@ -7,7 +7,15 @@ from typing import Any, Optional, Tuple, cast, override
 import mido
 from mido.frozen import FrozenMessage, freeze_message
 
-from centipede.actor import Actor, ActorEnv, Callback, Mutex, Sender, System, new_system
+from centipede.actor import (
+    Actor,
+    ActorEnv,
+    Callback,
+    Mutex,
+    Sender,
+    System,
+    new_system,
+)
 from centipede.spiny.common import Box
 from centipede.spiny.heapmap import PHeapMap
 
@@ -141,8 +149,8 @@ class RecvCallback(Callback[FrozenMessage]):
         self._port.callback = None  # pyright: ignore
 
 
-def echo_system(logger: Optional[Logger] = None) -> System:
-    system = new_system(logger=logger)
+def echo_system() -> System:
+    system = new_system("echo")
     out_port = mido.open_output(name="virt_out", virtual=True)  # pyright: ignore
     in_port = mido.open_input(name="virt_in", virtual=True)  # pyright: ignore
     send_actor = SendActor(out_port)
