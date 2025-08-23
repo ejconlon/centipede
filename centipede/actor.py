@@ -27,20 +27,53 @@ T = TypeVar("T")
 
 
 class Mutex[T]:
+    """A thread-safe mutex wrapper that provides exclusive access to a value.
+
+    Uses context manager protocol to automatically handle lock acquisition and release.
+    """
+
     def __init__(self, value: T):
+        """Initialize mutex with the given value.
+
+        Args:
+            value: The value to protect with mutual exclusion.
+        """
         self._lock = Lock()
         self._value = value
 
     def __enter__(self) -> T:
+        """Acquire lock and return the protected value.
+
+        Returns:
+            The protected value.
+        """
         self._lock.acquire()
         return self._value
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Release the lock.
+
+        Args:
+            exc_type: Exception type if an exception was raised.
+            exc_val: Exception value if an exception was raised.
+            exc_tb: Exception traceback if an exception was raised.
+        """
         self._lock.release()
 
 
 class Queue[T]:
+    """A thread-safe queue with draining and sealing capabilities.
+
+    Supports blocking get operations and can be put into a draining state
+    where no new items can be added and existing items can be cleared.
+    """
+
     def __init__(self, items: Optional[Iterable[T]] = None):
+        """Initialize queue with optional initial items.
+
+        Args:
+            items: Optional iterable of initial items to add to the queue.
+        """
         self._cv = Condition()
         self._items: deque[T] = deque()
         if items:
@@ -48,11 +81,23 @@ class Queue[T]:
         self._draining = False
 
     def put(self, item: T) -> None:
+        """Add item to the queue if not draining.
+
+        Args:
+            item: The item to add to the queue.
+        """
         with self._cv:
             if not self._draining:
                 self._items.append(item)
 
     def drain(self, item: T, immediate: bool) -> None:
+        """Put queue into draining state and optionally add a final item.
+
+        Args:
+            item: Final item to add to the queue.
+            immediate: If True, clear existing items and put this item first.
+                      If False, append this item to existing items.
+        """
         with self._cv:
             if immediate:
                 self._draining = True
@@ -63,14 +108,25 @@ class Queue[T]:
                 self._items.append(item)
 
     def seal(self) -> None:
+        """Seal the queue by setting draining state and clearing all items."""
         with self._cv:
             self._draining = True
             self._items.clear()
 
     def _resume_get(self) -> bool:
+        """Check if get operation should resume.
+
+        Returns:
+            True if queue is draining or has items.
+        """
         return self._draining or bool(self._items)
 
     def get(self) -> Optional[T]:
+        """Get the next item from the queue, blocking if empty.
+
+        Returns:
+            The next item from the queue, or None if queue is sealed.
+        """
         with self._cv:
             if not self._items:
                 self._cv.wait_for(self._resume_get)
@@ -80,15 +136,27 @@ class Queue[T]:
                 return None
 
     def _resume_wait(self) -> bool:
+        """Check if wait operation should resume.
+
+        Returns:
+            True if queue is draining and empty.
+        """
         return self._draining and not self._items
 
     def wait(self) -> None:
+        """Wait until the queue is drained and empty."""
         with self._cv:
             if not self._resume_wait():
                 self._cv.wait_for(self._resume_wait)
 
 
 class Action(Enum):
+    """Enumeration of actor lifecycle actions.
+
+    Defines the different phases and operations that can occur
+    during an actor's lifecycle.
+    """
+
     Start = 0
     Message = 1
     Handle = 2
@@ -103,11 +171,26 @@ UniqId = NewType("UniqId", int)
 
 
 def fmt_uniq_name(name: str, uniq_id: UniqId) -> str:
+    """Format a unique name by combining name and unique ID.
+
+    Args:
+        name: The base name.
+        uniq_id: The unique identifier.
+
+    Returns:
+        Formatted string combining name and ID.
+    """
     return f"{name}_{uniq_id}"
 
 
 @dataclass(frozen=True)
 class ActionException(Exception):
+    """Exception that occurs during actor lifecycle actions.
+
+    Wraps exceptions that occur during actor operations with context
+    about which actor and action caused the exception.
+    """
+
     name: str
     uniq_id: UniqId
     fatal: bool
@@ -117,6 +200,16 @@ class ActionException(Exception):
 
 
 def is_fatal_exception(exc: Exception) -> bool:
+    """Check if an exception should be treated as fatal.
+
+    Fatal exceptions cause the actor system to shutdown.
+
+    Args:
+        exc: The exception to check.
+
+    Returns:
+        True if the exception is fatal.
+    """
     if isinstance(exc, SystemExit):
         return True
     elif isinstance(exc, KeyboardInterrupt):
@@ -128,23 +221,51 @@ def is_fatal_exception(exc: Exception) -> bool:
 
 
 class Task(metaclass=ABCMeta):
+    """Abstract base class for tasks that can be run by actors.
+
+    Tasks are executed in their own threads and can be halted via an Event.
+    """
+
     @abstractmethod
     def run(self, logger: Logger, halt: Event) -> None:
+        """Execute the task.
+
+        Args:
+            logger: Logger for the task to use.
+            halt: Event that will be set when the task should stop.
+        """
         raise NotImplementedError
 
 
 class Packet[T](metaclass=ABCMeta):
+    """Abstract base class for messages sent between actors.
+
+    Packets represent different types of communication in the actor system.
+    """
+
     @staticmethod
     def start() -> Packet[T]:
+        """Get a start packet instance.
+
+        Returns:
+            A start packet.
+        """
         return _START_PACKET
 
     @staticmethod
     def stop() -> Packet[T]:
+        """Get a stop packet instance.
+
+        Returns:
+            A stop packet.
+        """
         return _STOP_PACKET
 
 
 @dataclass(frozen=True)
 class StartPacket(Packet[Any]):
+    """Packet sent to start an actor."""
+
     pass
 
 
@@ -153,17 +274,23 @@ _START_PACKET: Packet[Any] = StartPacket()
 
 @dataclass(frozen=True)
 class MessagePacket[T](Packet[T]):
+    """Packet containing a message value to be processed by an actor."""
+
     value: T
 
 
 @dataclass(frozen=True)
 class ReportPacket[T](Packet[T]):
+    """Packet sent to report child actor completion status."""
+
     child_id: UniqId
     child_exc: Optional[ActionException]
 
 
 @dataclass(frozen=True)
 class StopPacket(Packet[Any]):
+    """Packet sent to stop an actor."""
+
     pass
 
 
@@ -171,45 +298,110 @@ _STOP_PACKET: Packet[Any] = StopPacket()
 
 
 class Sender[T](metaclass=ABCMeta):
+    """Abstract interface for sending messages to actors or tasks.
+
+    Provides methods to send messages and stop the recipient.
+    """
+
     @abstractmethod
     def dest(self) -> UniqId:
+        """Get the unique ID of the destination.
+
+        Returns:
+            The unique identifier of the message recipient.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def send(self, msg: T) -> None:
+        """Send a message to the recipient.
+
+        Args:
+            msg: The message to send.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def stop(self, immediate: bool) -> None:
+        """Stop the recipient.
+
+        Args:
+            immediate: If True, stop immediately; if False, allow graceful shutdown.
+        """
         raise NotImplementedError
 
 
 class Control(metaclass=ABCMeta):
+    """Abstract interface for controlling actors and tasks.
+
+    Provides methods to spawn new actors and tasks, and stop the system.
+    """
+
     @abstractmethod
     def spawn_actor(self, name: str, actor: Actor[T]) -> Sender[T]:
+        """Spawn a new actor.
+
+        Args:
+            name: The name for the new actor.
+            actor: The actor instance to spawn.
+
+        Returns:
+            A sender for communicating with the spawned actor.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def spawn_task(self, name: str, task: Task) -> Sender[Never]:
+        """Spawn a new task.
+
+        Args:
+            name: The name for the new task.
+            task: The task instance to spawn.
+
+        Returns:
+            A sender for controlling the spawned task.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def stop(self, immediate: bool) -> None:
+        """Stop the actor system.
+
+        Args:
+            immediate: If True, stop immediately; if False, allow graceful shutdown.
+        """
         raise NotImplementedError
 
 
 @dataclass(frozen=True, eq=False)
 class ActorEnv:
+    """Environment provided to actors during their lifecycle.
+
+    Contains the logger and control interface for the actor.
+    """
+
     logger: Logger
     control: Control
 
 
 def on_report_stop_fatal(env: ActorEnv, exc: Optional[ActionException]):
+    """Report handler that stops the system only on fatal exceptions.
+
+    Args:
+        env: The actor environment.
+        exc: Optional exception that occurred in the child.
+    """
     if exc is not None:
         env.control.stop(immediate=exc.fatal)
 
 
 def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]):
+    """Report handler that always stops the system when a child reports.
+
+    Args:
+        env: The actor environment.
+        exc: Optional exception that occurred in the child.
+    """
     fatal = exc is not None and exc.fatal
     env.control.stop(immediate=fatal)
 
@@ -221,35 +413,85 @@ def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]):
 #   Cleanup: children cleaned up
 #   Report to parent
 class Actor[T](metaclass=ABCMeta):
+    """Abstract base class for actors in the actor system.
+
+    Actors are concurrent entities that process messages and can spawn children.
+    The lifecycle is: Start -> Message/Report loop -> Stop -> Cleanup.
+    """
+
     def on_start(self, env: ActorEnv) -> None:
+        """Called when the actor starts.
+
+        Args:
+            env: The actor environment with logger and control.
+        """
         return
 
     def on_message(self, env: ActorEnv, value: T) -> None:
+        """Called when the actor receives a message.
+
+        Args:
+            env: The actor environment.
+            value: The message value.
+        """
         return
 
     def on_report(
         self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
     ) -> None:
+        """Called when a child actor reports completion.
+
+        Args:
+            env: The actor environment.
+            child_id: The unique ID of the child.
+            exc: Optional exception from the child.
+        """
         on_report_stop_fatal(env, exc)
 
     def on_handle(self, env: ActorEnv, exc: Exception) -> None:
+        """Called to handle exceptions during actor lifecycle.
+
+        Args:
+            env: The actor environment.
+            exc: The exception to handle.
+        """
         raise exc
 
     def on_stop(self, logger: Logger) -> None:
+        """Called when the actor is stopping.
+
+        Args:
+            logger: The logger to use.
+        """
         return
 
     def on_cleanup(self, logger: Logger) -> None:
+        """Called to clean up resources after children have stopped.
+
+        Args:
+            logger: The logger to use.
+        """
         return
 
 
 @dataclass(frozen=True)
 class Node:
+    """Represents a node in the actor hierarchy.
+
+    Contains identifying information for actors and tasks.
+    """
+
     name: str
     uniq_id: UniqId
     parent_id: Optional[UniqId]
 
 
 class ActorLoop[T]:
+    """Main event loop for processing actor lifecycle events.
+
+    Handles Start, Message, Report, and Stop packets in sequence.
+    """
+
     def __init__(
         self,
         control: Control,
@@ -266,6 +508,11 @@ class ActorLoop[T]:
         self._queue = queue
 
     def run(self) -> Box[Optional[ActionException]]:
+        """Run the actor loop until completion.
+
+        Returns:
+            Box containing any exception that occurred.
+        """
         saved_exc: Box[Optional[ActionException]] = Box(None)
         while saved_exc.value is None:
             self._step(saved_exc=saved_exc)
@@ -274,6 +521,11 @@ class ActorLoop[T]:
         return saved_exc
 
     def cleanup(self, saved_exc: Box[Optional[ActionException]]) -> None:
+        """Clean up the actor after stopping.
+
+        Args:
+            saved_exc: Box to store any cleanup exceptions.
+        """
         try:
             self._actor.on_cleanup(logger=self._logger)
         except Exception as exc:
@@ -368,6 +620,11 @@ class ActorLoop[T]:
 
 @dataclass(frozen=True, eq=False)
 class ActorContext[T]:
+    """Runtime context for an active actor.
+
+    Contains the actor's thread, message queue, and child tracking.
+    """
+
     node: Node
     thread: Thread
     queue: Queue[Packet[T]]
@@ -376,6 +633,11 @@ class ActorContext[T]:
 
 @dataclass(frozen=True, eq=False)
 class TaskContext:
+    """Runtime context for an active task.
+
+    Contains the task's thread and halt event for stopping.
+    """
+
     node: Node
     thread: Thread
     halt: Event
@@ -383,6 +645,11 @@ class TaskContext:
 
 @dataclass(frozen=False)
 class GlobalMutState:
+    """Global mutable state for the actor system.
+
+    Tracks all active actors, tasks, and system state.
+    """
+
     id_src: UniqId
     actors: Dict[UniqId, ActorContext]
     tasks: Dict[UniqId, TaskContext]
@@ -392,6 +659,14 @@ class GlobalMutState:
 
     @staticmethod
     def empty(logger: Optional[Logger] = None) -> GlobalMutState:
+        """Create an empty global state.
+
+        Args:
+            logger: Optional logger to use.
+
+        Returns:
+            New empty global state.
+        """
         if logger is None:
             logging.basicConfig(level=logging.CRITICAL)
             logger = logging.getLogger()
@@ -546,6 +821,8 @@ class TaskLifecycle:
 
 
 class QueueSender[T](Sender[T]):
+    """Sender implementation that sends messages via actor queues."""
+
     def __init__(self, child_node: Node, child_queue: Queue[Packet[T]]):
         self._child_node = child_node
         self._child_queue = child_queue
@@ -564,6 +841,8 @@ class QueueSender[T](Sender[T]):
 
 
 class TaskSender(Sender[Never]):
+    """Sender implementation for controlling tasks via halt events."""
+
     def __init__(self, child_node: Node, child_halt: Event):
         self._child_node = child_node
         self._child_halt = child_halt
@@ -582,6 +861,8 @@ class TaskSender(Sender[Never]):
 
 
 class NullSender[T](Sender[T]):
+    """No-op sender used when system is draining and spawning is disabled."""
+
     def __init__(self, child_id: UniqId):
         self._child_id = child_id
 
@@ -599,6 +880,11 @@ class NullSender[T](Sender[T]):
 
 
 class ControlImpl(Control):
+    """Implementation of the Control interface.
+
+    Manages actor and task spawning within the actor system.
+    """
+
     def __init__(
         self,
         global_state: GlobalState,
@@ -688,16 +974,39 @@ class ControlImpl(Control):
 
 
 class RootActor(Actor[Never]):
+    """Root actor that manages the actor system lifecycle.
+
+    Sets the system to draining state when it stops.
+    """
+
     def __init__(self, global_state: GlobalState):
+        """Initialize with global state reference.
+
+        Args:
+            global_state: The global system state.
+        """
         self._global_state = global_state
 
     @override
     def on_stop(self, logger: Logger) -> None:
+        """Set the system to draining when root actor stops.
+
+        Args:
+            logger: The logger to use.
+        """
         with self._global_state as gs:
             gs.draining = True
 
 
 def system(logger: Optional[Logger] = None) -> Control:
+    """Create and start a new actor system.
+
+    Args:
+        logger: Optional logger to use. If None, creates a default logger.
+
+    Returns:
+        A Control interface for the actor system.
+    """
     global_state = Mutex(GlobalMutState.empty(logger=logger))
     root_name = "root"
     root_actor = RootActor(global_state)
@@ -733,6 +1042,11 @@ def system(logger: Optional[Logger] = None) -> Control:
 
 
 class PairActor[T](Actor[Never]):
+    """Actor that spawns a producer-consumer pair.
+
+    Creates a consumer actor and a producer task that sends messages to it.
+    """
+
     def __init__(
         self,
         consumer_name: str,
@@ -761,21 +1075,47 @@ class PairActor[T](Actor[Never]):
 
 
 class Callback[T](metaclass=ABCMeta):
+    """Abstract callback interface for external event sources.
+
+    Allows external systems to register with actors for message delivery.
+    """
+
     @abstractmethod
     def register(self, sender: Sender[T]) -> None:
+        """Register a sender to receive callbacks.
+
+        Args:
+            sender: The sender to register for callbacks.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def unregister(self) -> None:
+        """Unregister from receiving callbacks."""
         raise NotImplementedError
 
     def produce(self, consumer_name: str, consumer_actor: Actor[T]) -> Actor[Never]:
+        """Create an actor that connects this callback to a consumer.
+
+        Args:
+            consumer_name: Name for the consumer actor.
+            consumer_actor: The actor that will consume callback messages.
+
+        Returns:
+            An actor that manages the callback connection.
+        """
         return CallbackActor(
             consumer_name=consumer_name, consumer_actor=consumer_actor, cb=self
         )
 
 
 class CallbackActor[T](Actor[Never]):
+    """Actor that manages the connection between a callback and consumer.
+
+    Registers with a callback to receive external events and forwards
+    them to a consumer actor.
+    """
+
     def __init__(self, consumer_name: str, consumer_actor: Actor[T], cb: Callback[T]):
         self._consumer_name = consumer_name
         self._consumer_actor = consumer_actor
