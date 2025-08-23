@@ -85,6 +85,7 @@ class Action(Enum):
     Cleanup = 4
     Report = 5
     Supervise = 6
+    Run = 7
 
 
 UniqId = NewType("UniqId", int)
@@ -241,7 +242,7 @@ class ActorLoop[T]:
 
     def cleanup(self, saved_exc: Box[Optional[ActionException]]) -> None:
         try:
-            self._actor.on_cleanup(logger=self._env.logger)
+            self._actor.on_cleanup(logger=self._logger)
         except Exception as exc:
             saved_exc.value = self._except(
                 action=Action.Cleanup, exc=exc, saved_exc=saved_exc.value
@@ -310,7 +311,7 @@ class ActorLoop[T]:
 
     def _stop(self, saved_exc: Box[Optional[ActionException]]) -> None:
         try:
-            self._actor.on_stop(logger=self._env.logger)
+            self._actor.on_stop(logger=self._logger)
         except Exception as exc:
             saved_exc.value = self._except(
                 action=Action.Stop, exc=exc, saved_exc=saved_exc.value
@@ -468,7 +469,47 @@ class TaskLifecycle:
         self._halt = halt
 
     def run(self) -> None:
-        raise Exception("TODO")
+        saved_exc: Box[Optional[ActionException]] = Box(None)
+        try:
+            self._task.run(logger=self._logger, halt=self._halt)
+        except Exception as exc:
+            saved_exc.value = ActionException(
+                name=self._node.name,
+                uniq_id=self._node.uniq_id,
+                fatal=is_fatal_exception(exc),
+                action=Action.Run,
+                exc=exc,
+                saved_exc=None,
+            )
+        uniq_id = self._node.uniq_id
+        fatal = saved_exc.value is not None and saved_exc.value.fatal
+        with self._global_state as gs:
+            # Immediately stop spawning if fatal
+            if fatal:
+                gs.draining = True
+            # Set halt to wake any waiters
+            self._halt.set()
+        with self._global_state as gs:
+            parent_ctx: Optional[ActorContext] = None
+            if self._node.parent_id is not None:
+                parent_ctx = gs.actors.get(self._node.parent_id)
+            if parent_ctx is not None:
+                parent_ctx.child_ids.remove(uniq_id)
+                if fatal:
+                    # Propagate fatal upwards
+                    parent_ctx.queue.drain(StopPacket(), immediate=True)
+                else:
+                    # Simply report
+                    pack: Packet[None] = ReportPacket(
+                        child_id=uniq_id, child_exc=saved_exc.value
+                    )
+                    parent_ctx.queue.put(pack)
+            if fatal:
+                # Save exc
+                assert saved_exc.value is not None
+                gs.saved_excs.append(saved_exc.value)
+            # Cleanup context
+            del gs.tasks[uniq_id]
 
 
 class QueueSender[T](Sender[T]):
