@@ -7,6 +7,7 @@ from centipede.actor import (
     ActionException,
     Actor,
     ActorEnv,
+    Task,
     UniqId,
     system,
 )
@@ -167,3 +168,78 @@ def test_system_resilience():
     sys.stop(immediate=False)
     exceptions = sys.wait()
     assert len(exceptions) == 0
+
+
+def test_queue_timeout():
+    """Test that Queue methods properly handle timeouts."""
+    from centipede.actor import Queue
+
+    # Create an empty queue
+    queue: Queue[str] = Queue()
+
+    # Test get() with timeout
+    start_time = time.time()
+    result = queue.get(timeout=0.1)
+    elapsed = time.time() - start_time
+
+    # Should return None due to timeout
+    assert result is None
+    # Should have waited approximately 0.1 seconds
+    assert 0.08 <= elapsed <= 0.15  # Allow some margin for timing
+
+    # Test wait() with timeout
+    start_time = time.time()
+    success = queue.wait(timeout=0.1)
+    elapsed = time.time() - start_time
+
+    # Should return False due to timeout (queue not drained)
+    assert success is False
+    # Should have waited approximately 0.1 seconds
+    assert 0.08 <= elapsed <= 0.15
+
+
+def test_sender_wait_timeout():
+    """Test that Sender.wait() properly handles timeouts."""
+
+    class SimpleTask(Task):
+        def __init__(self, duration: float = 0.1):
+            self.duration = duration
+
+        def run(self, logger, halt) -> None:
+            halt.wait(timeout=self.duration)
+
+    sys = system()
+
+    # Test actor sender wait
+    actor = ErrorActor()
+    actor_sender = sys.spawn_actor("test-actor", actor)
+
+    # Test task sender wait
+    task = SimpleTask(duration=0.5)  # Long running task
+    task_sender = sys.spawn_task("test-task", task)
+
+    # Wait for a short time - should timeout
+    start_time = time.time()
+    result = task_sender.wait(timeout=0.1)
+    elapsed = time.time() - start_time
+
+    # Should return False due to timeout
+    assert result is False
+    assert 0.08 <= elapsed <= 0.15
+
+    # Stop the task and wait for completion
+    task_sender.stop(immediate=True)
+    result = task_sender.wait(timeout=1.0)
+
+    # Should return True (task stopped)
+    assert result is True
+
+    # Stop the actor and wait for completion
+    actor_sender.stop(immediate=True)
+    result = actor_sender.wait(timeout=1.0)
+
+    # Should return True (actor stopped)
+    assert result is True
+
+    sys.stop(immediate=False)
+    sys.wait(timeout=1.0)

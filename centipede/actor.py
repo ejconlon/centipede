@@ -163,15 +163,19 @@ class Queue[T]:
             self._items.clear()
             self._cv.notify_all()
 
-    def get(self) -> Optional[T]:
+    def get(self, timeout: Optional[float] = None) -> Optional[T]:
         """Get the next item from the queue, blocking if empty.
 
+        Args:
+            timeout: Maximum time to wait in seconds. If None, waits indefinitely.
+
         Returns:
-            The next item from the queue, or None if queue is sealed.
+            The next item from the queue, or None if queue is sealed or timeout occurred.
         """
         with self._cv:
             while not self._items and not self._draining:
-                self._cv.wait()
+                if not self._cv.wait(timeout=timeout):
+                    return None  # Timeout occurred
             if self._items:
                 return self._items.popleft()
             else:
@@ -185,11 +189,19 @@ class Queue[T]:
         """
         return self._draining and not self._items
 
-    def wait(self) -> None:
-        """Wait until the queue is drained and empty."""
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Wait until the queue is drained and empty.
+
+        Args:
+            timeout: Maximum time to wait in seconds. If None, waits indefinitely.
+
+        Returns:
+            True if the queue was drained and empty within the timeout, False otherwise.
+        """
         with self._cv:
             if not self._resume_wait():
-                self._cv.wait_for(self._resume_wait)
+                return self._cv.wait_for(self._resume_wait, timeout=timeout)
+            return True
 
 
 class Action(Enum):
@@ -353,6 +365,18 @@ class Sender[T](metaclass=ABCMeta):
 
         Args:
             immediate: If True, stop immediately; if False, allow graceful shutdown.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Wait for the recipient to terminate.
+
+        Args:
+            timeout: Maximum time to wait in seconds. If None, waits indefinitely.
+
+        Returns:
+            True if the recipient terminated within the timeout, False otherwise.
         """
         raise NotImplementedError
 
@@ -863,9 +887,12 @@ class TaskLifecycle:
 class QueueSender[T](Sender[T]):
     """Sender implementation that sends messages via actor queues."""
 
-    def __init__(self, child_node: Node, child_queue: Queue[Packet[T]]):
+    def __init__(
+        self, child_node: Node, child_queue: Queue[Packet[T]], child_thread: Thread
+    ):
         self._child_node = child_node
         self._child_queue = child_queue
+        self._child_thread = child_thread
 
     @override
     def dest(self) -> UniqId:
@@ -879,13 +906,27 @@ class QueueSender[T](Sender[T]):
     def send(self, msg: T) -> None:
         self._child_queue.put(MessagePacket(msg))
 
+    @override
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Wait for the actor to terminate.
+
+        Args:
+            timeout: Maximum time to wait in seconds. If None, waits indefinitely.
+
+        Returns:
+            True if the actor terminated within the timeout, False otherwise.
+        """
+        self._child_thread.join(timeout=timeout)
+        return not self._child_thread.is_alive()
+
 
 class TaskSender(Sender[Never]):
     """Sender implementation for controlling tasks via halt events."""
 
-    def __init__(self, child_node: Node, child_halt: Event):
+    def __init__(self, child_node: Node, child_halt: Event, child_thread: Thread):
         self._child_node = child_node
         self._child_halt = child_halt
+        self._child_thread = child_thread
 
     @override
     def dest(self) -> UniqId:
@@ -898,6 +939,20 @@ class TaskSender(Sender[Never]):
     @override
     def send(self, msg: None) -> None:
         pass
+
+    @override
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Wait for the task to terminate.
+
+        Args:
+            timeout: Maximum time to wait in seconds. If None, waits indefinitely.
+
+        Returns:
+            True if the task terminated within the timeout, False otherwise.
+        """
+        # For tasks, we wait on the thread since they don't have a message queue lifecycle
+        self._child_thread.join(timeout=timeout)
+        return not self._child_thread.is_alive()
 
 
 class NullSender[T](Sender[T]):
@@ -917,6 +972,18 @@ class NullSender[T](Sender[T]):
     @override
     def send(self, msg: T) -> None:
         pass
+
+    @override
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Wait for termination (no-op for null sender).
+
+        Args:
+            timeout: Maximum time to wait in seconds (ignored).
+
+        Returns:
+            Always returns True as null senders have no backing thread.
+        """
+        return True
 
 
 class ControlImpl(Control):
@@ -977,7 +1044,9 @@ class ControlImpl(Control):
                 assert isinstance(parent_context, ActorContext)
                 parent_context.child_ids.add(child_id)
                 thread.start()
-                return QueueSender(child_node=child_node, child_queue=child_queue)
+                return QueueSender(
+                    child_node=child_node, child_queue=child_queue, child_thread=thread
+                )
 
     @override
     def spawn_task(self, name: str, task: Task) -> Sender[Never]:
@@ -1014,7 +1083,9 @@ class ControlImpl(Control):
                 assert isinstance(parent_context, ActorContext)
                 parent_context.child_ids.add(child_id)
                 thread.start()
-                return TaskSender(child_node=child_node, child_halt=child_halt)
+                return TaskSender(
+                    child_node=child_node, child_halt=child_halt, child_thread=thread
+                )
 
 
 class System(Control):
