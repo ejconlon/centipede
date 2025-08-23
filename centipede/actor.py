@@ -26,6 +26,59 @@ from centipede.spiny.common import Box
 T = TypeVar("T")
 
 
+class ActorLogger(Logger):
+    """Logger that automatically prefixes messages with actor context."""
+
+    def __init__(self, base_logger: Logger, name: str, uniq_id: UniqId):
+        """Initialize with base logger and actor info.
+
+        Args:
+            base_logger: The base logger to delegate to.
+            name: The actor's name.
+            uniq_id: The actor's unique ID.
+        """
+        # Create a unique logger name to avoid conflicts
+        logger_name = f"{base_logger.name}.{fmt_uniq_name(name, uniq_id)}"
+        super().__init__(logger_name, base_logger.level)
+
+        self._base_logger = base_logger
+        self._actor_name = fmt_uniq_name(name, uniq_id)
+
+        # Copy handlers from base logger
+        for handler in base_logger.handlers:
+            self.addHandler(handler)
+
+    def _log(
+        self,
+        level,
+        msg,
+        args,
+        exc_info=None,
+        extra=None,
+        stack_info=False,
+        stacklevel=1,
+    ):
+        """Override _log to add actor context."""
+        formatted_msg = f"[{self._actor_name}] {msg}"
+        return super()._log(
+            level, formatted_msg, args, exc_info, extra, stack_info, stacklevel + 1
+        )
+
+
+def create_contextual_logger(base_logger: Logger, name: str, uniq_id: UniqId) -> Logger:
+    """Create a contextual logger that prefixes messages with actor name.
+
+    Args:
+        base_logger: The base logger to derive from.
+        name: The actor's name.
+        uniq_id: The actor's unique ID.
+
+    Returns:
+        A Logger that automatically prefixes messages with actor context.
+    """
+    return ActorLogger(base_logger, name, uniq_id)
+
+
 class Mutex[T]:
     """A thread-safe mutex wrapper that provides exclusive access to a value.
 
@@ -175,7 +228,7 @@ def fmt_uniq_name(name: str, uniq_id: UniqId) -> str:
     Returns:
         Formatted string combining name and ID.
     """
-    return f"{name}_{uniq_id}"
+    return f"{name}#{uniq_id}"
 
 
 @dataclass(frozen=True)
@@ -496,9 +549,9 @@ class ActorLoop[T]:
         queue: Queue[Packet[T]],
     ):
         self._node = node
-        self._env = ActorEnv(logger=logger, control=control)
+        self._logger = create_contextual_logger(logger, node.name, node.uniq_id)
+        self._env = ActorEnv(logger=self._logger, control=control)
         self._stopped = False
-        self._logger = logger
         self._actor = actor
         self._queue = queue
 
