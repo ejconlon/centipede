@@ -618,8 +618,35 @@ class ActorLoop[T]:
         )
 
 
+class Context(metaclass=ABCMeta):
+    """Abstract base class for runtime contexts.
+
+    Contexts represent different types of execution units in the actor system.
+    """
+
+    @property
+    @abstractmethod
+    def node(self) -> Node:
+        """Get the node information for this context.
+
+        Returns:
+            The node containing name, ID, and parent information.
+        """
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def thread(self) -> Thread:
+        """Get the thread for this context.
+
+        Returns:
+            The thread executing this context.
+        """
+        raise NotImplementedError
+
+
 @dataclass(frozen=True, eq=False)
-class ActorContext[T]:
+class ActorContext[T](Context):
     """Runtime context for an active actor.
 
     Contains the actor's thread, message queue, and child tracking.
@@ -632,7 +659,7 @@ class ActorContext[T]:
 
 
 @dataclass(frozen=True, eq=False)
-class TaskContext:
+class TaskContext(Context):
     """Runtime context for an active task.
 
     Contains the task's thread and halt event for stopping.
@@ -651,8 +678,7 @@ class GlobalMutState:
     """
 
     id_src: UniqId
-    actors: Dict[UniqId, ActorContext]
-    tasks: Dict[UniqId, TaskContext]
+    contexts: Dict[UniqId, Context]
     draining: bool
     saved_excs: List[ActionException]
     logger: Logger
@@ -672,8 +698,7 @@ class GlobalMutState:
             logger = logging.getLogger()
         return GlobalMutState(
             id_src=UniqId(0),
-            actors={},
-            tasks={},
+            contexts={},
             draining=False,
             saved_excs=[],
             logger=logger,
@@ -721,18 +746,19 @@ class ActorLifecycle[T]:
             if fatal:
                 gs.draining = True
             # Seal the queue to wake any waiters
-            ctx = gs.actors[uniq_id]
+            ctx = gs.contexts[uniq_id]
+            assert isinstance(ctx, ActorContext)
             self._queue.seal()
             # Send child stops or kill child threads
             for child_id in ctx.child_ids:
-                if child_id in gs.actors:
-                    child_actx = gs.actors[child_id]
-                    child_actx.queue.drain(Packet.stop(), immediate=fatal)
-                    child_threads.append(child_actx.thread)
-                elif child_id in gs.tasks:
-                    child_tctx = gs.tasks[child_id]
-                    child_tctx.halt.set()
-                    child_threads.append(child_tctx.thread)
+                if child_id in gs.contexts:
+                    child_ctx = gs.contexts[child_id]
+                    if isinstance(child_ctx, ActorContext):
+                        child_ctx.queue.drain(Packet.stop(), immediate=fatal)
+                        child_threads.append(child_ctx.thread)
+                    elif isinstance(child_ctx, TaskContext):
+                        child_ctx.halt.set()
+                        child_threads.append(child_ctx.thread)
         # Await child threads
         for thread in child_threads:
             thread.join()
@@ -741,7 +767,9 @@ class ActorLifecycle[T]:
         with self._global_state as gs:
             parent_ctx: Optional[ActorContext] = None
             if self._node.parent_id is not None:
-                parent_ctx = gs.actors.get(self._node.parent_id)
+                parent_context = gs.contexts.get(self._node.parent_id)
+                if isinstance(parent_context, ActorContext):
+                    parent_ctx = parent_context
             if parent_ctx is not None:
                 parent_ctx.child_ids.remove(uniq_id)
                 if fatal:
@@ -758,7 +786,7 @@ class ActorLifecycle[T]:
                 assert saved_exc.value is not None
                 gs.saved_excs.append(saved_exc.value)
             # Cleanup context
-            del gs.actors[uniq_id]
+            del gs.contexts[uniq_id]
 
 
 class TaskLifecycle:
@@ -800,7 +828,9 @@ class TaskLifecycle:
         with self._global_state as gs:
             parent_ctx: Optional[ActorContext] = None
             if self._node.parent_id is not None:
-                parent_ctx = gs.actors.get(self._node.parent_id)
+                parent_context = gs.contexts.get(self._node.parent_id)
+                if isinstance(parent_context, ActorContext):
+                    parent_ctx = parent_context
             if parent_ctx is not None:
                 parent_ctx.child_ids.remove(uniq_id)
                 if fatal:
@@ -817,7 +847,7 @@ class TaskLifecycle:
                 assert saved_exc.value is not None
                 gs.saved_excs.append(saved_exc.value)
             # Cleanup context
-            del gs.tasks[uniq_id]
+            del gs.contexts[uniq_id]
 
 
 class QueueSender[T](Sender[T]):
@@ -932,8 +962,10 @@ class ControlImpl(Control):
                     queue=child_queue,
                     child_ids=set(),
                 )
-                gs.actors[child_id] = context
-                gs.actors[parent_id].child_ids.add(child_id)
+                gs.contexts[child_id] = context
+                parent_context = gs.contexts[parent_id]
+                assert isinstance(parent_context, ActorContext)
+                parent_context.child_ids.add(child_id)
                 thread.start()
                 return QueueSender(child_node=child_node, child_queue=child_queue)
 
@@ -967,8 +999,10 @@ class ControlImpl(Control):
                     thread=thread,
                     halt=child_halt,
                 )
-                gs.tasks[child_id] = context
-                gs.actors[parent_id].child_ids.add(child_id)
+                gs.contexts[child_id] = context
+                parent_context = gs.contexts[parent_id]
+                assert isinstance(parent_context, ActorContext)
+                parent_context.child_ids.add(child_id)
                 thread.start()
                 return TaskSender(child_node=child_node, child_halt=child_halt)
 
@@ -1031,7 +1065,7 @@ def system(logger: Optional[Logger] = None) -> Control:
             queue=root_queue,
             child_ids=set(),
         )
-        gs.actors[root_id] = context
+        gs.contexts[root_id] = context
         thread.start()
         return ControlImpl(
             global_state=global_state,
