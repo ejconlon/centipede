@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from functools import partial
 from logging import Logger
-from typing import Optional, Tuple, override
+from typing import Any, Optional, Tuple, cast, override
 
 import mido
-from mido.frozen import FrozenMessage
+from mido.frozen import FrozenMessage, freeze_message
 
-from centipede.actor import Actor, ActorEnv, Mutex
+from centipede.actor import Actor, ActorEnv, Callback, Control, Mutex, Sender, system
 from centipede.spiny.common import Box
 from centipede.spiny.heapmap import PHeapMap
-from centipede.spiny.seq import PSeq
 
 
 def _assert_pos_lt(x, n):
@@ -112,22 +112,40 @@ class ParMsgHeap:
             return kv
 
 
-def connect_fn(name: str) -> mido.ports.BaseOutput:
-    return mido.open_output(name=name)  # pyright: ignore
-
-
-type MessageBundle = PSeq[FrozenMessage]
-
-
-class SendActor(Actor[MessageBundle]):
+class SendActor(Actor[FrozenMessage]):
     def __init__(self, port: mido.ports.BaseOutput):
         self._port = port
 
     @override
-    def on_message(self, env: ActorEnv, value: MessageBundle) -> None:
-        for msg in value:
-            self._port.send(msg)
+    def on_message(self, env: ActorEnv, value: FrozenMessage) -> None:
+        self._port.send(value)
 
     @override
     def on_stop(self, logger: Logger) -> None:
         self._port.close()
+
+
+def _recv_cb(sender: Sender[FrozenMessage], msg: Any) -> None:
+    fmsg = cast(FrozenMessage, freeze_message(msg))
+    sender.send(fmsg)
+
+
+class RecvCallback(Callback[FrozenMessage]):
+    def __init__(self, port: mido.ports.BaseInput):
+        self._port = port
+
+    def register(self, sender: Sender[FrozenMessage]) -> None:
+        self._port.callback = partial(_recv_cb, sender)  # pyright: ignore
+
+    def unregister(self) -> None:
+        self._port.callback = None  # pyright: ignore
+
+
+def echo_control() -> Control:
+    control = system()
+    out_port = mido.open_output(name="virt_out", virtual=True)  # pyright: ignore
+    in_port = mido.open_input(name="virt_in", virtual=True)  # pyright: ignore
+    send_actor = SendActor(out_port)
+    recv_actor = RecvCallback(in_port).produce("send", send_actor)
+    control.spawn_actor("recv", recv_actor)
+    return control

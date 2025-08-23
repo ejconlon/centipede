@@ -8,7 +8,18 @@ from dataclasses import dataclass
 from enum import Enum
 from logging import Logger
 from threading import Condition, Event, Lock, Thread
-from typing import Any, Dict, List, NewType, Optional, Set, TypeVar, cast, override
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Never,
+    NewType,
+    Optional,
+    Set,
+    TypeVar,
+    override,
+)
 
 from centipede.spiny.common import Box
 
@@ -123,12 +134,21 @@ class Task(metaclass=ABCMeta):
 
 
 class Packet[T](metaclass=ABCMeta):
-    pass
+    @staticmethod
+    def start() -> Packet[T]:
+        return _START_PACKET
+
+    @staticmethod
+    def stop() -> Packet[T]:
+        return _STOP_PACKET
 
 
 @dataclass(frozen=True)
 class StartPacket(Packet[Any]):
     pass
+
+
+_START_PACKET: Packet[Any] = StartPacket()
 
 
 @dataclass(frozen=True)
@@ -145,6 +165,9 @@ class ReportPacket[T](Packet[T]):
 @dataclass(frozen=True)
 class StopPacket(Packet[Any]):
     pass
+
+
+_STOP_PACKET: Packet[Any] = StopPacket()
 
 
 class Sender[T](metaclass=ABCMeta):
@@ -167,7 +190,7 @@ class Control(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def spawn_task(self, name: str, task: Task) -> Sender[None]:
+    def spawn_task(self, name: str, task: Task) -> Sender[Never]:
         raise NotImplementedError
 
     @abstractmethod
@@ -179,6 +202,16 @@ class Control(metaclass=ABCMeta):
 class ActorEnv:
     logger: Logger
     control: Control
+
+
+def on_report_stop_fatal(env: ActorEnv, exc: Optional[ActionException]):
+    if exc is not None:
+        env.control.stop(immediate=exc.fatal)
+
+
+def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]):
+    fatal = exc is not None and exc.fatal
+    env.control.stop(immediate=fatal)
 
 
 # Lifecycle:
@@ -197,7 +230,7 @@ class Actor[T](metaclass=ABCMeta):
     def on_report(
         self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
     ) -> None:
-        return
+        on_report_stop_fatal(env, exc)
 
     def on_handle(self, env: ActorEnv, exc: Exception) -> None:
         raise exc
@@ -395,7 +428,7 @@ class ActorLifecycle[T]:
             global_state=self._global_state,
             node=self._node,
             logger=self._logger,
-            queue=cast(Queue[Packet[None]], self._queue),
+            queue=self._queue,
         )
         loop = ActorLoop(
             control=control,
@@ -419,7 +452,7 @@ class ActorLifecycle[T]:
             for child_id in ctx.child_ids:
                 if child_id in gs.actors:
                     child_actx = gs.actors[child_id]
-                    child_actx.queue.drain(StopPacket(), immediate=fatal)
+                    child_actx.queue.drain(Packet.stop(), immediate=fatal)
                     child_threads.append(child_actx.thread)
                 elif child_id in gs.tasks:
                     child_tctx = gs.tasks[child_id]
@@ -438,10 +471,10 @@ class ActorLifecycle[T]:
                 parent_ctx.child_ids.remove(uniq_id)
                 if fatal:
                     # Propagate fatal upwards
-                    parent_ctx.queue.drain(StopPacket(), immediate=True)
+                    parent_ctx.queue.drain(Packet.stop(), immediate=True)
                 else:
                     # Simply report
-                    pack: Packet[None] = ReportPacket(
+                    pack: Packet[Never] = ReportPacket(
                         child_id=uniq_id, child_exc=saved_exc.value
                     )
                     parent_ctx.queue.put(pack)
@@ -497,10 +530,10 @@ class TaskLifecycle:
                 parent_ctx.child_ids.remove(uniq_id)
                 if fatal:
                     # Propagate fatal upwards
-                    parent_ctx.queue.drain(StopPacket(), immediate=True)
+                    parent_ctx.queue.drain(Packet.stop(), immediate=True)
                 else:
                     # Simply report
-                    pack: Packet[None] = ReportPacket(
+                    pack: Packet[Never] = ReportPacket(
                         child_id=uniq_id, child_exc=saved_exc.value
                     )
                     parent_ctx.queue.put(pack)
@@ -523,14 +556,14 @@ class QueueSender[T](Sender[T]):
 
     @override
     def stop(self, immediate: bool) -> None:
-        self._child_queue.drain(StopPacket(), immediate=immediate)
+        self._child_queue.drain(Packet.stop(), immediate=immediate)
 
     @override
     def send(self, msg: T) -> None:
         self._child_queue.put(MessagePacket(msg))
 
 
-class TaskSender(Sender[None]):
+class TaskSender(Sender[Never]):
     def __init__(self, child_node: Node, child_halt: Event):
         self._child_node = child_node
         self._child_halt = child_halt
@@ -571,7 +604,7 @@ class ControlImpl(Control):
         global_state: GlobalState,
         node: Node,
         logger: Logger,
-        queue: Queue[Packet[None]],
+        queue: Queue[Packet[T]],
     ):
         self._global_state = global_state
         self._node = node
@@ -580,7 +613,7 @@ class ControlImpl(Control):
 
     @override
     def stop(self, immediate: bool) -> None:
-        self._queue.drain(StopPacket(), immediate=immediate)
+        self._queue.drain(Packet.stop(), immediate=immediate)
 
     @override
     def spawn_actor(self, name: str, actor: Actor[T]) -> Sender[T]:
@@ -591,7 +624,7 @@ class ControlImpl(Control):
                 return NullSender(child_id=child_id)
             else:
                 parent_id = self._node.uniq_id
-                child_queue: Queue[Packet[T]] = Queue([StartPacket()])
+                child_queue: Queue[Packet[T]] = Queue([Packet.start()])
                 child_uname = fmt_uniq_name(name, child_id)
                 child_logger = self._logger.getChild(child_uname)
                 child_node = Node(
@@ -619,7 +652,7 @@ class ControlImpl(Control):
                 return QueueSender(child_node=child_node, child_queue=child_queue)
 
     @override
-    def spawn_task(self, name: str, task: Task) -> Sender[None]:
+    def spawn_task(self, name: str, task: Task) -> Sender[Never]:
         with self._global_state as gs:
             child_id = gs.id_src
             gs.id_src = UniqId(gs.id_src + 1)
@@ -654,7 +687,7 @@ class ControlImpl(Control):
                 return TaskSender(child_node=child_node, child_halt=child_halt)
 
 
-class RootActor(Actor[None]):
+class RootActor(Actor[Never]):
     def __init__(self, global_state: GlobalState):
         self._global_state = global_state
 
@@ -664,14 +697,14 @@ class RootActor(Actor[None]):
             gs.draining = True
 
 
-def control(logger: Optional[Logger] = None) -> Control:
+def system(logger: Optional[Logger] = None) -> Control:
     global_state = Mutex(GlobalMutState.empty(logger=logger))
     root_name = "root"
     root_actor = RootActor(global_state)
     with global_state as gs:
         root_id = gs.id_src
         gs.id_src = UniqId(gs.id_src + 1)
-        root_queue: Queue[Packet[None]] = Queue([StartPacket()])
+        root_queue: Queue[Packet[Never]] = Queue([Packet.start()])
         root_uname = fmt_uniq_name(root_name, root_id)
         root_logger = gs.logger.getChild(root_uname)
         root_node = Node(name=root_name, uniq_id=root_id, parent_id=None)
@@ -697,3 +730,70 @@ def control(logger: Optional[Logger] = None) -> Control:
             logger=root_logger,
             queue=root_queue,
         )
+
+
+class PairActor[T](Actor[Never]):
+    def __init__(
+        self,
+        consumer_name: str,
+        consumer_actor: Actor[T],
+        producer_name: str,
+        mk_producer_task: Callable[[Sender[T]], Task],
+    ):
+        self._consumer_name = consumer_name
+        self._consumer_actor = consumer_actor
+        self._producer_name = producer_name
+        self._mk_producer_task = mk_producer_task
+
+    @override
+    def on_start(self, env: ActorEnv) -> None:
+        sender = env.control.spawn_actor(
+            name=self._consumer_name, actor=self._consumer_actor
+        )
+        producer_task = self._mk_producer_task(sender)
+        env.control.spawn_task(name=self._producer_name, task=producer_task)
+
+    @override
+    def on_report(
+        self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
+    ) -> None:
+        on_report_stop_always(env, exc)
+
+
+class Callback[T](metaclass=ABCMeta):
+    @abstractmethod
+    def register(self, sender: Sender[T]) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def unregister(self) -> None:
+        raise NotImplementedError
+
+    def produce(self, consumer_name: str, consumer_actor: Actor[T]) -> Actor[Never]:
+        return CallbackActor(
+            consumer_name=consumer_name, consumer_actor=consumer_actor, cb=self
+        )
+
+
+class CallbackActor[T](Actor[Never]):
+    def __init__(self, consumer_name: str, consumer_actor: Actor[T], cb: Callback[T]):
+        self._consumer_name = consumer_name
+        self._consumer_actor = consumer_actor
+        self._cb = cb
+
+    @override
+    def on_start(self, env: ActorEnv) -> None:
+        sender = env.control.spawn_actor(
+            name=self._consumer_name, actor=self._consumer_actor
+        )
+        self._cb.register(sender)
+
+    @override
+    def on_report(
+        self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
+    ) -> None:
+        on_report_stop_always(env, exc)
+
+    @override
+    def on_stop(self, logger: Logger):
+        self._cb.unregister()
