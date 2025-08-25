@@ -11,7 +11,6 @@ from minipat.pat import (
     PatChoice,
     PatElongation,
     PatEuclidean,
-    PatGroup,
     PatPar,
     PatPolymetric,
     PatProbability,
@@ -113,10 +112,6 @@ class PatStream[T](Stream[T]):
                                 seq_result = ev_heap_push(ev, seq_result)
 
                 return seq_result
-
-            case PatGroup(children):
-                # Groups behave like sequences
-                return self._query_pattern(Pat(PatSeq(children)), arc)
 
             case PatPar(children):
                 # All children play simultaneously across the entire arc

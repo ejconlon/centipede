@@ -6,7 +6,6 @@ from minipat.pat import (
     PatChoice,
     PatElongation,
     PatEuclidean,
-    PatGroup,
     PatPar,
     PatPolymetric,
     PatProbability,
@@ -229,8 +228,8 @@ def test_parse_complex_pattern():
     # First: bd*2 (should be repetition)
     assert isinstance(children[0].unwrap, PatRepetition)
 
-    # Second: [sd cp] (should be grouped)
-    assert isinstance(children[1].unwrap, PatGroup)
+    # Second: [sd cp] (should be sequence)
+    assert isinstance(children[1].unwrap, PatSeq)
 
     # Third: ~ (should be silence)
     assert isinstance(children[2].unwrap, PatSilence)
@@ -247,9 +246,9 @@ def test_parse_nested_groups():
     children = list(result.unwrap.children)
     assert len(children) == 2
 
-    # First should be nested group
+    # First should be nested sequence
     nested = children[0]
-    assert isinstance(nested.unwrap, PatGroup)
+    assert isinstance(nested.unwrap, PatSeq)
 
     # Second should be "hh"
     assert children[1].unwrap.val == "hh"
@@ -343,9 +342,9 @@ def test_hihat_subdivision():
     children = list(result.unwrap.children)
     assert len(children) == 4
 
-    # Check that the hihat groups are properly parsed
-    assert isinstance(children[1].unwrap, PatGroup)
-    assert isinstance(children[3].unwrap, PatGroup)
+    # Check that the hihat groups are properly parsed as sequences
+    assert isinstance(children[1].unwrap, PatSeq)
+    assert isinstance(children[3].unwrap, PatSeq)
 
 
 def test_polyrhythmic_pattern():

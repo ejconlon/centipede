@@ -8,7 +8,6 @@ from minipat.pat import (
     PatChoice,
     PatElongation,
     PatEuclidean,
-    PatGroup,
     PatPar,
     PatPolymetric,
     PatProbability,
@@ -59,13 +58,6 @@ def print_pattern(pat: Pat[str], *, _top_level: bool = True) -> str:
                     parts.append(print_pattern(child, _top_level=False))
             return " ".join(parts)
 
-        case PatGroup(children):
-            # Groups always preserve their brackets
-            if len(children) == 1:
-                return f"[{print_pattern(children[0], _top_level=False)}]"
-            parts = [print_pattern(child, _top_level=False) for child in children]
-            return f"[{' '.join(parts)}]"
-
         case PatPar(children):
             # Parallel patterns use [a,b,c] notation
             pattern_strs = [
@@ -94,7 +86,7 @@ def print_pattern(pat: Pat[str], *, _top_level: bool = True) -> str:
 
         case PatRepetition(pattern, operator, count):
             # If the pattern being repeated is a multi-element sequence, it needs brackets
-            # PatGroup already has brackets, so no need to add more
+            # Bracketed sequences already handled above
             if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
                 pattern_str = f"[{print_pattern(pattern, _top_level=False)}]"
             else:

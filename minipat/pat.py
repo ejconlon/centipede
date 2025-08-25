@@ -75,10 +75,6 @@ class Pat[T]:
     def alternating(patterns: Iterable[Pat[T]]) -> Pat[T]:
         return Pat(PatAlternating(PSeq.mk(patterns)))
 
-    @staticmethod
-    def group(pats: Iterable[Pat[T]]) -> Pat[T]:
-        return Pat(PatGroup(PSeq.mk(pats)))
-
     def scale(self, factor: Factor) -> Pat[T]:
         if factor <= 0:
             return Pat.silence()
@@ -127,13 +123,6 @@ class PatScale[T, R](PatF[T, R]):
 
 @dataclass(frozen=True)
 class PatSeq[T, R](PatF[T, R]):
-    children: PSeq[R]
-
-
-@dataclass(frozen=True)
-class PatGroup[T, R](PatF[T, R]):
-    """A sequence that was explicitly grouped with brackets []."""
-
     children: PSeq[R]
 
 
@@ -204,9 +193,6 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatSeq(cs):
                 czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatSeq(czs))
-            case PatGroup(cs):
-                czs = PSeq.mk(wrapper(env, c) for c in cs)
-                return fn(env, PatGroup(czs))
             case PatPar(cs):
                 czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatPar(czs))
@@ -269,8 +255,6 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatScale(f, c))
             case PatSeq(cs):
                 return Pat(PatSeq(cs))
-            case PatGroup(cs):
-                return Pat(PatGroup(cs))
             case PatPar(cs):
                 return Pat(PatPar(cs))
             case PatChoice(cs):

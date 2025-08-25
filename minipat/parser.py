@@ -113,12 +113,12 @@ class PatternTransformer(Transformer):
     def seq(self, items):
         """Transform grouping [...] or .pattern."""
         pattern = items[0]
-        # If the pattern is already a sequence, wrap it in a group
-        # Otherwise, create a group with the single pattern
+        # If the pattern is already a sequence, return it as-is
+        # Otherwise, create a sequence with the single pattern
         if isinstance(pattern.unwrap, PatSeq):
-            return Pat.group(pattern.unwrap.children)
+            return pattern
         else:
-            return Pat.group([pattern])
+            return Pat.seq([pattern])
 
     def choice(self, items):
         """Transform choice patterns [a|b|c]."""

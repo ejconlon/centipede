@@ -133,10 +133,13 @@ def test_complex_patterns():
 
 def test_grouped_sequences():
     """Test that grouped sequences are handled correctly."""
-    # Grouped sequences should preserve their brackets
-    round_trip_test("[bd sd]")  # Preserve explicit grouping
-    round_trip_test("[bd sd] cp")  # Preserve nested grouping
-    round_trip_test("bd [sd cp] hh")  # Preserve nested grouping
+    # Simple grouped sequences become regular sequences (brackets removed)
+    round_trip_test("[bd sd]", "bd sd")  # Brackets are removed for single sequences
+    # But nested sequences preserve structure with brackets
+    round_trip_test("[bd sd] cp")  # Structure preserved - nested sequence plus element
+    round_trip_test(
+        "bd [sd cp] hh"
+    )  # Structure preserved - element plus nested sequence plus element
 
 
 def test_whitespace_normalization():
