@@ -13,10 +13,12 @@ from minipat.pat import (
     PatEuclidean,
     PatPar,
     PatPolymetric,
+    PatPolymetricSub,
     PatProbability,
     PatPure,
+    PatRatio,
+    PatReplicate,
     PatRepetition,
-    PatScale,
     PatSelect,
     PatSeq,
     PatSilence,
@@ -106,10 +108,25 @@ def print_pattern(pat: Pat[str]) -> str:
             pattern_strs = [print_pattern(pattern) for pattern in patterns]
             return f"<{' '.join(pattern_strs)}>"
 
-        case PatScale(factor, pattern):
-            pattern_str = print_pattern_grouped(pattern)
-            factor_str = format_fraction(factor)
-            return f"{pattern_str}#{factor_str}"
+        case PatReplicate(pattern, count):
+            # If the pattern being replicated is a multi-element sequence, it needs brackets
+            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
+                pattern_str = f"[{print_pattern(pattern)}]"
+            else:
+                pattern_str = print_pattern(pattern)
+            return f"{pattern_str}!{count}"
+
+        case PatRatio(pattern, numerator, denominator):
+            # If the pattern with ratio is a multi-element sequence, it needs brackets
+            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
+                pattern_str = f"[{print_pattern(pattern)}]"
+            else:
+                pattern_str = print_pattern(pattern)
+            return f"{pattern_str}*{numerator}%{denominator}"
+
+        case PatPolymetricSub(patterns, subdivision):
+            pattern_strs = [print_pattern(pattern) for pattern in patterns]
+            return f"{{{', '.join(pattern_strs)}}}%{subdivision}"
 
         case _:
             # This should never happen if all pattern types are handled above

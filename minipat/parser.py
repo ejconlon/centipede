@@ -15,12 +15,12 @@ from minipat.pat import Pat, PatSeq, RepetitionOp
 PATTERN_GRAMMAR = """
 start: pattern
 
-// Main pattern can be a sequence or a single element
-pattern: element+
+// Main pattern can be a sequence, dot grouping, or elements
+pattern: dot_group | element+
 
 // Elements can be various types
-element: elongation | repetition | scale | probability | base_element
-base_element: atom | seq | choice | parallel | alternating | euclidean | polymetric
+element: elongation | repetition | replicate | ratio | probability | base_element
+base_element: atom | seq | choice | parallel | alternating | euclidean | polymetric | polymetric_sub
 
 // Basic atoms
 atom: select | symbol | silence
@@ -30,6 +30,7 @@ select: SYMBOL ":" (numeric_value | SYMBOL)
 
 // Grouping structures
 seq: "[" pattern "]"
+dot_group: element+ DOT element+
 choice: "[" choice_list "]"
 choice_list: pattern ("|" pattern)+
 parallel: "[" parallel_list "]"
@@ -41,9 +42,12 @@ euclidean: atom "(" numeric_value "," numeric_value ("," numeric_value)? ")"
 
 // Polymetric sequences
 polymetric: "{" pattern ("," pattern)+ "}"
+polymetric_sub: "{" pattern ("," pattern)+ "}" PERCENT numeric_value
 
 // Repetition and speed modifiers
 repetition: (base_element | probability) MULTIPLY numeric_value | (base_element | probability) DIVIDE numeric_value | repetition DIVIDE numeric_value | repetition MULTIPLY numeric_value
+replicate: (base_element | probability) EXCLAMATION numeric_value | replicate EXCLAMATION numeric_value
+ratio: (base_element | probability) MULTIPLY numeric_value PERCENT numeric_value | replicate PERCENT numeric_value
 elongation: (base_element | probability) UNDERSCORE+ | (base_element | probability) AT+ | repetition UNDERSCORE+ | repetition AT+
 
 // Operator tokens
@@ -51,9 +55,10 @@ MULTIPLY: "*"
 DIVIDE: "/"
 UNDERSCORE: "_"
 AT: "@"
+EXCLAMATION: "!"
+PERCENT: "%"
+DOT: "."
 
-// Scale patterns - using # as scale operator
-scale: (base_element | probability) "#" numeric_value | scale "#" numeric_value
 
 // Probability
 probability: atom "?" probability_value?
@@ -206,12 +211,58 @@ class PatternTransformer(Transformer):
         elongation_count = len(elongation_symbols)
         return Pat.elongation(element, elongation_count)
 
-    # Scale patterns
-    def scale(self, items):
-        """Transform scale patterns like bd#2 or bd#(1/2)."""
+    def replicate(self, items):
+        """Transform replicate patterns like bd!3."""
         element = items[0]
-        factor = items[1]
-        return Pat.scale(element, factor)
+        # items[1] is the EXCLAMATION token, items[2] is the count
+        count = int(items[2])
+        return Pat.replicate(element, count)
+
+    def ratio(self, items):
+        """Transform ratio patterns like bd*3%2."""
+        element = items[0]
+        # items[1]=MULTIPLY, items[2]=numerator, items[3]=PERCENT, items[4]=denominator
+        numerator = int(items[2])
+        denominator = int(items[4])
+        return Pat.ratio(element, numerator, denominator)
+
+    def polymetric_sub(self, items):
+        """Transform polymetric patterns with subdivision like {a,b}%4."""
+        # items structure: {, pattern, comma, pattern, ..., }, PERCENT, numeric_value
+        # Find the last numeric value (subdivision)
+        subdivision = int(items[-1])
+        # Everything else except the PERCENT and subdivision are pattern-related
+        patterns = []
+        for item in items[:-2]:  # Skip PERCENT and subdivision
+            if hasattr(item, "unwrap"):  # It's a pattern
+                patterns.append(item)
+        return Pat.polymetric_sub(patterns, subdivision)
+
+    def dot_group(self, items):
+        """Transform dot grouping patterns like bd sd . hh cp."""
+        # Find the DOT token and split the elements
+        dot_index = -1
+        for i, item in enumerate(items):
+            if hasattr(item, "type") and item.type == "DOT":
+                dot_index = i
+                break
+
+        if dot_index == -1:
+            raise ValueError("DOT not found in dot_group")
+
+        left_elements = items[:dot_index]
+        right_elements = items[dot_index + 1 :]
+
+        # Create sequences from left and right parts
+        left_seq = (
+            Pat.seq(left_elements) if len(left_elements) > 1 else left_elements[0]
+        )
+        right_seq = (
+            Pat.seq(right_elements) if len(right_elements) > 1 else right_elements[0]
+        )
+
+        # Return a sequence of the two parts
+        return Pat.seq([left_seq, right_seq])
 
     # Probability
     def probability(self, items):

@@ -80,52 +80,6 @@ def test_parallel_pattern():
     assert "y" in values
 
 
-def test_scale_pattern_fast():
-    """Test scale pattern with factor > 1 (faster)."""
-    # Pattern equivalent to "x*2"
-    base_pattern = Pat.pure("x")
-    pattern = base_pattern.scale(Fraction(2))
-    stream = PatStream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
-
-    events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
-
-    # Should have 2 events (pattern repeated twice)
-    assert len(event_list) == 2
-
-    # First event: 0 to 0.5
-    _, first_event = event_list[0]
-    assert first_event.arc.start == Fraction(0)
-    assert first_event.arc.end == Fraction(1, 2)
-    assert first_event.val == "x"
-
-    # Second event: 0.5 to 1
-    _, second_event = event_list[1]
-    assert second_event.arc.start == Fraction(1, 2)
-    assert second_event.arc.end == Fraction(1)
-    assert second_event.val == "x"
-
-
-def test_scale_pattern_slow():
-    """Test scale pattern with factor < 1 (slower)."""
-    # Pattern equivalent to "x/2"
-    base_pattern = Pat.pure("x")
-    pattern = base_pattern.scale(Fraction(1, 2))
-    stream = PatStream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
-
-    events = stream.unstream(arc)
-    event_list = list(events)
-
-    assert len(event_list) == 1
-    _, event = event_list[0]
-    # Pattern is slowed down by factor of 2, so it only fills half the original time
-    assert event.arc.start == Fraction(0)
-    assert event.arc.end == Fraction(1)
-    assert event.val == "x"
-
-
 def test_repetition_fast():
     """Test fast repetition pattern."""
     # Pattern equivalent to "x!" with count 2
@@ -295,7 +249,7 @@ def test_alternating_pattern():
 def test_probability_pattern():
     """Test probability pattern (deterministic based on arc)."""
     base_pattern = Pat.pure("x")
-    pattern = Pat.probability(base_pattern, 1.0)  # Always include
+    pattern = Pat.probability(base_pattern, Fraction(1))  # Always include
     stream = PatStream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
@@ -307,7 +261,7 @@ def test_probability_pattern():
     assert event.val == "x"
 
     # Test with 0 probability
-    pattern_never = Pat.probability(base_pattern, 0.0)
+    pattern_never = Pat.probability(base_pattern, Fraction(0))
     stream_never = PatStream(pattern_never)
 
     events_never = stream_never.unstream(arc)
@@ -318,16 +272,16 @@ def test_probability_pattern():
 
 def test_complex_nested_pattern():
     """Test complex nested pattern combining multiple operations."""
-    # Pattern equivalent to "[x y]*2" - sequence repeated twice
+    # Pattern equivalent to "[x y]!2" - sequence replicated twice
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
-    pattern = seq.scale(Fraction(2))
+    pattern = Pat.replicate(seq, 2)
     stream = PatStream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
 
-    # Should have 4 events: x, y, x, y (sequence repeated twice)
+    # Should have 4 events: x, y, x, y (sequence replicated twice)
     assert len(event_list) == 4
 
     # First repetition
@@ -403,3 +357,132 @@ def test_partial_arc_query():
         assert not intersection.null(), (
             f"Event {event.val} at {event.arc.start}-{event.arc.end} should intersect with {arc.start}-{arc.end}"
         )
+
+
+# New TidalCycles features stream tests
+
+
+def test_replicate_stream():
+    """Test replicate patterns work with stream processing."""
+    from minipat.parser import parse_pattern
+
+    pattern = parse_pattern("bd!3")
+    stream = PatStream(pattern)
+    arc = Arc(Fraction(0), Fraction(1))
+
+    events = stream.unstream(arc)
+    event_list = sorted(events, key=lambda x: x[0].start)
+
+    # Should have 3 events (pattern replicated 3 times)
+    assert len(event_list) == 3
+
+    # Each event should be "bd"
+    for _, event in event_list:
+        assert event.val == "bd"
+
+    # Events should be evenly spaced
+    expected_duration = Fraction(1, 3)
+    for i, (_, event) in enumerate(event_list):
+        expected_start = i * expected_duration
+        expected_end = (i + 1) * expected_duration
+        assert event.arc.start == expected_start
+        assert event.arc.end == expected_end
+
+
+def test_ratio_stream():
+    """Test ratio patterns work with stream processing."""
+    from minipat.parser import parse_pattern
+
+    pattern = parse_pattern("bd*2%1")  # 2/1 ratio
+    stream = PatStream(pattern)
+    arc = Arc(Fraction(0), Fraction(1))
+
+    events = stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have events (exact count depends on implementation)
+    assert len(event_list) >= 1
+
+    # All events should be "bd"
+    for _, event in event_list:
+        assert event.val == "bd"
+
+
+def test_polymetric_subdivision_stream():
+    """Test polymetric subdivision patterns work with stream processing."""
+    from minipat.parser import parse_pattern
+
+    pattern = parse_pattern("{bd, sd}%2")
+    stream = PatStream(pattern)
+    arc = Arc(Fraction(0), Fraction(1))
+
+    events = stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have events from both patterns
+    assert len(event_list) >= 2
+
+    # Should have both "bd" and "sd" events
+    values = [event.val for _, event in event_list]
+    assert "bd" in values
+    assert "sd" in values
+
+
+def test_dot_grouping_stream():
+    """Test dot grouping patterns work with stream processing."""
+    from minipat.parser import parse_pattern
+
+    pattern = parse_pattern("bd sd . hh cp")
+    stream = PatStream(pattern)
+    arc = Arc(Fraction(0), Fraction(1))
+
+    events = stream.unstream(arc)
+    event_list = sorted(events, key=lambda x: x[0].start)
+
+    # Should have 4 events total
+    assert len(event_list) == 4
+
+    # Should have all the expected values
+    values = [event.val for _, event in event_list]
+    assert values == ["bd", "sd", "hh", "cp"]
+
+
+def test_new_features_stream_integration():
+    """Test that new patterns integrate properly with stream processing."""
+    from minipat.parser import parse_pattern
+
+    # Basic smoke test - these should not crash
+    patterns = ["bd!3", "bd*2%1", "{bd, sd}%2", "bd sd . hh cp"]
+
+    for pattern_str in patterns:
+        pat = parse_pattern(pattern_str)
+        stream = PatStream(pat)
+        arc = Arc(Fraction(0), Fraction(1))
+        # Should not crash
+        events = stream.unstream(arc)
+        assert events is not None
+
+        # Should have some events
+        event_list = list(events)
+        assert len(event_list) > 0
+
+
+def test_complex_new_features_stream():
+    """Test complex combinations of new features with streams."""
+    from minipat.parser import parse_pattern
+
+    # Complex pattern with multiple new features
+    pattern = parse_pattern("{bd!2, sd*3%2}%4")
+    stream = PatStream(pattern)
+    arc = Arc(Fraction(0), Fraction(1))
+
+    events = stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have events
+    assert len(event_list) > 0
+
+    # Should contain both bd and sd
+    values = [event.val for _, event in event_list]
+    assert "bd" in values
+    assert "sd" in values

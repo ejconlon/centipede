@@ -1,10 +1,7 @@
-from fractions import Fraction
-
 from minipat.pat import (
     Pat,
     PatPar,
     PatPure,
-    PatScale,
     PatSeq,
 )
 
@@ -37,15 +34,6 @@ def test_pat_par():
     par = Pat.par(pats)
 
     assert isinstance(par.unwrap, PatPar)
-
-
-def test_pat_scale():
-    """Test pattern scaling."""
-    pat = Pat.pure("test")
-    scaled = pat.scale(Fraction(2))
-
-    assert isinstance(scaled.unwrap, PatScale)
-    assert scaled.unwrap.factor == Fraction(2)
 
 
 def test_pat_map():

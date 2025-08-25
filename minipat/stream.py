@@ -15,10 +15,12 @@ from minipat.pat import (
     PatEuclidean,
     PatPar,
     PatPolymetric,
+    PatPolymetricSub,
     PatProbability,
     PatPure,
+    PatRatio,
+    PatReplicate,
     PatRepetition,
-    PatScale,
     PatSelect,
     PatSeq,
     PatSilence,
@@ -88,38 +90,6 @@ class PatStream[T](Stream[T]):
                 # Pure patterns generate events spanning the entire arc
                 event = Ev(arc, val)
                 return ev_heap_singleton(event)
-
-            case PatScale(factor, child):
-                if factor <= 0:
-                    return ev_heap_empty()
-
-                scale_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
-
-                if factor >= 1:
-                    # Fast scaling - repeat the pattern 'factor' times
-                    repetitions = int(factor)
-                    rep_duration = arc.length() / repetitions
-
-                    for i in range(repetitions):
-                        rep_start = arc.start + i * rep_duration
-                        rep_arc = Arc(rep_start, rep_start + rep_duration)
-
-                        if not arc.intersect(rep_arc).null():
-                            child_events = self._query_pattern(child, rep_arc)
-                            for _, ev in child_events:
-                                if not arc.intersect(ev.arc).null():
-                                    scale_result = ev_heap_push(ev, scale_result)
-                else:
-                    # Slow scaling - stretch the pattern
-                    stretched_arc = arc.scale(1 / factor)
-                    child_events = self._query_pattern(child, stretched_arc)
-                    for _, ev in child_events:
-                        stretched_ev = ev.scale(factor)
-                        # Include events that intersect with query arc
-                        if not arc.intersect(stretched_ev.arc).null():
-                            scale_result = ev_heap_push(stretched_ev, scale_result)
-
-                return scale_result
 
             case PatSeq(children):
                 if len(children) == 0:
@@ -264,6 +234,50 @@ class PatStream[T](Stream[T]):
                 cycle_index = int(arc.start) % len(patterns)
                 chosen_pattern = patterns[cycle_index]
                 return self._query_pattern(chosen_pattern, arc)
+
+            case PatReplicate(pattern, count):
+                if count <= 0:
+                    return ev_heap_empty()
+                # Replicate is similar to repetition but simpler - just repeat the pattern count times
+                replicate_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                rep_duration = arc.length() / count
+                for i in range(count):
+                    rep_start = arc.start + i * rep_duration
+                    rep_arc = Arc(rep_start, rep_start + rep_duration)
+                    if not arc.intersect(rep_arc).null():
+                        child_events = self._query_pattern(pattern, rep_arc)
+                        for _, ev in child_events:
+                            if not arc.intersect(ev.arc).null():
+                                replicate_result = ev_heap_push(ev, replicate_result)
+                return replicate_result
+
+            case PatRatio(pattern, numerator, denominator):
+                if denominator <= 0 or numerator <= 0:
+                    return ev_heap_empty()
+                # Ratio is like repetition with a fractional factor
+                ratio = Fraction(numerator, denominator)
+                stretched_arc = arc.scale(1 / ratio)
+                pattern_events = self._query_pattern(pattern, stretched_arc)
+                ratio_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                for _, ev in pattern_events:
+                    scaled_ev = ev.scale(ratio)
+                    if not arc.intersect(scaled_ev.arc).null():
+                        ratio_result = ev_heap_push(scaled_ev, ratio_result)
+                return ratio_result
+
+            case PatPolymetricSub(patterns, subdivision):
+                if len(patterns) == 0 or subdivision <= 0:
+                    return ev_heap_empty()
+                # Similar to polymetric but with subdivision factor
+                poly_sub_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                sub_arc = arc.scale(Fraction(1, subdivision))
+                for pattern in patterns:
+                    pattern_events = self._query_pattern(pattern, sub_arc)
+                    for _, ev in pattern_events:
+                        scaled_ev = ev.scale(Fraction(subdivision))
+                        if not arc.intersect(scaled_ev.arc).null():
+                            poly_sub_result = ev_heap_push(scaled_ev, poly_sub_result)
+                return poly_sub_result
 
             case _:
                 return ev_heap_empty()

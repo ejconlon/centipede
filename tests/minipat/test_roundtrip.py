@@ -264,3 +264,89 @@ def test_complex_compositions():
 
     for pattern, expected in complex_patterns:
         round_trip_test(pattern, expected)
+
+
+# New TidalCycles features round-trip tests
+
+
+def test_replicate_roundtrip():
+    """Test replicate patterns round-trip correctly."""
+    round_trip_test("bd!3")
+    round_trip_test("sd!2")
+    round_trip_test("hh!5")
+
+
+def test_ratio_roundtrip():
+    """Test ratio patterns round-trip correctly."""
+    round_trip_test("bd*3%2")
+    round_trip_test("sd*4%3")
+    round_trip_test("hh*2%1")
+
+
+def test_polymetric_subdivision_roundtrip():
+    """Test polymetric subdivision patterns round-trip correctly."""
+    round_trip_test("{bd, sd}%4")
+    round_trip_test("{hh, cp, oh}%8")
+    round_trip_test("{bd sd, hh*2}%2")
+
+
+def test_dot_grouping_roundtrip():
+    """Test dot grouping patterns round-trip correctly."""
+    # Note: dot grouping creates sequences, but the printer simplifies them
+    # so "bd . sd" becomes "bd sd" which is semantically equivalent
+    round_trip_test("bd sd . hh cp", "[bd sd] [hh cp]")
+    round_trip_test("bd . sd", "bd sd")
+    round_trip_test("a b c . x y z", "[a b c] [x y z]")
+
+
+def test_new_features_combinations():
+    """Test combinations of new features round-trip correctly."""
+    round_trip_test("bd!3 . sd*2%3", "bd!3 sd*2%3")
+    round_trip_test("{bd!2, sd}%4")
+    round_trip_test("bd*3%2 sd!4")
+
+
+def test_new_features_nested():
+    """Test new features with nested patterns round-trip correctly."""
+    round_trip_test("[bd sd]!2")
+    round_trip_test("[bd | sd]*3%2")
+    round_trip_test("{[bd sd], [hh cp]}%4", "{bd sd, hh cp}%4")
+
+
+def test_new_features_with_existing():
+    """Test new features combined with existing features."""
+    round_trip_test("bd?!3")
+    round_trip_test("bd?*2%3")
+    round_trip_test("bd(3,8)!2")
+    round_trip_test("bd(3,8)*2%1")
+    round_trip_test("bd:0!3")
+    round_trip_test("sd:1*4%2")
+
+
+def test_new_features_whitespace():
+    """Test that whitespace is handled correctly in new features."""
+    patterns_with_expected = [
+        ("bd ! 3", "bd!3"),
+        ("bd * 3 % 2", "bd*3%2"),
+        ("{ bd , sd } % 4", "{bd, sd}%4"),
+        ("bd sd   .   hh cp", "[bd sd] [hh cp]"),
+    ]
+
+    for original, expected in patterns_with_expected:
+        round_trip_test(original, expected)
+
+
+def test_new_features_chaining():
+    """Test chaining operations with new features."""
+    # Note: Current grammar doesn't support direct chaining like bd!2*3
+    # For now, we'll test simpler cases that work
+    round_trip_test("[bd sd]!2")  # Just replicate
+    round_trip_test("[bd sd]*2")  # Just multiply
+
+
+def test_new_features_edge_cases():
+    """Test edge cases with new features."""
+    # Zero and negative counts should work in parser but may have special behavior in stream
+    round_trip_test("bd!0")
+    round_trip_test("bd*0%1")
+    round_trip_test("{bd, sd}%1")

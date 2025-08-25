@@ -8,9 +8,12 @@ from minipat.pat import (
     PatEuclidean,
     PatPar,
     PatPolymetric,
+    PatPolymetricSub,
     PatProbability,
     PatPure,
+    PatRatio,
     PatRepetition,
+    PatReplicate,
     PatSelect,
     PatSeq,
     PatSilence,
@@ -361,3 +364,75 @@ def test_polyrhythmic_pattern():
 
     # Second should be "hh*8" (repetition)
     assert isinstance(patterns[1].unwrap, PatRepetition)
+
+
+# New TidalCycles features tests
+
+
+def test_parse_replicate():
+    """Test parsing replicate patterns."""
+    result = parse_pattern("bd!3")
+    assert isinstance(result.unwrap, PatReplicate)
+    assert result.unwrap.count == 3
+    assert isinstance(result.unwrap.pattern.unwrap, PatPure)
+    assert result.unwrap.pattern.unwrap.val == "bd"
+
+
+def test_parse_ratio():
+    """Test parsing ratio patterns."""
+    result = parse_pattern("bd*3%2")
+    assert isinstance(result.unwrap, PatRatio)
+    assert result.unwrap.numerator == 3
+    assert result.unwrap.denominator == 2
+    assert isinstance(result.unwrap.pattern.unwrap, PatPure)
+    assert result.unwrap.pattern.unwrap.val == "bd"
+
+
+def test_parse_polymetric_subdivision():
+    """Test parsing polymetric subdivision patterns."""
+    result = parse_pattern("{bd, sd}%4")
+    assert isinstance(result.unwrap, PatPolymetricSub)
+    assert result.unwrap.subdivision == 4
+    assert len(result.unwrap.patterns) == 2
+
+
+def test_parse_dot_grouping():
+    """Test parsing dot grouping patterns."""
+    result = parse_pattern("bd sd . hh cp")
+    assert isinstance(result.unwrap, PatSeq)
+    assert len(result.unwrap.children) == 2
+    # Both sides should be sequences
+    assert isinstance(result.unwrap.children[0].unwrap, PatSeq)
+    assert isinstance(result.unwrap.children[1].unwrap, PatSeq)
+
+
+def test_parse_complex_new_features():
+    """Test parsing complex combinations of new features."""
+    # Replicate with selection
+    result = parse_pattern("bd:0!2")
+    assert isinstance(result.unwrap, PatReplicate)
+    assert isinstance(result.unwrap.pattern.unwrap, PatSelect)
+
+    # Ratio with probability
+    result = parse_pattern("bd?*2%3")
+    assert isinstance(result.unwrap, PatRatio)
+    assert isinstance(result.unwrap.pattern.unwrap, PatProbability)
+
+    # Polymetric subdivision with replicate inside
+    result = parse_pattern("{bd!2, sd}%4")
+    assert isinstance(result.unwrap, PatPolymetricSub)
+    patterns = list(result.unwrap.patterns)
+    assert isinstance(patterns[0].unwrap, PatReplicate)
+
+
+def test_parse_nested_new_features():
+    """Test parsing nested new features."""
+    # Replicate of sequence
+    result = parse_pattern("[bd sd]!2")
+    assert isinstance(result.unwrap, PatReplicate)
+    assert isinstance(result.unwrap.pattern.unwrap, PatSeq)
+
+    # Ratio of choice
+    result = parse_pattern("[bd | sd]*2%1")
+    assert isinstance(result.unwrap, PatRatio)
+    assert isinstance(result.unwrap.pattern.unwrap, PatChoice)

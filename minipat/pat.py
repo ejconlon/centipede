@@ -10,7 +10,6 @@ from functools import partial
 from typing import Any, Callable, Tuple
 
 from centipede.common import PartialMatchException, ignore_arg
-from minipat.common import Factor
 from spiny import Box, PSeq
 
 
@@ -193,25 +192,45 @@ class Pat[T]:
         """
         return Pat(PatAlternating(PSeq.mk(patterns)))
 
-    def scale(self, factor: Factor) -> Pat[T]:
-        """Scale the pattern by a factor.
+    @staticmethod
+    def replicate(pattern: Pat[T], count: int) -> Pat[T]:
+        """Create a replicate pattern (!).
 
         Args:
-            factor: The scaling factor
+            pattern: The pattern to replicate
+            count: The number of times to replicate
 
         Returns:
-            A scaled version of the pattern
+            A replicated pattern
         """
-        if factor <= 0:
-            return Pat.silence()
-        elif factor == 1:
-            return self
-        else:
-            match self.unwrap:
-                case PatScale(f, p):
-                    return p.scale(f * factor)
-                case _:
-                    return Pat(PatScale(factor, self))
+        return Pat(PatReplicate(pattern, count))
+
+    @staticmethod
+    def ratio(pattern: Pat[T], numerator: int, denominator: int) -> Pat[T]:
+        """Create a ratio pattern (%).
+
+        Args:
+            pattern: The pattern to apply ratio to
+            numerator: The numerator of the ratio
+            denominator: The denominator of the ratio
+
+        Returns:
+            A ratio pattern
+        """
+        return Pat(PatRatio(pattern, numerator, denominator))
+
+    @staticmethod
+    def polymetric_sub(patterns: Iterable[Pat[T]], subdivision: int) -> Pat[T]:
+        """Create a polymetric pattern with subdivision ({}%).
+
+        Args:
+            patterns: The patterns to play polymetrically
+            subdivision: The subdivision factor
+
+        Returns:
+            A polymetric subdivision pattern
+        """
+        return Pat(PatPolymetricSub(PSeq.mk(patterns), subdivision))
 
     def map[U](self, fn: Callable[[T], U]) -> Pat[U]:
         """Map a function over the pattern values.
@@ -281,19 +300,6 @@ class PatPure[T](PatF[T, Any]):
     """
 
     val: T
-
-
-@dataclass(frozen=True)
-class PatScale[T, R](PatF[T, R]):
-    """Pattern functor for time scaling.
-
-    Args:
-        factor: The scaling factor
-        child: The child pattern to scale
-    """
-
-    factor: Factor
-    child: R
 
 
 @dataclass(frozen=True)
@@ -422,6 +428,47 @@ class PatAlternating[T, R](PatF[T, R]):
     patterns: PSeq[R]
 
 
+@dataclass(frozen=True)
+class PatReplicate[T, R](PatF[T, R]):
+    """Pattern functor for replicate patterns (!).
+
+    Args:
+        pattern: The pattern to replicate
+        count: The number of times to replicate
+    """
+
+    pattern: R
+    count: int
+
+
+@dataclass(frozen=True)
+class PatRatio[T, R](PatF[T, R]):
+    """Pattern functor for ratio patterns (%).
+
+    Args:
+        pattern: The pattern to apply ratio to
+        numerator: The numerator of the ratio
+        denominator: The denominator of the ratio
+    """
+
+    pattern: R
+    numerator: int
+    denominator: int
+
+
+@dataclass(frozen=True)
+class PatPolymetricSub[T, R](PatF[T, R]):
+    """Pattern functor for polymetric patterns with subdivision ({}%).
+
+    Args:
+        patterns: The patterns to play polymetrically
+        subdivision: The subdivision factor
+    """
+
+    patterns: PSeq[R]
+    subdivision: int
+
+
 def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[T]], Z]:
     """Create a catamorphism with environment.
 
@@ -439,9 +486,6 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
                 return fn(env, pf)
             case PatPure(_):
                 return fn(env, pf)
-            case PatScale(f, c):
-                cz = wrapper(env, c)
-                return fn(env, PatScale(f, cz))
             case PatSeq(cs):
                 czs = PSeq.mk(wrapper(env, c) for c in cs)
                 return fn(env, PatSeq(czs))
@@ -472,6 +516,15 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatAlternating(ps):
                 pzs = PSeq.mk(wrapper(env, p) for p in ps)
                 return fn(env, PatAlternating(pzs))
+            case PatReplicate(p, count):
+                pz = wrapper(env, p)
+                return fn(env, PatReplicate(pz, count))
+            case PatRatio(p, num, denom):
+                pz = wrapper(env, p)
+                return fn(env, PatRatio(pz, num, denom))
+            case PatPolymetricSub(ps, subdivision):
+                pzs = PSeq.mk(wrapper(env, p) for p in ps)
+                return fn(env, PatPolymetricSub(pzs, subdivision))
             case _:
                 raise PartialMatchException(pf)
 
@@ -528,8 +581,6 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat.silence()
             case PatPure(val):
                 return Pat(PatPure(fn(val)))
-            case PatScale(f, c):
-                return Pat(PatScale(f, c))
             case PatSeq(cs):
                 return Pat(PatSeq(cs))
             case PatPar(cs):
@@ -550,6 +601,12 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatSelect(p, selector))
             case PatAlternating(ps):
                 return Pat(PatAlternating(ps))
+            case PatReplicate(p, count):
+                return Pat(PatReplicate(p, count))
+            case PatRatio(p, num, denom):
+                return Pat(PatRatio(p, num, denom))
+            case PatPolymetricSub(ps, subdivision):
+                return Pat(PatPolymetricSub(ps, subdivision))
             case _:
                 raise PartialMatchException(pf)
 
