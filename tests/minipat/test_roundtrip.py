@@ -6,7 +6,7 @@ Based on test patterns from https://raw.githubusercontent.com/ejconlon/minipat/r
 import pytest
 
 from minipat.parser import parse_pattern
-from minipat.printer import NotImplementedError, print_pattern
+from minipat.printer import print_pattern
 
 
 def round_trip_test(pattern_str: str, expected_str: str | None = None) -> None:
@@ -168,14 +168,15 @@ def test_patpar_now_printable():
     assert result == "[bd, sd]"
 
 
-def test_custom_probability_not_printable():
-    """Test that custom probability values raise NotImplementedError."""
+def test_custom_probability_printable():
+    """Test that custom probability values are printable."""
+    from fractions import Fraction
+
     from minipat.pat import Pat
 
-    pat = Pat.probability(Pat.pure("bd"), 0.75)
-
-    with pytest.raises(NotImplementedError, match="custom probability"):
-        print_pattern(pat)
+    pat = Pat.probability(Pat.pure("bd"), Fraction(3, 4))
+    result = print_pattern(pat)
+    assert result == "bd?(3/4)"
 
 
 def test_empty_pattern_fails():

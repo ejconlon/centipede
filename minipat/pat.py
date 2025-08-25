@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
+from fractions import Fraction
 from functools import partial
 from typing import Any, Callable, Tuple
 
@@ -155,12 +156,12 @@ class Pat[T]:
         return Pat(PatElongation(pattern, count))
 
     @staticmethod
-    def probability(pattern: Pat[T], prob: float = 0.5) -> Pat[T]:
+    def probability(pattern: Pat[T], prob: Fraction = Fraction(1, 2)) -> Pat[T]:
         """Create a probabilistic pattern.
 
         Args:
             pattern: The pattern to apply probability to
-            prob: The probability (0.0 to 1.0)
+            prob: The probability (0 to 1 as a Fraction)
 
         Returns:
             A pattern that plays with the given probability
@@ -390,11 +391,11 @@ class PatProbability[T, R](PatF[T, R]):
 
     Args:
         pattern: The pattern to apply probability to
-        probability: The probability value (0.0 to 1.0)
+        probability: The probability value (0 to 1 as a Fraction)
     """
 
     pattern: R
-    probability: float
+    probability: Fraction
 
 
 @dataclass(frozen=True)
