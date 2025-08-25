@@ -1,0 +1,271 @@
+from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
+from fractions import Fraction
+from typing import List, override
+
+from minipat.arc import Arc
+from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
+from minipat.pat import (
+    Pat,
+    PatAlternating,
+    PatChoice,
+    PatElongation,
+    PatEuclidean,
+    PatGroup,
+    PatPar,
+    PatPolymetric,
+    PatProbability,
+    PatPure,
+    PatRepetition,
+    PatScale,
+    PatSelect,
+    PatSeq,
+    PatSilence,
+    RepetitionOp,
+)
+from spiny.heapmap import PHeapMap
+
+
+# sealed
+class Stream[T](metaclass=ABCMeta):
+    """A stream of events in time."""
+
+    @abstractmethod
+    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+        """Emit all events that start or end in the given arc."""
+        ...
+
+
+@dataclass(frozen=True)
+class PatStream[T](Stream[T]):
+    pat: Pat[T]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+        """Convert pattern to events within the given arc using proper streaming logic."""
+        return self._query_pattern(self.pat, arc)
+
+    def _query_pattern(self, pat: Pat[T], arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+        """Query a pattern for events within the given arc."""
+        if arc.null():
+            return ev_heap_empty()
+
+        pf = pat.unwrap
+        match pf:
+            case PatSilence():
+                return ev_heap_empty()
+
+            case PatPure(val):
+                # Pure patterns generate events spanning the entire arc
+                event = Ev(arc, val)
+                return ev_heap_singleton(event)
+
+            case PatScale(factor, child):
+                if factor <= 0:
+                    return ev_heap_empty()
+
+                scale_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+
+                if factor >= 1:
+                    # Fast scaling - repeat the pattern 'factor' times
+                    repetitions = int(factor)
+                    rep_duration = arc.length() / repetitions
+
+                    for i in range(repetitions):
+                        rep_start = arc.start + i * rep_duration
+                        rep_arc = Arc(rep_start, rep_start + rep_duration)
+
+                        if not arc.intersect(rep_arc).null():
+                            child_events = self._query_pattern(child, rep_arc)
+                            for _, ev in child_events:
+                                if not arc.intersect(ev.arc).null():
+                                    scale_result = ev_heap_push(ev, scale_result)
+                else:
+                    # Slow scaling - stretch the pattern
+                    stretched_arc = arc.scale(1 / factor)
+                    child_events = self._query_pattern(child, stretched_arc)
+                    for _, ev in child_events:
+                        stretched_ev = ev.scale(factor)
+                        # Include events that intersect with query arc
+                        if not arc.intersect(stretched_ev.arc).null():
+                            scale_result = ev_heap_push(stretched_ev, scale_result)
+
+                return scale_result
+
+            case PatSeq(children):
+                if len(children) == 0:
+                    return ev_heap_empty()
+
+                seq_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                child_duration = arc.length() / len(children)
+
+                for i, child in enumerate(children):
+                    child_start = arc.start + i * child_duration
+                    child_arc = Arc(child_start, child_start + child_duration)
+
+                    # Only query if child arc intersects with our query arc
+                    intersection = child_arc.intersect(arc)
+                    if not intersection.null():
+                        child_events = self._query_pattern(child, child_arc)
+                        for _, ev in child_events:
+                            # Only include events that intersect with query arc
+                            if not arc.intersect(ev.arc).null():
+                                seq_result = ev_heap_push(ev, seq_result)
+
+                return seq_result
+
+            case PatGroup(children):
+                # Groups behave like sequences
+                return self._query_pattern(Pat(PatSeq(children)), arc)
+
+            case PatPar(children):
+                # All children play simultaneously across the entire arc
+                par_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                for child in children:
+                    child_events = self._query_pattern(child, arc)
+                    for _, ev in child_events:
+                        par_result = ev_heap_push(ev, par_result)
+                return par_result
+
+            case PatChoice(choices):
+                if len(choices) == 0:
+                    return ev_heap_empty()
+
+                # Choose based on cycle - use floor of start time as cycle index
+                cycle_index = int(arc.start) % len(choices)
+                chosen_pattern = choices[cycle_index]
+                return self._query_pattern(chosen_pattern, arc)
+
+            case PatEuclidean(atom, hits, steps, rotation):
+                if steps <= 0 or hits <= 0:
+                    return ev_heap_empty()
+
+                euc_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                step_duration = arc.length() / steps
+                euclidean_pattern = _generate_euclidean(hits, steps, rotation)
+
+                for i, is_hit in enumerate(euclidean_pattern):
+                    if is_hit:
+                        step_start = arc.start + i * step_duration
+                        step_arc = Arc(step_start, step_start + step_duration)
+
+                        # Only process if step intersects with query arc
+                        if not arc.intersect(step_arc).null():
+                            atom_events = self._query_pattern(atom, step_arc)
+                            for _, ev in atom_events:
+                                # Use step_arc for the event timing
+                                step_ev = Ev(step_arc, ev.val)
+                                if not arc.intersect(step_ev.arc).null():
+                                    euc_result = ev_heap_push(step_ev, euc_result)
+
+                return euc_result
+
+            case PatPolymetric(patterns):
+                # All patterns play simultaneously (like parallel)
+                poly_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                for pattern in patterns:
+                    pattern_events = self._query_pattern(pattern, arc)
+                    for _, ev in pattern_events:
+                        poly_result = ev_heap_push(ev, poly_result)
+                return poly_result
+
+            case PatRepetition(pattern, operator, count):
+                if count <= 0:
+                    return ev_heap_empty()
+
+                rep_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+
+                match operator:
+                    case RepetitionOp.FAST:
+                        # Faster repetition - compress pattern and repeat
+                        rep_duration = arc.length() / count
+                        for i in range(count):
+                            rep_start = arc.start + i * rep_duration
+                            rep_arc = Arc(rep_start, rep_start + rep_duration)
+
+                            if not arc.intersect(rep_arc).null():
+                                pattern_events = self._query_pattern(pattern, rep_arc)
+                                for _, ev in pattern_events:
+                                    if not arc.intersect(ev.arc).null():
+                                        rep_result = ev_heap_push(ev, rep_result)
+
+                    case RepetitionOp.SLOW:
+                        # Slower repetition - stretch pattern
+                        stretched_arc = arc.scale(Fraction(count))
+                        pattern_events = self._query_pattern(pattern, stretched_arc)
+                        for _, ev in pattern_events:
+                            # Scale events back down
+                            slow_ev = ev.scale(Fraction(1, count))
+                            if not arc.intersect(slow_ev.arc).null():
+                                rep_result = ev_heap_push(slow_ev, rep_result)
+
+                return rep_result
+
+            case PatElongation(pattern, count):
+                if count <= 0:
+                    return ev_heap_empty()
+
+                # Elongation stretches the pattern
+                stretched_arc = arc.scale(Fraction(count))
+                pattern_events = self._query_pattern(pattern, stretched_arc)
+                elong_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+
+                for _, ev in pattern_events:
+                    elongated_ev = ev.scale(Fraction(1, count))
+                    if not arc.intersect(elongated_ev.arc).null():
+                        elong_result = ev_heap_push(elongated_ev, elong_result)
+
+                return elong_result
+
+            case PatProbability(pattern, prob):
+                # Use arc start time as seed for deterministic randomness
+                import random
+
+                random.seed(hash(arc.start))
+
+                if random.random() < prob:
+                    return self._query_pattern(pattern, arc)
+                return ev_heap_empty()
+
+            case PatSelect(pattern, _):
+                # For now, just return the pattern as-is
+                return self._query_pattern(pattern, arc)
+
+            case PatAlternating(patterns):
+                if len(patterns) == 0:
+                    return ev_heap_empty()
+
+                # Alternate based on cycle
+                cycle_index = int(arc.start) % len(patterns)
+                chosen_pattern = patterns[cycle_index]
+                return self._query_pattern(chosen_pattern, arc)
+
+            case _:
+                return ev_heap_empty()
+
+
+def _generate_euclidean(hits: int, steps: int, rotation: int = 0) -> List[bool]:
+    """Generate a Euclidean rhythm pattern using Bresenham's line algorithm."""
+    if steps <= 0 or hits <= 0:
+        return []
+
+    if hits >= steps:
+        return [True] * steps
+
+    # Use Bresenham's line algorithm to distribute hits evenly
+    pattern = [False] * steps
+    slope = hits / steps
+    previous = 0.0
+
+    for i in range(steps):
+        current = (i + 1) * slope
+        if int(current) != int(previous):
+            pattern[i] = True
+        previous = current
+
+    # Apply rotation
+    if rotation != 0:
+        rotation = rotation % steps
+        pattern = pattern[rotation:] + pattern[:rotation]
+
+    return pattern

@@ -21,7 +21,7 @@ from typing import (
     override,
 )
 
-from centipede.spiny.common import Box
+from spiny.common import Box
 
 T = TypeVar("T")
 

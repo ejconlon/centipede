@@ -16,8 +16,8 @@ from centipede.actor import (
     System,
     new_system,
 )
-from centipede.spiny.common import Box
-from centipede.spiny.heapmap import PHeapMap
+from spiny.common import Box
+from spiny.heapmap import PHeapMap
 
 
 def _assert_pos_lt(x, n):

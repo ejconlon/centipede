@@ -6,8 +6,8 @@ import numpy as np
 import numpy.typing as npt
 import plotext as plt
 
-from centipede.minipat.arc import Arc
-from centipede.minipat.common import ONE, ZERO, Time
+from minipat.arc import Arc
+from minipat.common import ONE, ZERO, Time
 
 type Freq = Fraction
 type Phase = Fraction
