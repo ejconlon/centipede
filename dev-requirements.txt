@@ -30,7 +30,7 @@ pure-eval==0.2.3
 pygments==2.19.2
 pytest==8.4.1
 pytest-xdist==3.8.0
-python-rtmidi @ git+https://github.com/ejconlon/python-rtmidi@20d89ceb79fc4c18af197aaf6a8223a06160bf17
+python-rtmidi @ git+https://github.com/SpotlightKid/python-rtmidi@e3a71480a1965a313f697b528196f27bb6da13e9
 ruff==0.12.1
 sortedcontainers==2.4.0
 stack-data==0.6.3
