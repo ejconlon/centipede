@@ -20,7 +20,11 @@ from minipat.pat import (
 
 
 class NotImplementedError(Exception):
-    """Raised when a Pat constructor cannot be printed."""
+    """Raised when a Pat constructor cannot be printed.
+
+    This exception is raised when attempting to print a pattern
+    that doesn't have a corresponding representation in mini notation.
+    """
 
     pass
 
