@@ -18,7 +18,6 @@ from minipat.pat import (
     PatPolymetricSub,
     PatProbability,
     PatPure,
-    PatRatio,
     PatReplicate,
     PatRepetition,
     PatSelect,
@@ -173,16 +172,35 @@ class PatStream[T](Stream[T]):
                 match operator:
                     case RepetitionOp.FAST:
                         # Faster repetition - compress pattern and repeat
-                        rep_duration = arc.length() / count
-                        for i in range(count):
-                            rep_start = arc.start + i * rep_duration
-                            rep_arc = Arc(rep_start, rep_start + rep_duration)
+                        if hasattr(count, "denominator") and count.denominator != 1:
+                            # Fractional count: scale the pattern appropriately
+                            scaled_arc = arc.scale(Fraction(1) / Fraction(count))
+                            pattern_events = self._query_pattern(pattern, scaled_arc)
+                            for _, ev in pattern_events:
+                                # Scale events back up
+                                fast_ev = ev.scale(Fraction(count))
+                                if not arc.intersect(fast_ev.arc).null():
+                                    rep_result = ev_heap_push(fast_ev, rep_result)
+                        else:
+                            # Integer count: create multiple compressed copies
+                            int_count = (
+                                int(count) if hasattr(count, "numerator") else count
+                            )
+                            if int_count > 0:
+                                rep_duration = arc.length() / int_count
+                                for i in range(int_count):
+                                    rep_start = arc.start + i * rep_duration
+                                    rep_arc = Arc(rep_start, rep_start + rep_duration)
 
-                            if not arc.intersect(rep_arc).null():
-                                pattern_events = self._query_pattern(pattern, rep_arc)
-                                for _, ev in pattern_events:
-                                    if not arc.intersect(ev.arc).null():
-                                        rep_result = ev_heap_push(ev, rep_result)
+                                    if not arc.intersect(rep_arc).null():
+                                        pattern_events = self._query_pattern(
+                                            pattern, rep_arc
+                                        )
+                                        for _, ev in pattern_events:
+                                            if not arc.intersect(ev.arc).null():
+                                                rep_result = ev_heap_push(
+                                                    ev, rep_result
+                                                )
 
                     case RepetitionOp.SLOW:
                         # Slower repetition - stretch pattern
@@ -250,20 +268,6 @@ class PatStream[T](Stream[T]):
                             if not arc.intersect(ev.arc).null():
                                 replicate_result = ev_heap_push(ev, replicate_result)
                 return replicate_result
-
-            case PatRatio(pattern, numerator, denominator):
-                if denominator <= 0 or numerator <= 0:
-                    return ev_heap_empty()
-                # Ratio is like repetition with a fractional factor
-                ratio = Fraction(numerator, denominator)
-                stretched_arc = arc.scale(1 / ratio)
-                pattern_events = self._query_pattern(pattern, stretched_arc)
-                ratio_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
-                for _, ev in pattern_events:
-                    scaled_ev = ev.scale(ratio)
-                    if not arc.intersect(scaled_ev.arc).null():
-                        ratio_result = ev_heap_push(scaled_ev, ratio_result)
-                return ratio_result
 
             case PatPolymetricSub(patterns, subdivision):
                 if len(patterns) == 0 or subdivision <= 0:

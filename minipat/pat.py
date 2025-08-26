@@ -206,20 +206,6 @@ class Pat[T]:
         return Pat(PatReplicate(pattern, count))
 
     @staticmethod
-    def ratio(pattern: Pat[T], numerator: int, denominator: int) -> Pat[T]:
-        """Create a ratio pattern (%).
-
-        Args:
-            pattern: The pattern to apply ratio to
-            numerator: The numerator of the ratio
-            denominator: The denominator of the ratio
-
-        Returns:
-            A ratio pattern
-        """
-        return Pat(PatRatio(pattern, numerator, denominator))
-
-    @staticmethod
     def polymetric_sub(patterns: Iterable[Pat[T]], subdivision: int) -> Pat[T]:
         """Create a polymetric pattern with subdivision ({}%).
 
@@ -442,21 +428,6 @@ class PatReplicate[T, R](PatF[T, R]):
 
 
 @dataclass(frozen=True)
-class PatRatio[T, R](PatF[T, R]):
-    """Pattern functor for ratio patterns (%).
-
-    Args:
-        pattern: The pattern to apply ratio to
-        numerator: The numerator of the ratio
-        denominator: The denominator of the ratio
-    """
-
-    pattern: R
-    numerator: int
-    denominator: int
-
-
-@dataclass(frozen=True)
 class PatPolymetricSub[T, R](PatF[T, R]):
     """Pattern functor for polymetric patterns with subdivision ({}%).
 
@@ -519,9 +490,6 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatReplicate(p, count):
                 pz = wrapper(env, p)
                 return fn(env, PatReplicate(pz, count))
-            case PatRatio(p, num, denom):
-                pz = wrapper(env, p)
-                return fn(env, PatRatio(pz, num, denom))
             case PatPolymetricSub(ps, subdivision):
                 pzs = PSeq.mk(wrapper(env, p) for p in ps)
                 return fn(env, PatPolymetricSub(pzs, subdivision))
@@ -603,8 +571,6 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatAlternating(ps))
             case PatReplicate(p, count):
                 return Pat(PatReplicate(p, count))
-            case PatRatio(p, num, denom):
-                return Pat(PatRatio(p, num, denom))
             case PatPolymetricSub(ps, subdivision):
                 return Pat(PatPolymetricSub(ps, subdivision))
             case _:

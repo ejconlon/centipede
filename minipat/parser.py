@@ -19,7 +19,7 @@ start: pattern
 pattern: dot_group | element+
 
 // Elements can be various types
-element: elongation | repetition | replicate | ratio | probability | base_element
+element: elongation | repetition | replicate | probability | base_element
 base_element: atom | seq | choice | parallel | alternating | euclidean | polymetric | polymetric_sub
 
 // Basic atoms
@@ -47,7 +47,6 @@ polymetric_sub: "{" pattern ("," pattern)+ "}" PERCENT numeric_value
 // Repetition and speed modifiers
 repetition: (base_element | probability) MULTIPLY numeric_value | (base_element | probability) DIVIDE numeric_value | repetition DIVIDE numeric_value | repetition MULTIPLY numeric_value
 replicate: (base_element | probability) EXCLAMATION numeric_value | replicate EXCLAMATION numeric_value
-ratio: (base_element | probability) MULTIPLY numeric_value PERCENT numeric_value | replicate PERCENT numeric_value
 elongation: (base_element | probability) UNDERSCORE+ | (base_element | probability) AT+ | repetition UNDERSCORE+ | repetition AT+
 
 // Operator tokens
@@ -65,8 +64,8 @@ probability: atom "?" probability_value?
 probability_value: numeric_value
 
 // Numeric values - supports integers, decimals, and parenthesized fractions
-numeric_value: NUMBER | DECIMAL | "(" fraction ")"
-fraction: NUMBER "/" NUMBER
+numeric_value: NUMBER | DECIMAL | fraction | "(" fraction ")"
+fraction: NUMBER "%" NUMBER
 
 // Tokens
 SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
@@ -192,7 +191,7 @@ class PatternTransformer(Transformer):
         """Transform repetition patterns like bd*2 or bd/2."""
         element = items[0]
         op_str = str(items[1])
-        num = int(items[2])  # Convert Fraction to int for repetition count
+        num = items[2]  # Keep as is - can be int, float, or Fraction
 
         # Convert string operator to enum
         if op_str == "*":
@@ -217,14 +216,6 @@ class PatternTransformer(Transformer):
         # items[1] is the EXCLAMATION token, items[2] is the count
         count = int(items[2])
         return Pat.replicate(element, count)
-
-    def ratio(self, items):
-        """Transform ratio patterns like bd*3%2."""
-        element = items[0]
-        # items[1]=MULTIPLY, items[2]=numerator, items[3]=PERCENT, items[4]=denominator
-        numerator = int(items[2])
-        denominator = int(items[4])
-        return Pat.ratio(element, numerator, denominator)
 
     def polymetric_sub(self, items):
         """Transform polymetric patterns with subdivision like {a,b}%4."""
@@ -289,7 +280,7 @@ class PatternTransformer(Transformer):
         return items[0]
 
     def fraction(self, items):
-        """Transform fraction like 1/2 into Fraction."""
+        """Transform fraction like 1%2 into Fraction."""
         numerator = int(items[0])
         denominator = int(items[1])
         return Fraction(numerator, denominator)

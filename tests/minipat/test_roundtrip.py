@@ -280,7 +280,7 @@ def test_ratio_roundtrip():
     """Test ratio patterns round-trip correctly."""
     round_trip_test("bd*3%2")
     round_trip_test("sd*4%3")
-    round_trip_test("hh*2%1")
+    round_trip_test("hh*2%1", "hh*2")
 
 
 def test_polymetric_subdivision_roundtrip():
@@ -318,9 +318,9 @@ def test_new_features_with_existing():
     round_trip_test("bd?!3")
     round_trip_test("bd?*2%3")
     round_trip_test("bd(3,8)!2")
-    round_trip_test("bd(3,8)*2%1")
+    round_trip_test("bd(3,8)*2%1", "bd(3,8)*2")
     round_trip_test("bd:0!3")
-    round_trip_test("sd:1*4%2")
+    round_trip_test("sd:1*4%2", "sd:1*2")
 
 
 def test_new_features_whitespace():
@@ -348,5 +348,5 @@ def test_new_features_edge_cases():
     """Test edge cases with new features."""
     # Zero and negative counts should work in parser but may have special behavior in stream
     round_trip_test("bd!0")
-    round_trip_test("bd*0%1")
+    round_trip_test("bd*0%1", "bd*0")
     round_trip_test("{bd, sd}%1")

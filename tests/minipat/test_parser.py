@@ -1,3 +1,5 @@
+from fractions import Fraction
+
 import pytest
 
 from minipat.parser import parse_pattern
@@ -11,7 +13,6 @@ from minipat.pat import (
     PatPolymetricSub,
     PatProbability,
     PatPure,
-    PatRatio,
     PatRepetition,
     PatReplicate,
     PatSelect,
@@ -379,11 +380,11 @@ def test_parse_replicate():
 
 
 def test_parse_ratio():
-    """Test parsing ratio patterns."""
+    """Test parsing fractional repetition patterns."""
     result = parse_pattern("bd*3%2")
-    assert isinstance(result.unwrap, PatRatio)
-    assert result.unwrap.numerator == 3
-    assert result.unwrap.denominator == 2
+    assert isinstance(result.unwrap, PatRepetition)
+    assert result.unwrap.operator == RepetitionOp.FAST
+    assert result.unwrap.count == Fraction(3, 2)
     assert isinstance(result.unwrap.pattern.unwrap, PatPure)
     assert result.unwrap.pattern.unwrap.val == "bd"
 
@@ -413,9 +414,9 @@ def test_parse_complex_new_features():
     assert isinstance(result.unwrap, PatReplicate)
     assert isinstance(result.unwrap.pattern.unwrap, PatSelect)
 
-    # Ratio with probability
+    # Fractional repetition with probability
     result = parse_pattern("bd?*2%3")
-    assert isinstance(result.unwrap, PatRatio)
+    assert isinstance(result.unwrap, PatRepetition)
     assert isinstance(result.unwrap.pattern.unwrap, PatProbability)
 
     # Polymetric subdivision with replicate inside
@@ -432,7 +433,7 @@ def test_parse_nested_new_features():
     assert isinstance(result.unwrap, PatReplicate)
     assert isinstance(result.unwrap.pattern.unwrap, PatSeq)
 
-    # Ratio of choice
+    # Fractional repetition of choice
     result = parse_pattern("[bd | sd]*2%1")
-    assert isinstance(result.unwrap, PatRatio)
+    assert isinstance(result.unwrap, PatRepetition)
     assert isinstance(result.unwrap.pattern.unwrap, PatChoice)

@@ -16,7 +16,6 @@ from minipat.pat import (
     PatPolymetricSub,
     PatProbability,
     PatPure,
-    PatRatio,
     PatReplicate,
     PatRepetition,
     PatSelect,
@@ -86,7 +85,17 @@ def print_pattern(pat: Pat[str]) -> str:
             else:
                 pattern_str = print_pattern(pattern)
             op_str = operator.value
-            return f"{pattern_str}{op_str}{count}"
+            # Format fractions with % instead of /, but only for non-integer fractions
+            if hasattr(count, "numerator") and hasattr(count, "denominator"):
+                if count.denominator == 1:
+                    # Integer, just show the numerator
+                    count_str = str(count.numerator)
+                else:
+                    # Non-integer fraction, use % notation
+                    count_str = f"{count.numerator}%{count.denominator}"
+            else:
+                count_str = str(count)
+            return f"{pattern_str}{op_str}{count_str}"
 
         case PatElongation(pattern, count):
             pattern_str = print_pattern(pattern)
@@ -115,14 +124,6 @@ def print_pattern(pat: Pat[str]) -> str:
             else:
                 pattern_str = print_pattern(pattern)
             return f"{pattern_str}!{count}"
-
-        case PatRatio(pattern, numerator, denominator):
-            # If the pattern with ratio is a multi-element sequence, it needs brackets
-            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
-                pattern_str = f"[{print_pattern(pattern)}]"
-            else:
-                pattern_str = print_pattern(pattern)
-            return f"{pattern_str}*{numerator}%{denominator}"
 
         case PatPolymetricSub(patterns, subdivision):
             pattern_strs = [print_pattern(pattern) for pattern in patterns]
