@@ -140,7 +140,7 @@ def test_parse_repetition_multiply():
     """Test parsing repetition with * operator."""
     result = parse_pattern("bd*2")
     assert isinstance(result.unwrap, PatRepetition)
-    assert result.unwrap.operator == RepetitionOp.FAST
+    assert result.unwrap.operator == RepetitionOp.Fast
     assert result.unwrap.count == 2
     assert result.unwrap.pattern.unwrap.value == "bd"
 
@@ -149,7 +149,7 @@ def test_parse_repetition_divide():
     """Test parsing repetition with / operator (slowdown)."""
     result = parse_pattern("bd/2")
     assert isinstance(result.unwrap, PatRepetition)
-    assert result.unwrap.operator == RepetitionOp.SLOW
+    assert result.unwrap.operator == RepetitionOp.Slow
     assert result.unwrap.count == 2
     assert result.unwrap.pattern.unwrap.value == "bd"
 
@@ -159,13 +159,13 @@ def test_parse_multiple_repetition():
     result = parse_pattern("bd*2/4")
     # Should be a repetition with SLOW operator
     assert isinstance(result.unwrap, PatRepetition)
-    assert result.unwrap.operator == RepetitionOp.SLOW
+    assert result.unwrap.operator == RepetitionOp.Slow
     assert result.unwrap.count == 4
 
     # The child should be the multiplication repetition
     child = result.unwrap.pattern
     assert isinstance(child.unwrap, PatRepetition)
-    assert child.unwrap.operator == RepetitionOp.FAST
+    assert child.unwrap.operator == RepetitionOp.Fast
     assert child.unwrap.count == 2
 
 
@@ -314,7 +314,7 @@ def test_parse_complex_sample_selection():
     # First should be bd:0*2 (repetition of sample selection)
     first = children[0]
     assert isinstance(first.unwrap, PatRepetition)
-    assert first.unwrap.operator == RepetitionOp.FAST
+    assert first.unwrap.operator == RepetitionOp.Fast
     assert first.unwrap.count == 2
     assert isinstance(first.unwrap.pattern.unwrap, PatSelect)
     assert first.unwrap.pattern.unwrap.pattern.unwrap.value == "bd"
@@ -323,7 +323,7 @@ def test_parse_complex_sample_selection():
     # Second should be sd:1/2 (repetition with division of sample selection)
     second = children[1]
     assert isinstance(second.unwrap, PatRepetition)
-    assert second.unwrap.operator == RepetitionOp.SLOW
+    assert second.unwrap.operator == RepetitionOp.Slow
     assert second.unwrap.count == 2
     assert isinstance(second.unwrap.pattern.unwrap, PatSelect)
     assert second.unwrap.pattern.unwrap.pattern.unwrap.value == "sd"
@@ -382,7 +382,7 @@ def test_parse_ratio():
     """Test parsing fractional repetition patterns."""
     result = parse_pattern("bd*3%2")
     assert isinstance(result.unwrap, PatRepetition)
-    assert result.unwrap.operator == RepetitionOp.FAST
+    assert result.unwrap.operator == RepetitionOp.Fast
     assert result.unwrap.count == Fraction(3, 2)
     assert isinstance(result.unwrap.pattern.unwrap, PatPure)
     assert result.unwrap.pattern.unwrap.value == "bd"

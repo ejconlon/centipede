@@ -238,9 +238,9 @@ class PatternTransformer(Transformer):
 
         # Convert string operator to enum
         if op_str == "*":
-            op = RepetitionOp.FAST
+            op = RepetitionOp.Fast
         elif op_str == "/":
-            op = RepetitionOp.SLOW
+            op = RepetitionOp.Slow
         else:
             raise ValueError(f"Unknown repetition operator: {op_str}")
 

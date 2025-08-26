@@ -169,7 +169,7 @@ class PatStream[T](Stream[T]):
                 rep_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
 
                 match operator:
-                    case RepetitionOp.FAST:
+                    case RepetitionOp.Fast:
                         # Faster repetition - compress pattern and repeat
                         if hasattr(count, "denominator") and count.denominator != 1:
                             # Fractional count: scale the pattern appropriately
@@ -201,7 +201,7 @@ class PatStream[T](Stream[T]):
                                                     ev, rep_result
                                                 )
 
-                    case RepetitionOp.SLOW:
+                    case RepetitionOp.Slow:
                         # Slower repetition - stretch pattern
                         stretched_arc = arc.scale(Fraction(count))
                         pattern_events = self._query_pattern(pattern, stretched_arc)

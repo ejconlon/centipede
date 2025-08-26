@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from functools import partial
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 from centipede.common import PartialMatchException, ignore_arg
 from spiny import Box, PSeq
@@ -16,10 +16,10 @@ from spiny import Box, PSeq
 class RepetitionOp(Enum):
     """Enumeration for repetition operators."""
 
-    FAST = "*"  # Multiply/repeat
+    Fast = "*"
     """Fast repetition operator (*) - repeats pattern faster."""
 
-    SLOW = "/"  # Divide/slow down
+    Slow = "/"
     """Slow repetition operator (/) - slows down pattern."""
 
 
@@ -47,6 +47,8 @@ class Pat[T]:
     def silence() -> Pat[T]:
         """Create a silent pattern.
 
+        Textual form: ~
+
         Returns:
             A pattern representing silence
         """
@@ -55,6 +57,8 @@ class Pat[T]:
     @staticmethod
     def pure(val: T) -> Pat[T]:
         """Create a pattern with a single value.
+
+        Textual form: value
 
         Args:
             val: The value to wrap
@@ -68,6 +72,8 @@ class Pat[T]:
     def seq(pats: Iterable[Pat[T]]) -> Pat[T]:
         """Create a sequential pattern.
 
+        Textual form: [p1 p2 p3 ...]
+
         Args:
             pats: The patterns to sequence
 
@@ -79,6 +85,8 @@ class Pat[T]:
     @staticmethod
     def par(pats: Iterable[Pat[T]]) -> Pat[T]:
         """Create a parallel pattern.
+
+        Textual form: {p1, p2, p3, ...}
 
         Args:
             pats: The patterns to play in parallel
@@ -92,6 +100,8 @@ class Pat[T]:
     def choice(choices: Iterable[Pat[T]]) -> Pat[T]:
         """Create a choice pattern.
 
+        Textual form: <p1 | p2 | p3 | ...>
+
         Args:
             choices: The patterns to choose from
 
@@ -101,11 +111,13 @@ class Pat[T]:
         return Pat(PatChoice(PSeq.mk(choices)))
 
     @staticmethod
-    def euclidean(atom: Pat[T], hits: int, steps: int, rotation: int = 0) -> Pat[T]:
+    def euclidean(pattern: Pat[T], hits: int, steps: int, rotation: int = 0) -> Pat[T]:
         """Create a Euclidean rhythm pattern.
 
+        Textual form: pattern(hits,steps) or pattern(hits,steps,rotation)
+
         Args:
-            atom: The pattern to distribute
+            pattern: The pattern to distribute
             hits: Number of hits to distribute
             steps: Total number of steps
             rotation: Optional rotation offset
@@ -113,28 +125,34 @@ class Pat[T]:
         Returns:
             A pattern with Euclidean rhythm distribution
         """
-        return Pat(PatEuclidean(atom, hits, steps, rotation))
+        return Pat(PatEuclidean(pattern, hits, steps, rotation))
 
     @staticmethod
-    def polymetric(patterns: Iterable[Pat[T]], factor: int | None = None) -> Pat[T]:
+    def polymetric(
+        patterns: Iterable[Pat[T]], subdivision: Optional[int] = None
+    ) -> Pat[T]:
         """Create a polymetric pattern.
+
+        Textual form: {p1, p2, p3, ...} or {p1, p2, p3, ...}%N
 
         Args:
             patterns: The patterns to play polymetrically
-            factor: Optional subdivision factor for {}%N patterns
+            subdivision: Optional subdivision factor for {}%N patterns
 
         Returns:
             A polymetric pattern with or without subdivision
         """
-        return Pat(PatPolymetric(PSeq.mk(patterns), factor))
+        return Pat(PatPolymetric(PSeq.mk(patterns), subdivision))
 
     @staticmethod
     def repetition(pattern: Pat[T], operator: RepetitionOp, count: int) -> Pat[T]:
         """Create a repetition pattern.
 
+        Textual form: pattern*count or pattern/count
+
         Args:
             pattern: The pattern to repeat
-            operator: The repetition operator (FAST or SLOW)
+            operator: The repetition operator (Fast or Slow)
             count: The repetition count
 
         Returns:
@@ -145,6 +163,8 @@ class Pat[T]:
     @staticmethod
     def elongation(pattern: Pat[T], count: int) -> Pat[T]:
         """Create an elongated pattern.
+
+        Textual form: pattern@count
 
         Args:
             pattern: The pattern to elongate
@@ -159,6 +179,8 @@ class Pat[T]:
     def probability(pattern: Pat[T], prob: Fraction = Fraction(1, 2)) -> Pat[T]:
         """Create a probabilistic pattern.
 
+        Textual form: pattern?
+
         Args:
             pattern: The pattern to apply probability to
             prob: The probability (0 to 1 as a Fraction)
@@ -171,6 +193,8 @@ class Pat[T]:
     @staticmethod
     def select(pattern: Pat[T], selector: str) -> Pat[T]:
         """Create a sample selection pattern.
+
+        Textual form: pattern:selector
 
         Args:
             pattern: The pattern to select from
@@ -185,6 +209,8 @@ class Pat[T]:
     def alternating(patterns: Iterable[Pat[T]]) -> Pat[T]:
         """Create an alternating pattern.
 
+        Textual form: <p1 p2 p3 ...>
+
         Args:
             patterns: The patterns to alternate between
 
@@ -196,6 +222,8 @@ class Pat[T]:
     @staticmethod
     def replicate(pattern: Pat[T], count: int) -> Pat[T]:
         """Create a replicate pattern (!).
+
+        Textual form: pattern!count
 
         Args:
             pattern: The pattern to replicate
@@ -257,7 +285,10 @@ class Pat[T]:
 
 @dataclass(frozen=True)
 class PatSilence(PatF[Any, Any]):
-    """Pattern functor representing silence."""
+    """Pattern functor representing silence.
+
+    Textual form: ~
+    """
 
     pass
 
@@ -268,6 +299,8 @@ _PAT_SILENCE = Pat(PatSilence())
 @dataclass(frozen=True)
 class PatPure[T](PatF[T, Any]):
     """Pattern functor containing a single value.
+
+    Textual form: value
 
     Args:
         value: The contained value
@@ -280,6 +313,8 @@ class PatPure[T](PatF[T, Any]):
 class PatSeq[T, R](PatF[T, R]):
     """Pattern functor for sequential composition.
 
+    Textual form: [p1 p2 p3 ...]
+
     Args:
         patterns: The child patterns to play in sequence
     """
@@ -290,6 +325,8 @@ class PatSeq[T, R](PatF[T, R]):
 @dataclass(frozen=True)
 class PatPar[T, R](PatF[T, R]):
     """Pattern functor for parallel composition.
+
+    Textual form: {p1, p2, p3, ...}
 
     Args:
         patterns: The child patterns to play in parallel
@@ -302,6 +339,8 @@ class PatPar[T, R](PatF[T, R]):
 class PatChoice[T, R](PatF[T, R]):
     """Pattern functor for choice between patterns.
 
+    Textual form: <p1 | p2 | p3 | ...>
+
     Args:
         patterns: The patterns to choose from
     """
@@ -312,6 +351,8 @@ class PatChoice[T, R](PatF[T, R]):
 @dataclass(frozen=True)
 class PatEuclidean[T, R](PatF[T, R]):
     """Pattern functor for Euclidean rhythms.
+
+    Textual form: pattern(hits,steps) or pattern(hits,steps,rotation)
 
     Args:
         pattern: The pattern to distribute
@@ -330,18 +371,22 @@ class PatEuclidean[T, R](PatF[T, R]):
 class PatPolymetric[T, R](PatF[T, R]):
     """Pattern functor for polymetric patterns.
 
+    Textual form: {p1, p2, p3, ...} or {p1, p2, p3, ...}%N
+
     Args:
         patterns: The patterns to play polymetrically
         subdivision: Optional subdivision factor for {}%N patterns
     """
 
     patterns: PSeq[R]
-    subdivision: int | None = None
+    subdivision: Optional[int] = None
 
 
 @dataclass(frozen=True)
 class PatRepetition[T, R](PatF[T, R]):
     """Pattern functor for repetition.
+
+    Textual form: pattern*count or pattern/count
 
     Args:
         pattern: The pattern to repeat
@@ -358,6 +403,8 @@ class PatRepetition[T, R](PatF[T, R]):
 class PatElongation[T, R](PatF[T, R]):
     """Pattern functor for elongation.
 
+    Textual form: pattern@count
+
     Args:
         pattern: The pattern to elongate
         count: The elongation count
@@ -370,6 +417,8 @@ class PatElongation[T, R](PatF[T, R]):
 @dataclass(frozen=True)
 class PatProbability[T, R](PatF[T, R]):
     """Pattern functor for probabilistic patterns.
+
+    Textual form: pattern?
 
     Args:
         pattern: The pattern to apply probability to
@@ -384,6 +433,8 @@ class PatProbability[T, R](PatF[T, R]):
 class PatSelect[T, R](PatF[T, R]):
     """Pattern functor for sample selection.
 
+    Textual form: pattern:selector
+
     Args:
         pattern: The pattern to select from
         selector: The selection identifier
@@ -397,6 +448,8 @@ class PatSelect[T, R](PatF[T, R]):
 class PatAlternating[T, R](PatF[T, R]):
     """Pattern functor for alternating patterns.
 
+    Textual form: <p1 p2 p3 ...>
+
     Args:
         patterns: The patterns to alternate between
     """
@@ -407,6 +460,8 @@ class PatAlternating[T, R](PatF[T, R]):
 @dataclass(frozen=True)
 class PatReplicate[T, R](PatF[T, R]):
     """Pattern functor for replicate patterns (!).
+
+    Textual form: pattern!count
 
     Args:
         pattern: The pattern to replicate

@@ -84,7 +84,7 @@ def test_repetition_fast():
     """Test fast repetition pattern."""
     # Pattern equivalent to "x!" with count 2
     base_pattern = Pat.pure("x")
-    pattern = Pat.repetition(base_pattern, RepetitionOp.FAST, 2)
+    pattern = Pat.repetition(base_pattern, RepetitionOp.Fast, 2)
     stream = PatStream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
@@ -110,7 +110,7 @@ def test_repetition_slow():
     """Test slow repetition pattern."""
     # Pattern equivalent to "x" slowed down by factor of 2
     base_pattern = Pat.pure("x")
-    pattern = Pat.repetition(base_pattern, RepetitionOp.SLOW, 2)
+    pattern = Pat.repetition(base_pattern, RepetitionOp.Slow, 2)
     stream = PatStream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
