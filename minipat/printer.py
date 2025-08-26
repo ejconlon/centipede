@@ -13,7 +13,6 @@ from minipat.pat import (
     PatEuclidean,
     PatPar,
     PatPolymetric,
-    PatPolymetricSub,
     PatProbability,
     PatPure,
     PatReplicate,
@@ -51,7 +50,7 @@ def print_pattern(pat: Pat[str]) -> str:
             for child in children:
                 # If the child is a sequence with multiple elements, bracket it
                 # Groups already have their own brackets
-                if isinstance(child.unwrap, PatSeq) and len(child.unwrap.children) > 1:
+                if isinstance(child.unwrap, PatSeq) and len(child.unwrap.patterns) > 1:
                     parts.append(f"[{print_pattern(child)}]")
                 else:
                     parts.append(print_pattern(child))
@@ -73,14 +72,14 @@ def print_pattern(pat: Pat[str]) -> str:
             else:
                 return f"{atom_str}({hits},{steps},{rotation})"
 
-        case PatPolymetric(patterns):
+        case PatPolymetric(patterns, None):
             pattern_strs = [print_pattern(pattern) for pattern in patterns]
             return f"{{{', '.join(pattern_strs)}}}"
 
         case PatRepetition(pattern, operator, count):
             # If the pattern being repeated is a multi-element sequence, it needs brackets
             # Bracketed sequences already handled above
-            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
+            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.patterns) > 1:
                 pattern_str = f"[{print_pattern(pattern)}]"
             else:
                 pattern_str = print_pattern(pattern)
@@ -119,15 +118,18 @@ def print_pattern(pat: Pat[str]) -> str:
 
         case PatReplicate(pattern, count):
             # If the pattern being replicated is a multi-element sequence, it needs brackets
-            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.children) > 1:
+            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.patterns) > 1:
                 pattern_str = f"[{print_pattern(pattern)}]"
             else:
                 pattern_str = print_pattern(pattern)
             return f"{pattern_str}!{count}"
 
-        case PatPolymetricSub(patterns, subdivision):
+        case PatPolymetric(patterns, subdivision):
             pattern_strs = [print_pattern(pattern) for pattern in patterns]
-            return f"{{{', '.join(pattern_strs)}}}%{subdivision}"
+            if subdivision is None:
+                return f"{{{', '.join(pattern_strs)}}}"
+            else:
+                return f"{{{', '.join(pattern_strs)}}}%{subdivision}"
 
         case _:
             # This should never happen if all pattern types are handled above
@@ -140,7 +142,7 @@ def print_pattern_grouped(pat: Pat[str]) -> str:
     This is useful for printing sub-patterns that might need bracketing
     in certain contexts.
     """
-    if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.children) > 1:
+    if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.patterns) > 1:
         return f"[{print_pattern(pat)}]"
     else:
         return print_pattern(pat)

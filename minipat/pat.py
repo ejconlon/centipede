@@ -116,16 +116,17 @@ class Pat[T]:
         return Pat(PatEuclidean(atom, hits, steps, rotation))
 
     @staticmethod
-    def polymetric(patterns: Iterable[Pat[T]]) -> Pat[T]:
+    def polymetric(patterns: Iterable[Pat[T]], factor: int | None = None) -> Pat[T]:
         """Create a polymetric pattern.
 
         Args:
             patterns: The patterns to play polymetrically
+            factor: Optional subdivision factor for {}%N patterns
 
         Returns:
-            A pattern that plays patterns simultaneously at different rates
+            A polymetric pattern with or without subdivision
         """
-        return Pat(PatPolymetric(PSeq.mk(patterns)))
+        return Pat(PatPolymetric(PSeq.mk(patterns), factor))
 
     @staticmethod
     def repetition(pattern: Pat[T], operator: RepetitionOp, count: int) -> Pat[T]:
@@ -205,19 +206,6 @@ class Pat[T]:
         """
         return Pat(PatReplicate(pattern, count))
 
-    @staticmethod
-    def polymetric_sub(patterns: Iterable[Pat[T]], subdivision: int) -> Pat[T]:
-        """Create a polymetric pattern with subdivision ({}%).
-
-        Args:
-            patterns: The patterns to play polymetrically
-            subdivision: The subdivision factor
-
-        Returns:
-            A polymetric subdivision pattern
-        """
-        return Pat(PatPolymetricSub(PSeq.mk(patterns), subdivision))
-
     def map[U](self, fn: Callable[[T], U]) -> Pat[U]:
         """Map a function over the pattern values.
 
@@ -282,10 +270,10 @@ class PatPure[T](PatF[T, Any]):
     """Pattern functor containing a single value.
 
     Args:
-        val: The contained value
+        value: The contained value
     """
 
-    val: T
+    value: T
 
 
 @dataclass(frozen=True)
@@ -293,10 +281,10 @@ class PatSeq[T, R](PatF[T, R]):
     """Pattern functor for sequential composition.
 
     Args:
-        children: The child patterns to play in sequence
+        patterns: The child patterns to play in sequence
     """
 
-    children: PSeq[R]
+    patterns: PSeq[R]
 
 
 @dataclass(frozen=True)
@@ -304,10 +292,10 @@ class PatPar[T, R](PatF[T, R]):
     """Pattern functor for parallel composition.
 
     Args:
-        children: The child patterns to play in parallel
+        patterns: The child patterns to play in parallel
     """
 
-    children: PSeq[R]
+    patterns: PSeq[R]
 
 
 @dataclass(frozen=True)
@@ -315,10 +303,10 @@ class PatChoice[T, R](PatF[T, R]):
     """Pattern functor for choice between patterns.
 
     Args:
-        choices: The patterns to choose from
+        patterns: The patterns to choose from
     """
 
-    choices: PSeq[R]
+    patterns: PSeq[R]
 
 
 @dataclass(frozen=True)
@@ -326,13 +314,13 @@ class PatEuclidean[T, R](PatF[T, R]):
     """Pattern functor for Euclidean rhythms.
 
     Args:
-        atom: The pattern to distribute
+        pattern: The pattern to distribute
         hits: Number of hits to distribute
         steps: Total number of steps
         rotation: Rotation offset
     """
 
-    atom: R
+    pattern: R
     hits: int
     steps: int
     rotation: int
@@ -344,9 +332,11 @@ class PatPolymetric[T, R](PatF[T, R]):
 
     Args:
         patterns: The patterns to play polymetrically
+        subdivision: Optional subdivision factor for {}%N patterns
     """
 
     patterns: PSeq[R]
+    subdivision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -427,19 +417,6 @@ class PatReplicate[T, R](PatF[T, R]):
     count: int
 
 
-@dataclass(frozen=True)
-class PatPolymetricSub[T, R](PatF[T, R]):
-    """Pattern functor for polymetric patterns with subdivision ({}%).
-
-    Args:
-        patterns: The patterns to play polymetrically
-        subdivision: The subdivision factor
-    """
-
-    patterns: PSeq[R]
-    subdivision: int
-
-
 def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[T]], Z]:
     """Create a catamorphism with environment.
 
@@ -469,9 +446,9 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatEuclidean(atom, hits, steps, rotation):
                 atom_z = wrapper(env, atom)
                 return fn(env, PatEuclidean(atom_z, hits, steps, rotation))
-            case PatPolymetric(ps):
+            case PatPolymetric(ps, None):
                 pzs = PSeq.mk(wrapper(env, p) for p in ps)
-                return fn(env, PatPolymetric(pzs))
+                return fn(env, PatPolymetric(pzs, None))
             case PatRepetition(p, op, count):
                 pz = wrapper(env, p)
                 return fn(env, PatRepetition(pz, op, count))
@@ -490,9 +467,9 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatReplicate(p, count):
                 pz = wrapper(env, p)
                 return fn(env, PatReplicate(pz, count))
-            case PatPolymetricSub(ps, subdivision):
+            case PatPolymetric(ps, subdivision):
                 pzs = PSeq.mk(wrapper(env, p) for p in ps)
-                return fn(env, PatPolymetricSub(pzs, subdivision))
+                return fn(env, PatPolymetric(pzs, subdivision))
             case _:
                 raise PartialMatchException(pf)
 
@@ -557,8 +534,8 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatChoice(cs))
             case PatEuclidean(atom, hits, steps, rotation):
                 return Pat(PatEuclidean(atom, hits, steps, rotation))
-            case PatPolymetric(ps):
-                return Pat(PatPolymetric(ps))
+            case PatPolymetric(ps, None):
+                return Pat(PatPolymetric(ps, None))
             case PatRepetition(p, op, count):
                 return Pat(PatRepetition(p, op, count))
             case PatElongation(p, count):
@@ -571,8 +548,8 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatAlternating(ps))
             case PatReplicate(p, count):
                 return Pat(PatReplicate(p, count))
-            case PatPolymetricSub(ps, subdivision):
-                return Pat(PatPolymetricSub(ps, subdivision))
+            case PatPolymetric(ps, subdivision):
+                return Pat(PatPolymetric(ps, subdivision))
             case _:
                 raise PartialMatchException(pf)
 

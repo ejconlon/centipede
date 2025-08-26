@@ -146,8 +146,8 @@ class PatternTransformer(Transformer):
         symbol_token, selector_token = items
         # Create a pattern from the symbol token and use the selector as string
         # Extract the actual symbol string if it's already transformed
-        if hasattr(symbol_token, "unwrap") and hasattr(symbol_token.unwrap, "val"):
-            symbol_str = symbol_token.unwrap.val
+        if hasattr(symbol_token, "unwrap") and hasattr(symbol_token.unwrap, "value"):
+            symbol_str = symbol_token.unwrap.value
         else:
             symbol_str = str(symbol_token)
         symbol_pat = Pat.pure(symbol_str)
@@ -156,9 +156,9 @@ class PatternTransformer(Transformer):
         if isinstance(selector_token, Fraction):
             selector = format_fraction(selector_token)
         elif hasattr(selector_token, "unwrap") and hasattr(
-            selector_token.unwrap, "val"
+            selector_token.unwrap, "value"
         ):
-            selector = selector_token.unwrap.val
+            selector = selector_token.unwrap.value
         else:
             selector = str(selector_token)
 
@@ -196,7 +196,7 @@ class PatternTransformer(Transformer):
         """Transform alternating patterns <a b c>."""
         # If we get a single item that's a sequence, extract its children
         if len(items) == 1 and isinstance(items[0].unwrap, PatSeq):
-            patterns = list(items[0].unwrap.children)
+            patterns = list(items[0].unwrap.patterns)
             return Pat.alternating(patterns)
         else:
             return Pat.alternating(items)
@@ -223,8 +223,8 @@ class PatternTransformer(Transformer):
         if len(items) > 1:
             # Has subdivision: {a,b,c}%4
             # items[1] is PERCENT token, items[2] is subdivision value
-            subdivision = int(items[2])
-            return Pat.polymetric_sub(patterns, subdivision)
+            factor = int(items[2])
+            return Pat.polymetric(patterns, factor)
         else:
             # No subdivision: {a,b,c}
             return Pat.polymetric(patterns)

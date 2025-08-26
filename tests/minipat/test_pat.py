@@ -17,7 +17,7 @@ def test_pat_pure():
     pure = Pat.pure("test")
 
     assert isinstance(pure.unwrap, PatPure)
-    assert pure.unwrap.val == "test"
+    assert pure.unwrap.value == "test"
 
 
 def test_pat_seq():
@@ -42,4 +42,4 @@ def test_pat_map():
     mapped = pat.map(lambda x: x * 2)
 
     assert isinstance(mapped.unwrap, PatPure)
-    assert mapped.unwrap.val == 10
+    assert mapped.unwrap.value == 10

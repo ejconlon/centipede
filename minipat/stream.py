@@ -15,7 +15,6 @@ from minipat.pat import (
     PatEuclidean,
     PatPar,
     PatPolymetric,
-    PatPolymetricSub,
     PatProbability,
     PatPure,
     PatReplicate,
@@ -154,14 +153,14 @@ class PatStream[T](Stream[T]):
 
                 return euc_result
 
-            case PatPolymetric(patterns):
+            case PatPolymetric(patterns, None):
                 # All patterns play simultaneously (like parallel)
-                poly_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+                poly_simple_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
                 for pattern in patterns:
                     pattern_events = self._query_pattern(pattern, arc)
                     for _, ev in pattern_events:
-                        poly_result = ev_heap_push(ev, poly_result)
-                return poly_result
+                        poly_simple_result = ev_heap_push(ev, poly_simple_result)
+                return poly_simple_result
 
             case PatRepetition(pattern, operator, count):
                 if count <= 0:
@@ -269,19 +268,33 @@ class PatStream[T](Stream[T]):
                                 replicate_result = ev_heap_push(ev, replicate_result)
                 return replicate_result
 
-            case PatPolymetricSub(patterns, subdivision):
-                if len(patterns) == 0 or subdivision <= 0:
+            case PatPolymetric(patterns, subdivision):
+                if len(patterns) == 0:
                     return ev_heap_empty()
-                # Similar to polymetric but with subdivision factor
-                poly_sub_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
-                sub_arc = arc.scale(Fraction(1, subdivision))
-                for pattern in patterns:
-                    pattern_events = self._query_pattern(pattern, sub_arc)
-                    for _, ev in pattern_events:
-                        scaled_ev = ev.scale(Fraction(subdivision))
-                        if not arc.intersect(scaled_ev.arc).null():
-                            poly_sub_result = ev_heap_push(scaled_ev, poly_sub_result)
-                return poly_sub_result
+
+                polymetric_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+
+                if subdivision is None:
+                    # All patterns play simultaneously (like parallel)
+                    for pattern in patterns:
+                        pattern_events = self._query_pattern(pattern, arc)
+                        for _, ev in pattern_events:
+                            polymetric_result = ev_heap_push(ev, polymetric_result)
+                else:
+                    # With subdivision subdivision
+                    if subdivision <= 0:
+                        return ev_heap_empty()
+                    sub_arc = arc.scale(Fraction(1, subdivision))
+                    for pattern in patterns:
+                        pattern_events = self._query_pattern(pattern, sub_arc)
+                        for _, ev in pattern_events:
+                            scaled_ev = ev.scale(Fraction(subdivision))
+                            if not arc.intersect(scaled_ev.arc).null():
+                                polymetric_result = ev_heap_push(
+                                    scaled_ev, polymetric_result
+                                )
+
+                return polymetric_result
 
             case _:
                 return ev_heap_empty()
