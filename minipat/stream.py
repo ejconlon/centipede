@@ -1,5 +1,6 @@
 """Stream implementation for converting patterns to timed events."""
 
+import random
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
@@ -17,8 +18,8 @@ from minipat.pat import (
     PatPolymetric,
     PatProbability,
     PatPure,
-    PatReplicate,
     PatRepetition,
+    PatReplicate,
     PatSelect,
     PatSeq,
     PatSilence,
@@ -231,7 +232,6 @@ class PatStream[T](Stream[T]):
 
             case PatProbability(pattern, prob):
                 # Use arc start time as seed for deterministic randomness
-                import random
 
                 random.seed(hash(arc.start))
 

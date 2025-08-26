@@ -12,10 +12,13 @@ type Factor = Fraction
 """Type alias for scaling factors represented as fractions."""
 
 ZERO = Fraction(0)
-"""The constant zero as a fraction."""
+"""The constant 0 as a fraction."""
 
 ONE = Fraction(1)
-"""The constant one as a fraction."""
+"""The constant 1 as a fraction."""
+
+ONE_HALF = Fraction(1, 2)
+"""The constant 1/2 as a fraction."""
 
 
 def format_fraction(frac: Fraction) -> str:

@@ -10,6 +10,7 @@ from functools import partial
 from typing import Any, Callable, Optional, Tuple
 
 from centipede.common import PartialMatchException, ignore_arg
+from minipat.common import ONE_HALF
 from spiny import Box, PSeq
 
 
@@ -176,7 +177,7 @@ class Pat[T]:
         return Pat(PatElongation(pattern, count))
 
     @staticmethod
-    def probability(pattern: Pat[T], prob: Fraction = Fraction(1, 2)) -> Pat[T]:
+    def probability(pattern: Pat[T], prob: Fraction = ONE_HALF) -> Pat[T]:
         """Create a probabilistic pattern.
 
         Textual form: pattern?
