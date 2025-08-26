@@ -41,13 +41,14 @@ alternating: "<" pattern+ ">"
 euclidean: atom "(" numeric_value "," numeric_value ("," numeric_value)? ")"
 
 // Polymetric sequences
-polymetric: "{" pattern ("," pattern)+ "}"
-polymetric_sub: "{" pattern ("," pattern)+ "}" PERCENT numeric_value
+pattern_list: pattern ("," pattern)+
+polymetric: "{" pattern_list "}"
+polymetric_sub: "{" pattern_list "}" PERCENT numeric_value
 
 // Repetition and speed modifiers
-repetition: (base_element | probability) MULTIPLY numeric_value | (base_element | probability) DIVIDE numeric_value | repetition DIVIDE numeric_value | repetition MULTIPLY numeric_value
-replicate: (base_element | probability) EXCLAMATION numeric_value | replicate EXCLAMATION numeric_value
-elongation: (base_element | probability) UNDERSCORE+ | (base_element | probability) AT+ | repetition UNDERSCORE+ | repetition AT+
+repetition: (base_element | probability | repetition) (MULTIPLY | DIVIDE) numeric_value
+replicate: (base_element | probability | replicate) EXCLAMATION numeric_value
+elongation: (base_element | probability | repetition) (UNDERSCORE+ | AT numeric_value)
 
 // Operator tokens
 MULTIPLY: "*"
@@ -57,7 +58,6 @@ AT: "@"
 EXCLAMATION: "!"
 PERCENT: "%"
 DOT: "."
-
 
 // Probability
 probability: atom "?" probability_value?
@@ -182,9 +182,14 @@ class PatternTransformer(Transformer):
         return Pat.euclidean(atom, hits, steps, rotation)
 
     # Polymetric sequences
+    def pattern_list(self, items):
+        """Transform pattern list a,b,c."""
+        return items
+
     def polymetric(self, items):
         """Transform polymetric patterns {a,b,c}."""
-        return Pat.polymetric(items)
+        patterns = items[0]  # The pattern_list
+        return Pat.polymetric(patterns)
 
     # Repetition and speed modifiers
     def repetition(self, items):
@@ -204,10 +209,19 @@ class PatternTransformer(Transformer):
         return Pat.repetition(element, op, num)
 
     def elongation(self, items):
-        """Transform elongation patterns like bd_ or bd@."""
+        """Transform elongation patterns like bd_ or bd@2."""
         element = items[0]
-        elongation_symbols = items[1:]
-        elongation_count = len(elongation_symbols)
+
+        # Check if we have @ followed by a number
+        if len(items) >= 3 and str(items[1]) == "@":
+            # Case: bd@N (@ followed by numeric value)
+            n = int(items[2])
+            elongation_count = max(0, n - 1)  # @N means N-1 underscores
+        else:
+            # Case: bd_ (underscores)
+            elongation_symbols = items[1:]
+            elongation_count = len(elongation_symbols)
+
         return Pat.elongation(element, elongation_count)
 
     def replicate(self, items):
@@ -219,14 +233,9 @@ class PatternTransformer(Transformer):
 
     def polymetric_sub(self, items):
         """Transform polymetric patterns with subdivision like {a,b}%4."""
-        # items structure: {, pattern, comma, pattern, ..., }, PERCENT, numeric_value
-        # Find the last numeric value (subdivision)
-        subdivision = int(items[-1])
-        # Everything else except the PERCENT and subdivision are pattern-related
-        patterns = []
-        for item in items[:-2]:  # Skip PERCENT and subdivision
-            if hasattr(item, "unwrap"):  # It's a pattern
-                patterns.append(item)
+        patterns = items[0]  # The pattern_list
+        # items[1] is PERCENT token, items[2] is subdivision value
+        subdivision = int(items[2])  # The subdivision value
         return Pat.polymetric_sub(patterns, subdivision)
 
     def dot_group(self, items):
