@@ -7,20 +7,41 @@ from fractions import Fraction
 from lark import Lark, Transformer
 
 from minipat.common import format_fraction
-from minipat.pat import Pat, PatSeq, RepetitionOp
+from minipat.pat import Pat, PatElongation, PatSeq, RepetitionOp
 
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
 # sequences, choices, parallel patterns, euclidean rhythms, and more.
 PATTERN_GRAMMAR = """
+%import common.WS
+%ignore WS
+
+// Tokens
+SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
+NUMBER: /\\d+/
+DECIMAL: /\\d*\\.\\d+/
+
+// Operator tokens
+MULTIPLY: "*"
+DIVIDE: "/"
+UNDERSCORE: "_"
+AT: "@"
+EXCLAMATION: "!"
+PERCENT: "%"
+DOT: "."
+
+// Numeric values - supports integers, decimals, and fractions
+numeric_value: NUMBER | DECIMAL | fraction | "(" fraction ")"
+fraction: NUMBER "%" NUMBER
+
 start: pattern
 
 // Main pattern can be a sequence, dot grouping, or elements
-pattern: dot_group | element+
+pattern: dot_group | element_sequence
+element_sequence: element (UNDERSCORE+ | element)*
 
 // Elements can be various types
-element: elongation | repetition | replicate | probability | base_element
-base_element: atom | seq | choice | parallel | alternating | euclidean | polymetric | polymetric_sub
+element: elongation | repetition | replicate | probability | atom | seq | choice | parallel | alternating | euclidean | polymetric
 
 // Basic atoms
 atom: select | symbol | silence
@@ -30,7 +51,7 @@ select: SYMBOL ":" (numeric_value | SYMBOL)
 
 // Grouping structures
 seq: "[" pattern "]"
-dot_group: element+ DOT element+
+dot_group: element_sequence (DOT element_sequence)+
 choice: "[" choice_list "]"
 choice_list: pattern ("|" pattern)+
 parallel: "[" parallel_list "]"
@@ -42,38 +63,16 @@ euclidean: atom "(" numeric_value "," numeric_value ("," numeric_value)? ")"
 
 // Polymetric sequences
 pattern_list: pattern ("," pattern)+
-polymetric: "{" pattern_list "}"
-polymetric_sub: "{" pattern_list "}" PERCENT numeric_value
+polymetric: "{" pattern_list "}" (PERCENT numeric_value)?
 
 // Repetition and speed modifiers
-repetition: (base_element | probability | repetition) (MULTIPLY | DIVIDE) numeric_value
-replicate: (base_element | probability | replicate) EXCLAMATION numeric_value
-elongation: (base_element | probability | repetition) (UNDERSCORE+ | AT numeric_value)
-
-// Operator tokens
-MULTIPLY: "*"
-DIVIDE: "/"
-UNDERSCORE: "_"
-AT: "@"
-EXCLAMATION: "!"
-PERCENT: "%"
-DOT: "."
+repetition: element (MULTIPLY | DIVIDE) numeric_value
+replicate: element EXCLAMATION numeric_value
+elongation: element (UNDERSCORE+ | AT numeric_value)
 
 // Probability
 probability: atom "?" probability_value?
 probability_value: numeric_value
-
-// Numeric values - supports integers, decimals, and parenthesized fractions
-numeric_value: NUMBER | DECIMAL | fraction | "(" fraction ")"
-fraction: NUMBER "%" NUMBER
-
-// Tokens
-SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
-NUMBER: /\\d+/
-DECIMAL: /\\d*\\.\\d+/
-
-%import common.WS
-%ignore WS
 """
 
 
@@ -89,6 +88,37 @@ class PatternTransformer(Transformer):
         if len(items) == 1:
             return items[0]
         return Pat.seq(items)
+
+    def element_sequence(self, items):
+        """Transform element sequence, handling trailing underscores."""
+        if len(items) == 1:
+            return items[0]
+
+        result = []
+        current_element = items[0]
+
+        for i in range(1, len(items)):
+            item = items[i]
+            if isinstance(item, str) and item == "_":
+                # This is an underscore token - elongate the current element
+                if isinstance(current_element.unwrap, PatElongation):
+                    # Already elongated, add to count
+                    base_element = current_element.unwrap.pattern
+                    total_count = current_element.unwrap.count + 1
+                    current_element = Pat.elongation(base_element, total_count)
+                else:
+                    # Create new elongation
+                    current_element = Pat.elongation(current_element, 1)
+            else:
+                # This is another element
+                result.append(current_element)
+                current_element = item
+
+        result.append(current_element)
+
+        if len(result) == 1:
+            return result[0]
+        return Pat.seq(result)
 
     def element(self, items):
         """Transform an element into a pattern."""
@@ -187,9 +217,17 @@ class PatternTransformer(Transformer):
         return items
 
     def polymetric(self, items):
-        """Transform polymetric patterns {a,b,c}."""
+        """Transform polymetric patterns {a,b,c} or {a,b,c}%4."""
         patterns = items[0]  # The pattern_list
-        return Pat.polymetric(patterns)
+
+        if len(items) > 1:
+            # Has subdivision: {a,b,c}%4
+            # items[1] is PERCENT token, items[2] is subdivision value
+            subdivision = int(items[2])
+            return Pat.polymetric_sub(patterns, subdivision)
+        else:
+            # No subdivision: {a,b,c}
+            return Pat.polymetric(patterns)
 
     # Repetition and speed modifiers
     def repetition(self, items):
@@ -216,13 +254,21 @@ class PatternTransformer(Transformer):
         if len(items) >= 3 and str(items[1]) == "@":
             # Case: bd@N (@ followed by numeric value)
             n = int(items[2])
-            elongation_count = max(0, n - 1)  # @N means N-1 underscores
+            current_count = max(0, n - 1)  # @N means N-1 underscores
         else:
             # Case: bd_ (underscores)
             elongation_symbols = items[1:]
-            elongation_count = len(elongation_symbols)
+            current_count = len(elongation_symbols)
 
-        return Pat.elongation(element, elongation_count)
+        # Check if the element is already an elongation and collapse them
+        if isinstance(element.unwrap, PatElongation):
+            # Nested elongation: combine the counts
+            base_element = element.unwrap.pattern
+            total_count = element.unwrap.count + current_count
+            return Pat.elongation(base_element, total_count)
+        else:
+            # Regular elongation
+            return Pat.elongation(element, current_count)
 
     def replicate(self, items):
         """Transform replicate patterns like bd!3."""
@@ -231,38 +277,16 @@ class PatternTransformer(Transformer):
         count = int(items[2])
         return Pat.replicate(element, count)
 
-    def polymetric_sub(self, items):
-        """Transform polymetric patterns with subdivision like {a,b}%4."""
-        patterns = items[0]  # The pattern_list
-        # items[1] is PERCENT token, items[2] is subdivision value
-        subdivision = int(items[2])  # The subdivision value
-        return Pat.polymetric_sub(patterns, subdivision)
-
     def dot_group(self, items):
-        """Transform dot grouping patterns like bd sd . hh cp."""
-        # Find the DOT token and split the elements
-        dot_index = -1
+        """Transform dot grouping patterns like bd sd _ . hh cp _ . oh."""
+        # items alternate: element_sequence, DOT, element_sequence, DOT, ...
+        # Extract just the element_sequences (skip DOT tokens)
+        sequences = []
         for i, item in enumerate(items):
-            if hasattr(item, "type") and item.type == "DOT":
-                dot_index = i
-                break
+            if i % 2 == 0:  # Even indices are element_sequences
+                sequences.append(item)
 
-        if dot_index == -1:
-            raise ValueError("DOT not found in dot_group")
-
-        left_elements = items[:dot_index]
-        right_elements = items[dot_index + 1 :]
-
-        # Create sequences from left and right parts
-        left_seq = (
-            Pat.seq(left_elements) if len(left_elements) > 1 else left_elements[0]
-        )
-        right_seq = (
-            Pat.seq(right_elements) if len(right_elements) > 1 else right_elements[0]
-        )
-
-        # Return a sequence of the two parts
-        return Pat.seq([left_seq, right_seq])
+        return Pat.seq(sequences)
 
     # Probability
     def probability(self, items):
