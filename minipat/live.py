@@ -20,7 +20,7 @@ from minipat.arc import Arc
 from minipat.common import ONE, ZERO
 from minipat.ev import Ev
 from minipat.pat import Pat
-from minipat.stream import PatStream
+from minipat.stream import pat_stream
 from spiny.heapmap import PHeapMap
 
 
@@ -277,7 +277,7 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
                 continue
 
             # Generate events using pattern stream
-            stream = PatStream(orbit.pattern)
+            stream = pat_stream(orbit.pattern)
             events = stream.unstream(arc)
 
             # Send events to backend

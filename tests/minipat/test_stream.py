@@ -2,13 +2,13 @@ from fractions import Fraction
 
 from minipat.arc import Arc
 from minipat.pat import Pat, RepetitionOp
-from minipat.stream import PatStream
+from minipat.stream import pat_stream
 
 
 def test_pure_pattern():
     """Test pure pattern generates single event spanning arc."""
     pattern = Pat.pure("x")
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -23,7 +23,7 @@ def test_pure_pattern():
 def test_silence_pattern():
     """Test silence pattern generates no events."""
     pattern: Pat[str] = Pat.silence()
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -36,7 +36,7 @@ def test_sequence_pattern():
     """Test sequence pattern divides time proportionally."""
     # Pattern equivalent to "x y"
     pattern = Pat.seq([Pat.pure("x"), Pat.pure("y")])
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -61,7 +61,7 @@ def test_parallel_pattern():
     """Test parallel pattern plays all children simultaneously."""
     # Pattern equivalent to "[x,y]"
     pattern = Pat.par([Pat.pure("x"), Pat.pure("y")])
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -85,7 +85,7 @@ def test_repetition_fast():
     # Pattern equivalent to "x!" with count 2
     base_pattern = Pat.pure("x")
     pattern = Pat.repetition(base_pattern, RepetitionOp.Fast, 2)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -111,7 +111,7 @@ def test_repetition_slow():
     # Pattern equivalent to "x" slowed down by factor of 2
     base_pattern = Pat.pure("x")
     pattern = Pat.repetition(base_pattern, RepetitionOp.Slow, 2)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -132,7 +132,7 @@ def test_elongation_pattern():
     # Pattern equivalent to "x@2"
     base_pattern = Pat.pure("x")
     pattern = Pat.elongation(base_pattern, 2)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -152,7 +152,7 @@ def test_choice_pattern():
     """Test choice pattern selects based on cycle."""
     # Pattern with two choices
     pattern = Pat.choice([Pat.pure("x"), Pat.pure("y")])
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
 
     # Test cycle 0 (arc starting at 0)
     arc0 = Arc(Fraction(0), Fraction(1))
@@ -178,7 +178,7 @@ def test_euclidean_pattern():
     # Pattern equivalent to "x(3,8)" - 3 hits in 8 steps
     atom = Pat.pure("x")
     pattern = Pat.euclidean(atom, 3, 8, 0)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -201,7 +201,7 @@ def test_polymetric_pattern():
     # Pattern with multiple rhythmic patterns
     patterns = [Pat.pure("x"), Pat.pure("y"), Pat.pure("z")]
     pattern = Pat.polymetric(patterns)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -226,7 +226,7 @@ def test_alternating_pattern():
     # Pattern that alternates between x and y
     patterns = [Pat.pure("x"), Pat.pure("y")]
     pattern = Pat.alternating(patterns)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
 
     # Test different cycles
     arc0 = Arc(Fraction(0), Fraction(1))
@@ -250,7 +250,7 @@ def test_probability_pattern():
     """Test probability pattern (deterministic based on arc)."""
     base_pattern = Pat.pure("x")
     pattern = Pat.probability(base_pattern, Fraction(1))  # Always include
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -262,7 +262,7 @@ def test_probability_pattern():
 
     # Test with 0 probability
     pattern_never = Pat.probability(base_pattern, Fraction(0))
-    stream_never = PatStream(pattern_never)
+    stream_never = pat_stream(pattern_never)
 
     events_never = stream_never.unstream(arc)
     event_list_never = list(events_never)
@@ -275,7 +275,7 @@ def test_complex_nested_pattern():
     # Pattern equivalent to "[x y]!2" - sequence replicated twice
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
     pattern = Pat.replicate(seq, 2)
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -310,7 +310,7 @@ def test_complex_nested_pattern():
 def test_empty_sequence():
     """Test empty sequence generates no events."""
     pattern: Pat[str] = Pat.seq([])
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -322,7 +322,7 @@ def test_empty_sequence():
 def test_null_arc():
     """Test null arc generates no events."""
     pattern = Pat.pure("x")
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(1), Fraction(1))  # null arc
 
     events = stream.unstream(arc)
@@ -335,7 +335,7 @@ def test_partial_arc_query():
     """Test querying a partial arc of a sequence."""
     # Pattern "x y z"
     pattern = Pat.seq([Pat.pure("x"), Pat.pure("y"), Pat.pure("z")])
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
 
     # Query only the middle third (should get "y")
     arc = Arc(Fraction(1, 3), Fraction(2, 3))
@@ -367,7 +367,7 @@ def test_replicate_stream():
     from minipat.parser import parse_pattern
 
     pattern = parse_pattern("bd!3")
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -394,7 +394,7 @@ def test_ratio_stream():
     from minipat.parser import parse_pattern
 
     pattern = parse_pattern("bd*2%1")  # 2/1 ratio
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -413,7 +413,7 @@ def test_polymetric_subdivision_stream():
     from minipat.parser import parse_pattern
 
     pattern = parse_pattern("{bd, sd}%2")
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -433,7 +433,7 @@ def test_dot_grouping_stream():
     from minipat.parser import parse_pattern
 
     pattern = parse_pattern("bd sd . hh cp")
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
@@ -456,7 +456,7 @@ def test_new_features_stream_integration():
 
     for pattern_str in patterns:
         pat = parse_pattern(pattern_str)
-        stream = PatStream(pat)
+        stream = pat_stream(pat)
         arc = Arc(Fraction(0), Fraction(1))
         # Should not crash
         events = stream.unstream(arc)
@@ -473,7 +473,7 @@ def test_complex_new_features_stream():
 
     # Complex pattern with multiple new features
     pattern = parse_pattern("{bd!2, sd*3%2}%4")
-    stream = PatStream(pattern)
+    stream = pat_stream(pattern)
     arc = Arc(Fraction(0), Fraction(1))
 
     events = stream.unstream(arc)
