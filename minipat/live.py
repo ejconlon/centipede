@@ -21,7 +21,23 @@ from minipat.common import ONE, ZERO
 from minipat.ev import Ev
 from minipat.pat import Pat
 from minipat.stream import Stream, pat_stream
+from spiny.dmap import DKey, DMap
 from spiny.heapmap import PHeapMap
+
+
+class AttrDom[T]:
+    pass
+
+
+class OrbitKey[T](DKey[AttrDom[T], int]):
+    pass
+
+
+class EvKey[T](DKey[AttrDom[T], Ev[T]]):
+    pass
+
+
+type AttrMap[T] = DMap[AttrDom[T]]
 
 
 @dataclass(frozen=True)

@@ -25,11 +25,6 @@ class DKey[K, V](metaclass=ABCMeta):
         return cls.__name__
 
 
-@dataclass(frozen=True)
-class DValue[V]:
-    value: V
-
-
 class DMap[K]:
     def __init__(self):
         self._map: PMap[str, Any] = PMap.empty()
@@ -58,7 +53,7 @@ class DMap[K]:
             A DMap containing only the given key-value pair.
         """
         new_dmap = DMap[K]()
-        new_dmap._map = PMap.singleton(dkey.key(), DValue(value))
+        new_dmap._map = PMap.singleton(dkey.key(), value)
         return new_dmap
 
     def lookup[V](self, dkey: DKey[K, V]) -> Optional[V]:
@@ -70,8 +65,8 @@ class DMap[K]:
         Returns:
             The value associated with the key, or None if not found
         """
-        dvalue = self._map.lookup(dkey.key())
-        return dvalue.value if dvalue is not None else None
+        value = self._map.lookup(dkey.key())
+        return value if value is not None else None
 
     def get[V](self, dkey: DKey[K, V], default: Union[V, Missing] = _MISSING) -> V:
         """Get the value associated with a dependent key.
@@ -91,14 +86,14 @@ class DMap[K]:
         Raises:
             KeyError: If key is not found and no default is provided.
         """
-        dvalue = self._map.lookup(dkey.key())
-        if dvalue is None:
+        value = self._map.lookup(dkey.key())
+        if value is None:
             if isinstance(default, Missing):
                 raise KeyError(dkey.key())
             else:
                 return default
         else:
-            return dvalue.value
+            return value
 
     def put[V](self, dkey: DKey[K, V], value: V) -> DMap[K]:
         """Store a value with its dependent key.
@@ -111,7 +106,7 @@ class DMap[K]:
             A new DMap with the key-value pair added
         """
         new_dmap = DMap[K]()
-        new_dmap._map = self._map.put(dkey.key(), DValue(value))
+        new_dmap._map = self._map.put(dkey.key(), value)
         return new_dmap
 
     def contains[V](self, dkey: DKey[K, V]) -> bool:
@@ -153,3 +148,21 @@ class DMap[K]:
             The number of entries in the map
         """
         return self._map.size()
+
+    def merge(self, other: DMap[K]) -> DMap[K]:
+        """Merge this DMap with another DMap.
+
+        Time Complexity: O(m log(n/m+1)) where m ≤ n are sizes of the maps
+        Space Complexity: O(log(m + n)) for recursion and path copying
+
+        If both maps contain the same key, the value from this map takes precedence.
+
+        Args:
+            other: The DMap to merge with this one.
+
+        Returns:
+            A new DMap containing entries from both maps.
+        """
+        new_dmap = DMap[K]()
+        new_dmap._map = self._map.merge(other._map)
+        return new_dmap
