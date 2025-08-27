@@ -1,6 +1,7 @@
 from fractions import Fraction
 
 from minipat.arc import Arc
+from minipat.common import CycleTime
 from minipat.pat import Pat, RepetitionOp
 from minipat.stream import pat_stream
 
@@ -9,7 +10,7 @@ def test_pure_pattern():
     """Test pure pattern generates single event spanning arc."""
     pattern = Pat.pure("x")
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -24,7 +25,7 @@ def test_silence_pattern():
     """Test silence pattern generates no events."""
     pattern: Pat[str] = Pat.silence()
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -37,7 +38,7 @@ def test_sequence_pattern():
     # Pattern equivalent to "x y"
     pattern = Pat.seq([Pat.pure("x"), Pat.pure("y")])
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
@@ -62,7 +63,7 @@ def test_parallel_pattern():
     # Pattern equivalent to "[x,y]"
     pattern = Pat.par([Pat.pure("x"), Pat.pure("y")])
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -86,7 +87,7 @@ def test_repetition_fast():
     base_pattern = Pat.pure("x")
     pattern = Pat.repetition(base_pattern, RepetitionOp.Fast, 2)
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
@@ -112,7 +113,7 @@ def test_repetition_slow():
     base_pattern = Pat.pure("x")
     pattern = Pat.repetition(base_pattern, RepetitionOp.Slow, 2)
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -133,7 +134,7 @@ def test_elongation_pattern():
     base_pattern = Pat.pure("x")
     pattern = Pat.elongation(base_pattern, 2)
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -155,7 +156,7 @@ def test_choice_pattern():
     stream = pat_stream(pattern)
 
     # Test cycle 0 (arc starting at 0)
-    arc0 = Arc(Fraction(0), Fraction(1))
+    arc0 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events0 = stream.unstream(arc0)
     event_list0 = list(events0)
 
@@ -164,7 +165,7 @@ def test_choice_pattern():
     assert event0.val == "x"  # First choice
 
     # Test cycle 1 (arc starting at 1)
-    arc1 = Arc(Fraction(1), Fraction(2))
+    arc1 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     events1 = stream.unstream(arc1)
     event_list1 = list(events1)
 
@@ -179,7 +180,7 @@ def test_euclidean_pattern():
     atom = Pat.pure("x")
     pattern = Pat.euclidean(atom, 3, 8, 0)
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
@@ -202,7 +203,7 @@ def test_polymetric_pattern():
     patterns = [Pat.pure("x"), Pat.pure("y"), Pat.pure("z")]
     pattern = Pat.polymetric(patterns)
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -229,7 +230,7 @@ def test_alternating_pattern():
     stream = pat_stream(pattern)
 
     # Test different cycles
-    arc0 = Arc(Fraction(0), Fraction(1))
+    arc0 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events0 = stream.unstream(arc0)
     event_list0 = list(events0)
 
@@ -237,7 +238,7 @@ def test_alternating_pattern():
     _, event0 = event_list0[0]
     assert event0.val == "x"  # First pattern
 
-    arc1 = Arc(Fraction(1), Fraction(2))
+    arc1 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     events1 = stream.unstream(arc1)
     event_list1 = list(events1)
 
@@ -251,7 +252,7 @@ def test_probability_pattern():
     base_pattern = Pat.pure("x")
     pattern = Pat.probability(base_pattern, Fraction(1))  # Always include
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -276,7 +277,7 @@ def test_complex_nested_pattern():
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
     pattern = Pat.replicate(seq, 2)
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
@@ -311,7 +312,7 @@ def test_empty_sequence():
     """Test empty sequence generates no events."""
     pattern: Pat[str] = Pat.seq([])
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -323,7 +324,7 @@ def test_null_arc():
     """Test null arc generates no events."""
     pattern = Pat.pure("x")
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(1), Fraction(1))  # null arc
+    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(1)))  # null arc
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -338,7 +339,7 @@ def test_partial_arc_query():
     stream = pat_stream(pattern)
 
     # Query only the middle third (should get "y")
-    arc = Arc(Fraction(1, 3), Fraction(2, 3))
+    arc = Arc(CycleTime(Fraction(1, 3)), CycleTime(Fraction(2, 3)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -368,7 +369,7 @@ def test_replicate_stream():
 
     pattern = parse_pattern("bd!3")
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
@@ -395,7 +396,7 @@ def test_ratio_stream():
 
     pattern = parse_pattern("bd*2%1")  # 2/1 ratio
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -414,7 +415,7 @@ def test_polymetric_subdivision_stream():
 
     pattern = parse_pattern("{bd, sd}%2")
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -434,7 +435,7 @@ def test_dot_grouping_stream():
 
     pattern = parse_pattern("bd sd . hh cp")
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].start)
@@ -457,7 +458,7 @@ def test_new_features_stream_integration():
     for pattern_str in patterns:
         pat = parse_pattern(pattern_str)
         stream = pat_stream(pat)
-        arc = Arc(Fraction(0), Fraction(1))
+        arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
         # Should not crash
         events = stream.unstream(arc)
         assert events is not None
@@ -474,7 +475,7 @@ def test_complex_new_features_stream():
     # Complex pattern with multiple new features
     pattern = parse_pattern("{bd!2, sd*3%2}%4")
     stream = pat_stream(pattern)
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)

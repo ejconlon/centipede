@@ -7,6 +7,7 @@ from fractions import Fraction
 from typing import List, Optional, override
 
 from minipat.arc import Arc
+from minipat.common import CycleTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
 from minipat.pat import (
     Pat,
@@ -84,7 +85,9 @@ class SeqStream[T](Stream[T]):
 
         for i, child in enumerate(self.children):
             child_start = arc.start + i * child_duration
-            child_arc = Arc(child_start, child_start + child_duration)
+            child_arc = Arc(
+                CycleTime(child_start), CycleTime(child_start + child_duration)
+            )
 
             intersection = child_arc.intersect(arc)
             if not intersection.null():
@@ -159,7 +162,9 @@ class EuclideanStream[T](Stream[T]):
         for i, is_hit in enumerate(self.pattern):
             if is_hit:
                 step_start = arc.start + i * step_duration
-                step_arc = Arc(step_start, step_start + step_duration)
+                step_arc = Arc(
+                    CycleTime(step_start), CycleTime(step_start + step_duration)
+                )
 
                 if not arc.intersect(step_arc).null():
                     atom_events = self.atom.unstream(step_arc)
@@ -240,7 +245,10 @@ class RepetitionStream[T](Stream[T]):
                         rep_duration = arc.length() / int_count
                         for i in range(int_count):
                             rep_start = arc.start + i * rep_duration
-                            rep_arc = Arc(rep_start, rep_start + rep_duration)
+                            rep_arc = Arc(
+                                CycleTime(rep_start),
+                                CycleTime(rep_start + rep_duration),
+                            )
 
                             if not arc.intersect(rep_arc).null():
                                 pattern_events = self.pattern.unstream(rep_arc)
@@ -346,7 +354,7 @@ class ReplicateStream[T](Stream[T]):
 
         for i in range(self.count):
             rep_start = arc.start + i * rep_duration
-            rep_arc = Arc(rep_start, rep_start + rep_duration)
+            rep_arc = Arc(CycleTime(rep_start), CycleTime(rep_start + rep_duration))
             if not arc.intersect(rep_arc).null():
                 child_events = self.pattern.unstream(rep_arc)
                 for _, ev in child_events:

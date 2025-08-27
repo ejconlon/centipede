@@ -1,12 +1,13 @@
 from fractions import Fraction
 
 from minipat.arc import Arc
+from minipat.common import CycleTime
 from minipat.ev import Ev
 
 
 def test_ev_creation():
     """Test basic Ev creation."""
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     ev = Ev(arc, "test")
     assert ev.arc == arc
     assert ev.val == "test"
@@ -14,7 +15,7 @@ def test_ev_creation():
 
 def test_ev_shift():
     """Test Ev shift operation."""
-    arc = Arc(Fraction(1), Fraction(2))
+    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     ev = Ev(arc, "test")
     shifted = ev.shift(Fraction(1))
     assert shifted.arc.start == Fraction(2)
@@ -24,7 +25,7 @@ def test_ev_shift():
 
 def test_ev_scale():
     """Test Ev scale operation."""
-    arc = Arc(Fraction(1), Fraction(2))
+    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     ev = Ev(arc, "test")
     scaled = ev.scale(Fraction(2))
     assert scaled.arc.start == Fraction(2)
@@ -34,7 +35,7 @@ def test_ev_scale():
 
 def test_ev_clip():
     """Test Ev clip operation."""
-    arc = Arc(Fraction(0), Fraction(4))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
     ev = Ev(arc, "test")
     clipped = ev.clip(Fraction(1, 2))
     assert clipped.arc.start == Fraction(0)

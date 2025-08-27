@@ -7,7 +7,7 @@ import numpy.typing as npt
 import plotext as plt
 
 from minipat.arc import Arc
-from minipat.common import ONE, ZERO, Time
+from minipat.common import ONE, ZERO, CycleTime
 
 type Freq = Fraction
 type Phase = Fraction
@@ -18,7 +18,7 @@ type Array = npt.NDArray[np.float64]
 TAU = np.float64(2 * np.pi)
 
 
-def mk_lspace(start: Time, end: Time, rate: Rate) -> Array:
+def mk_lspace(start: CycleTime, end: CycleTime, rate: Rate) -> Array:
     assert start <= end
     assert rate > 0
     start_ix = round(rate * start)
@@ -55,6 +55,6 @@ def plot(spc: Array, arr: Array) -> None:
 
 
 def test_plot() -> None:
-    lspace = mk_lspace(ZERO, ONE, 1024)
+    lspace = mk_lspace(CycleTime(ZERO), CycleTime(ONE), 1024)
     arr = mk_sin(lspace=lspace, freq=Fraction(4))
     plot(lspace, arr)

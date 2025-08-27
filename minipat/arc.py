@@ -8,7 +8,7 @@ from fractions import Fraction
 from math import ceil, floor
 from typing import Iterator, Optional, Tuple
 
-from minipat.common import ZERO, Delta, Factor, Time
+from minipat.common import ZERO, CycleTime, Delta, Factor
 
 
 @dataclass(frozen=True, order=True)
@@ -20,8 +20,8 @@ class Arc:
         end: The end time of the arc
     """
 
-    start: Time
-    end: Time
+    start: CycleTime
+    end: CycleTime
 
     @staticmethod
     def empty() -> Arc:
@@ -42,7 +42,7 @@ class Arc:
         Returns:
             An arc from cyc to cyc+1
         """
-        return Arc(Fraction(cyc), Fraction(cyc + 1))
+        return Arc(CycleTime(Fraction(cyc)), CycleTime(Fraction(cyc + 1)))
 
     @staticmethod
     def union_all(arcs: Iterable[Arc]) -> Arc:
@@ -120,8 +120,8 @@ class Arc:
             left_ix = floor(start)
             right_ix = ceil(end)
             for cyc in range(left_ix, right_ix):
-                s = max(Fraction(cyc), self.start)
-                e = min(Fraction(cyc + 1), self.end)
+                s = CycleTime(max(Fraction(cyc), self.start))
+                e = CycleTime(min(Fraction(cyc + 1), self.end))
                 yield (cyc, Arc(s, e))
 
     def union(self, other: Arc) -> Arc:
@@ -138,8 +138,8 @@ class Arc:
         elif other.null():
             return self
         else:
-            start = min(self.start, other.start)
-            end = max(self.end, other.end)
+            start = CycleTime(min(self.start, other.start))
+            end = CycleTime(max(self.end, other.end))
             if start < end:
                 return Arc(start, end)
             else:
@@ -159,8 +159,8 @@ class Arc:
         elif other.null():
             return other._normalize()
         else:
-            start = max(self.start, other.start)
-            end = min(self.end, other.end)
+            start = CycleTime(max(self.start, other.start))
+            end = CycleTime(min(self.end, other.end))
             if start < end:
                 return Arc(start, end)
             else:
@@ -178,7 +178,7 @@ class Arc:
         if self.null() or delta == 0:
             return self._normalize()
         else:
-            return Arc(self.start + delta, self.end + delta)
+            return Arc(CycleTime(self.start + delta), CycleTime(self.end + delta))
 
     def scale(self, factor: Factor) -> Arc:
         """Scale the arc by a given factor.
@@ -194,7 +194,7 @@ class Arc:
         elif factor <= 0:
             return Arc.empty()
         else:
-            return Arc(self.start * factor, self.end * factor)
+            return Arc(CycleTime(self.start * factor), CycleTime(self.end * factor))
 
     def clip(self, factor: Factor) -> Arc:
         """Clip the arc to a fraction of its length.
@@ -210,8 +210,8 @@ class Arc:
         elif factor <= 0:
             return Arc.empty()
         else:
-            end = self.start + (self.end - self.start) * factor
+            end = CycleTime(self.start + (self.end - self.start) * factor)
             return Arc(self.start, end)
 
 
-_EMPTY_ARC = Arc(ZERO, ZERO)
+_EMPTY_ARC = Arc(CycleTime(ZERO), CycleTime(ZERO))

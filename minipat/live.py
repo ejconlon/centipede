@@ -17,7 +17,7 @@ from typing import Dict, Optional, override
 
 from centipede.actor import Actor, ActorEnv, Sender, Task
 from minipat.arc import Arc
-from minipat.common import ONE, ZERO
+from minipat.common import ONE, ZERO, CycleTime, PosixTime
 from minipat.ev import Ev
 from minipat.pat import Pat
 from minipat.stream import Stream, pat_stream
@@ -88,7 +88,7 @@ class LiveDomain[T]:
     playing: bool = False
     """Whether pattern playback is currently active."""
 
-    current_cycle: Fraction = ZERO
+    current_cycle: CycleTime = CycleTime(ZERO)
     """Current cycle position in the timeline."""
 
     orbits: Dict[int, OrbitState[T]] = field(default_factory=dict)
@@ -100,7 +100,7 @@ class LiveDomain[T]:
     generations_per_cycle: int = 4
     """Current number of generations per cycle."""
 
-    playback_start_time: Optional[float] = None
+    playback_start_time: Optional[PosixTime] = None
     """Wall clock time when playback started (seconds since epoch)."""
 
 
@@ -112,12 +112,11 @@ class Backend[T](metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def send_events(self, orbit_id: int, events: PHeapMap[Arc, Ev[T]]) -> None:
-        """Send events from an orbit to the backend.
+    def send_events(self, attrs: PHeapMap[Arc, AttrMap[T]]) -> None:
+        """Send events with attributes to the backend.
 
         Args:
-            orbit_id: The orbit identifier.
-            events: The events to send.
+            attrs: The events with their attributes to send.
         """
         ...
 
@@ -134,12 +133,14 @@ class LogBackend[T](Backend[T]):
         self._logger = logger
 
     @override
-    def send_events(self, orbit_id: int, events: PHeapMap[Arc, Ev[T]]) -> None:
-        if not events:
-            self._logger.debug("Orbit %s: %d events", orbit_id, len(events))
+    def send_events(self, attrs: PHeapMap[Arc, AttrMap[T]]) -> None:
+        if not attrs:
+            self._logger.debug("Received %d events", len(attrs))
             if self._logger.getEffectiveLevel() <= logging.DEBUG:
-                for arc, ev in events:
-                    self._logger.debug("Event @%s: %s", arc, ev)
+                for arc, attr_map in attrs:
+                    orbit_id = attr_map.get(OrbitKey[T]())
+                    ev = attr_map.get(EvKey[T]())
+                    self._logger.debug("Orbit %s Event @%s: %s", orbit_id, arc, ev)
 
     @override
     def flush(self) -> None:
@@ -281,7 +282,7 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
         # Calculate the time arc for this generation
         cycle_start = self._state.domain.current_cycle
         cycle_length = Fraction(1) / self._state.domain.generations_per_cycle
-        cycle_end = cycle_start + cycle_length
+        cycle_end = CycleTime(cycle_start + cycle_length)
         arc = Arc(cycle_start, cycle_end)
 
         # Check if any orbits are soloed
@@ -303,10 +304,15 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
             # Generate events using the orbit stream
             events = orbit.stream.unstream(arc)
 
-            # Send events to backend
-            if not events:
+            # Convert events to attribute format
+            if events:
+                attrs = PHeapMap[Arc, AttrMap[T]].empty()
+                for event_arc, ev in events:
+                    attr_map = mk_attr_map(orbit_id, ev)
+                    attrs = attrs.put(event_arc, attr_map)
+
                 logger.debug("Sending %s events for orbit %s", len(events), orbit_id)
-                self._state.backend.send_events(orbit_id, events)
+                self._state.backend.send_events(attrs)
 
         # Flush backend
         self._state.backend.flush()
@@ -340,8 +346,8 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
 
         if playing:
             # Reset cycle position and record start time when starting
-            self._state.domain.current_cycle = Fraction(0)
-            self._state.domain.playback_start_time = time.time()
+            self._state.domain.current_cycle = CycleTime(Fraction(0))
+            self._state.domain.playback_start_time = PosixTime(time.time())
         else:
             # Clear start time when stopping
             self._state.domain.playback_start_time = None
@@ -377,7 +383,7 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
             orbit.solo = False
 
         # Reset cycle position
-        self._state.domain.current_cycle = Fraction(0)
+        self._state.domain.current_cycle = CycleTime(Fraction(0))
 
 
 class LiveSystem[T]:

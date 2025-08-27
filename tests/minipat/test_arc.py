@@ -1,11 +1,12 @@
 from fractions import Fraction
 
 from minipat.arc import Arc
+from minipat.common import CycleTime
 
 
 def test_arc_creation():
     """Test basic Arc creation."""
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     assert arc.start == Fraction(0)
     assert arc.end == Fraction(1)
 
@@ -27,46 +28,46 @@ def test_arc_cycle():
 
 def test_arc_length():
     """Test Arc length calculation."""
-    arc = Arc(Fraction(1), Fraction(4))
+    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(4)))
     assert arc.length() == Fraction(3)
 
 
 def test_arc_null():
     """Test Arc null detection."""
     # Normal arc should not be null
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     assert not arc.null()
 
     # Arc with start >= end should be null
-    null_arc = Arc(Fraction(1), Fraction(1))
+    null_arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(1)))
     assert null_arc.null()
 
-    null_arc2 = Arc(Fraction(2), Fraction(1))
+    null_arc2 = Arc(CycleTime(Fraction(2)), CycleTime(Fraction(1)))
     assert null_arc2.null()
 
 
 def test_arc_normalize():
     """Test Arc normalization."""
     # Normal arc should remain unchanged
-    arc = Arc(Fraction(0), Fraction(1))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     normalized = arc._normalize()
     assert normalized == arc
 
     # Invalid arc should become empty
-    invalid_arc = Arc(Fraction(2), Fraction(1))
+    invalid_arc = Arc(CycleTime(Fraction(2)), CycleTime(Fraction(1)))
     normalized = invalid_arc._normalize()
     assert normalized.null()
 
     # Special case: (0, 0) should remain as is
-    zero_arc = Arc(Fraction(0), Fraction(0))
+    zero_arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(0)))
     normalized = zero_arc._normalize()
     assert normalized == zero_arc
 
 
 def test_arc_union():
     """Test Arc union operation."""
-    arc1 = Arc(Fraction(0), Fraction(2))
-    arc2 = Arc(Fraction(1), Fraction(3))
+    arc1 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
+    arc2 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
     union = arc1.union(arc2)
     assert union.start == Fraction(0)
     assert union.end == Fraction(3)
@@ -77,8 +78,8 @@ def test_arc_union():
     assert union_with_empty == arc1
 
     # Union of non-overlapping arcs
-    arc3 = Arc(Fraction(0), Fraction(1))
-    arc4 = Arc(Fraction(2), Fraction(3))
+    arc3 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc4 = Arc(CycleTime(Fraction(2)), CycleTime(Fraction(3)))
     union_non_overlap = arc3.union(arc4)
     assert union_non_overlap.start == Fraction(0)
     assert union_non_overlap.end == Fraction(3)
@@ -86,8 +87,8 @@ def test_arc_union():
 
 def test_arc_intersect():
     """Test Arc intersection operation."""
-    arc1 = Arc(Fraction(0), Fraction(2))
-    arc2 = Arc(Fraction(1), Fraction(3))
+    arc1 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
+    arc2 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
     intersection = arc1.intersect(arc2)
     assert intersection.start == Fraction(1)
     assert intersection.end == Fraction(2)
@@ -98,15 +99,15 @@ def test_arc_intersect():
     assert intersection_with_empty.null()
 
     # Non-overlapping intersection
-    arc3 = Arc(Fraction(0), Fraction(1))
-    arc4 = Arc(Fraction(2), Fraction(3))
+    arc3 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc4 = Arc(CycleTime(Fraction(2)), CycleTime(Fraction(3)))
     no_intersection = arc3.intersect(arc4)
     assert no_intersection.null()
 
 
 def test_arc_shift():
     """Test Arc shift operation."""
-    arc = Arc(Fraction(1), Fraction(3))
+    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
     shifted = arc.shift(Fraction(2))
     assert shifted.start == Fraction(3)
     assert shifted.end == Fraction(5)
@@ -123,7 +124,7 @@ def test_arc_shift():
 
 def test_arc_scale():
     """Test Arc scale operation."""
-    arc = Arc(Fraction(1), Fraction(3))
+    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
     scaled = arc.scale(Fraction(2))
     assert scaled.start == Fraction(2)
     assert scaled.end == Fraction(6)
@@ -142,7 +143,7 @@ def test_arc_scale():
 
 def test_arc_clip():
     """Test Arc clip operation."""
-    arc = Arc(Fraction(0), Fraction(4))
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
     clipped = arc.clip(Fraction(1, 2))  # Clip to half
     assert clipped.start == Fraction(0)
     assert clipped.end == Fraction(2)
@@ -158,7 +159,7 @@ def test_arc_clip():
 
 def test_arc_split_cycles():
     """Test Arc split_cycles operation."""
-    arc = Arc(Fraction(1, 2), Fraction(5, 2))  # 0.5 to 2.5
+    arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(5, 2)))  # 0.5 to 2.5
     cycles = list(arc.split_cycles())
 
     # Should split into cycles 0, 1, 2
@@ -182,8 +183,8 @@ def test_arc_split_cycles():
 
 def test_arc_split_cycles_with_bounds():
     """Test Arc split_cycles with bounds."""
-    arc = Arc(Fraction(1, 2), Fraction(5, 2))
-    bounds = Arc(Fraction(3, 4), Fraction(7, 4))  # 0.75 to 1.75
+    arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(5, 2)))
+    bounds = Arc(CycleTime(Fraction(3, 4)), CycleTime(Fraction(7, 4)))  # 0.75 to 1.75
     cycles = list(arc.split_cycles(bounds))
 
     # Bounds eliminate cycle 2 compared to unbounded version
@@ -203,9 +204,9 @@ def test_arc_split_cycles_with_bounds():
 def test_arc_union_all():
     """Test Arc.union_all static method."""
     arcs = [
-        Arc(Fraction(0), Fraction(1)),
-        Arc(Fraction(2), Fraction(3)),
-        Arc(Fraction(1), Fraction(2)),
+        Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))),
+        Arc(CycleTime(Fraction(2)), CycleTime(Fraction(3))),
+        Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2))),
     ]
     union = Arc.union_all(arcs)
     assert union.start == Fraction(0)
@@ -219,15 +220,18 @@ def test_arc_union_all():
 def test_arc_intersect_all():
     """Test Arc.intersect_all static method."""
     arcs = [
-        Arc(Fraction(0), Fraction(3)),
-        Arc(Fraction(1), Fraction(4)),
-        Arc(Fraction(2), Fraction(5)),
+        Arc(CycleTime(Fraction(0)), CycleTime(Fraction(3))),
+        Arc(CycleTime(Fraction(1)), CycleTime(Fraction(4))),
+        Arc(CycleTime(Fraction(2)), CycleTime(Fraction(5))),
     ]
     intersection = Arc.intersect_all(arcs)
     assert intersection.start == Fraction(2)
     assert intersection.end == Fraction(3)
 
     # Non-overlapping arcs should return empty
-    non_overlap = [Arc(Fraction(0), Fraction(1)), Arc(Fraction(2), Fraction(3))]
+    non_overlap = [
+        Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))),
+        Arc(CycleTime(Fraction(2)), CycleTime(Fraction(3))),
+    ]
     no_intersection = Arc.intersect_all(non_overlap)
     assert no_intersection.null()

@@ -1,9 +1,13 @@
 """Common types and constants for minipat pattern system."""
 
 from fractions import Fraction
+from typing import NewType
 
-type Time = Fraction
-"""Type alias for time values represented as fractions."""
+CycleTime = NewType("CycleTime", Fraction)
+"""Time measured in elapsed cycles as fractions."""
+
+PosixTime = NewType("PosixTime", float)
+"""Time measured as POSIX timestamp (seconds since epoch)."""
 
 type Delta = Fraction
 """Type alias for time deltas represented as fractions."""
