@@ -45,7 +45,7 @@ class ReportingActor(Actor[str]):
         self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
     ) -> None:
         self.reports.append((child_id, exc))
-        env.logger.info(f"Child {child_id} reported: {exc}")
+        env.logger.info("Child %s reported: %s", child_id, exc)
 
 
 class FatalErrorActor(Actor[str]):

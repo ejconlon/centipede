@@ -20,7 +20,7 @@ from minipat.arc import Arc
 from minipat.common import ONE, ZERO
 from minipat.ev import Ev
 from minipat.pat import Pat
-from minipat.stream import pat_stream
+from minipat.stream import Stream, pat_stream
 from spiny.heapmap import PHeapMap
 
 
@@ -45,11 +45,11 @@ class LiveEnv:
 class OrbitState[T]:
     """State for a single orbit (audio channel/stream).
 
-    Each orbit contains a pattern and maintains its own playback state.
+    Each orbit contains a stream and maintains its own playback state.
     """
 
-    pattern: Optional[Pat[T]] = None
-    """Current pattern playing on this orbit."""
+    stream: Optional[Stream[T]] = None
+    """Current stream playing on this orbit."""
 
     muted: bool = False
     """Whether this orbit is muted."""
@@ -79,6 +79,9 @@ class LiveDomain[T]:
 
     generations_per_cycle: int = 4
     """Current number of generations per cycle."""
+
+    playback_start_time: Optional[float] = None
+    """Wall clock time when playback started (seconds since epoch)."""
 
 
 class Backend[T](metaclass=ABCMeta):
@@ -113,9 +116,10 @@ class LogBackend[T](Backend[T]):
     @override
     def send_events(self, orbit_id: int, events: PHeapMap[Arc, Ev[T]]) -> None:
         if not events:
-            self._logger.debug(f"Orbit {orbit_id}: {len(events)} events")
-            for arc, ev in events:
-                self._logger.debug(f"  {arc}: {ev}")
+            self._logger.debug("Orbit %s: %d events", orbit_id, len(events))
+            if self._logger.getEffectiveLevel() <= logging.DEBUG:
+                for arc, ev in events:
+                    self._logger.debug("Event @%s: %s", arc, ev)
 
     @override
     def flush(self) -> None:
@@ -172,10 +176,10 @@ class GenerateEvents[T](GeneratorMessage[T]):
 
 @dataclass(frozen=True)
 class SetOrbit[T](GeneratorMessage[T]):
-    """Set the pattern for a specific orbit."""
+    """Set the stream for a specific orbit."""
 
     orbit_id: int
-    pattern: Optional[Pat[T]]
+    stream: Optional[Stream[T]]
 
 
 @dataclass(frozen=True)
@@ -234,8 +238,8 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
         match value:
             case GenerateEvents():
                 self._generate_events(env.logger)
-            case SetOrbit(orbit_id, pattern):
-                self._set_orbit(env.logger, orbit_id, pattern)
+            case SetOrbit(orbit_id, stream):
+                self._set_orbit(env.logger, orbit_id, stream)
             case SetCps(cps):
                 self._set_cps(env.logger, cps)
             case SetPlaying(playing):
@@ -252,7 +256,7 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
         if not self._state.domain.playing:
             return
 
-        logger.debug(f"Generating events for cycle {self._state.domain.current_cycle}")
+        logger.debug("Generating events for cycle %s", self._state.domain.current_cycle)
 
         # Calculate the time arc for this generation
         cycle_start = self._state.domain.current_cycle
@@ -265,7 +269,7 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
 
         # Generate events for each active orbit
         for orbit_id, orbit in self._state.domain.orbits.items():
-            if orbit.pattern is None:
+            if orbit.stream is None:
                 continue
 
             # Skip muted orbits, unless they're soloed
@@ -276,13 +280,12 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
             if has_solo and not orbit.solo:
                 continue
 
-            # Generate events using pattern stream
-            stream = pat_stream(orbit.pattern)
-            events = stream.unstream(arc)
+            # Generate events using the orbit stream
+            events = orbit.stream.unstream(arc)
 
             # Send events to backend
             if not events:
-                logger.debug(f"Sending {len(events)} events for orbit {orbit_id}")
+                logger.debug("Sending %s events for orbit %s", len(events), orbit_id)
                 self._state.backend.send_events(orbit_id, events)
 
         # Flush backend
@@ -292,32 +295,36 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
         self._state.domain.current_cycle = cycle_end
 
     def _set_orbit(
-        self, logger: Logger, orbit_id: int, pattern: Optional[Pat[T]]
+        self, logger: Logger, orbit_id: int, stream: Optional[Stream[T]]
     ) -> None:
-        """Set the pattern for a specific orbit."""
+        """Set the stream for a specific orbit."""
         if orbit_id not in self._state.domain.orbits:
             self._state.domain.orbits[orbit_id] = OrbitState()
 
-        self._state.domain.orbits[orbit_id].pattern = pattern
+        self._state.domain.orbits[orbit_id].stream = stream
 
-        if pattern is None:
-            logger.debug(f"Cleared orbit {orbit_id}")
+        if stream is None:
+            logger.debug("Cleared orbit %s", orbit_id)
         else:
-            logger.debug(f"Set pattern for orbit {orbit_id}")
+            logger.debug("Set stream for orbit %s", orbit_id)
 
     def _set_cps(self, logger: Logger, cps: Fraction) -> None:
         """Set the cycles per second (tempo)."""
         self._state.domain.cps = cps
-        logger.debug(f"Set CPS to {cps}")
+        logger.debug("Set CPS to %s", cps)
 
     def _set_playing(self, logger: Logger, playing: bool) -> None:
         """Set the playing state."""
         self._state.domain.playing = playing
-        logger.debug(f"Set playing to {playing}")
+        logger.debug("Set playing to %s", playing)
 
         if playing:
-            # Reset cycle position when starting
+            # Reset cycle position and record start time when starting
             self._state.domain.current_cycle = Fraction(0)
+            self._state.domain.playback_start_time = time.time()
+        else:
+            # Clear start time when stopping
+            self._state.domain.playback_start_time = None
 
     def _mute_orbit(self, logger: Logger, orbit_id: int, muted: bool) -> None:
         """Mute or unmute an orbit."""
@@ -325,7 +332,7 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
             self._state.domain.orbits[orbit_id] = OrbitState()
 
         self._state.domain.orbits[orbit_id].muted = muted
-        logger.debug(f"Set orbit {orbit_id} muted to {muted}")
+        logger.debug("Set orbit %s muted to %s", orbit_id, muted)
 
     def _solo_orbit(self, logger: Logger, orbit_id: int, solo: bool) -> None:
         """Solo or unsolo an orbit."""
@@ -333,18 +340,19 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
             self._state.domain.orbits[orbit_id] = OrbitState()
 
         self._state.domain.orbits[orbit_id].solo = solo
-        logger.debug(f"Set orbit {orbit_id} solo to {solo}")
+        logger.debug("Set orbit %s solo to %s", orbit_id, solo)
 
     def _panic(self, logger: Logger) -> None:
-        """Emergency stop - clear all patterns and stop playback."""
-        logger.info("PANIC: Clearing all patterns and stopping playback")
+        """Emergency stop - clear all streams and stop playback."""
+        logger.info("PANIC: Clearing all streams and stopping playback")
 
         # Stop playback
         self._state.domain.playing = False
+        self._state.domain.playback_start_time = None
 
-        # Clear all patterns
+        # Clear all streams
         for orbit in self._state.domain.orbits.values():
-            orbit.pattern = None
+            orbit.stream = None
             orbit.muted = False
             orbit.solo = False
 
@@ -393,15 +401,15 @@ class LiveSystem[T]:
 
         self._logger.info("Live pattern system started")
 
-    def set_orbit(self, orbit_id: int, pattern: Optional[Pat[T]]) -> None:
-        """Set the pattern for a specific orbit.
+    def set_orbit(self, orbit_id: int, stream: Optional[Stream[T]]) -> None:
+        """Set the stream for a specific orbit.
 
         Args:
             orbit_id: The orbit identifier.
-            pattern: The pattern to set, or None to clear.
+            stream: The stream to set, or None to clear.
         """
         if self._state_sender is not None:
-            self._state_sender.send(SetOrbit(orbit_id, pattern))
+            self._state_sender.send(SetOrbit(orbit_id, stream))
 
     def set_cps(self, cps: Fraction) -> None:
         """Set the cycles per second (tempo).
@@ -505,13 +513,15 @@ if __name__ == "__main__":
     live.start(system)
 
     try:
-        # Create some simple patterns
+        # Create some simple patterns and convert to streams
         pattern1 = Pat.pure("kick")
         pattern2 = Pat.seq([Pat.pure("snare"), Pat.silence()])
+        stream1 = pat_stream(pattern1)
+        stream2 = pat_stream(pattern2)
 
-        # Set patterns on orbits
-        live.set_orbit(0, pattern1)
-        live.set_orbit(1, pattern2)
+        # Set streams on orbits
+        live.set_orbit(0, stream1)
+        live.set_orbit(1, stream2)
 
         # Set tempo and start playback
         live.set_cps(Fraction(2))  # 2 cycles per second

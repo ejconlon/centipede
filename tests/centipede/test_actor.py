@@ -27,7 +27,7 @@ class SimpleActor(Actor[str]):
 
     def on_message(self, env: ActorEnv, value: str) -> None:
         self.messages.append(value)
-        env.logger.info(f"Received message: {value}")
+        env.logger.info("Received message: %s", value)
 
     def on_stop(self, logger) -> None:
         self.stopped = True
@@ -83,7 +83,7 @@ class ProducerTask(Task):
                 break
             self.sender.send(msg)
             self.sent_count += 1
-            logger.info(f"Sent message: {msg}")
+            logger.info("Sent message: %s", msg)
             time.sleep(self.delay)
 
 
