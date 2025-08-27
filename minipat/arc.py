@@ -8,7 +8,7 @@ from fractions import Fraction
 from math import ceil, floor
 from typing import Iterator, Optional, Tuple
 
-from minipat.common import ZERO, CycleTime, Delta, Factor
+from minipat.common import ZERO, CycleTime, CycleDelta, CycleTimeOps, Factor
 
 
 @dataclass(frozen=True, order=True)
@@ -83,13 +83,13 @@ class Arc:
                     out = out.intersect(arc)
         return out
 
-    def length(self) -> Delta:
+    def length(self) -> CycleDelta:
         """Get the length of the arc.
 
         Returns:
             The duration of the arc (end - start)
         """
-        return self.end - self.start
+        return CycleTimeOps.diff(self.end, self.start)
 
     def null(self) -> bool:
         """Check if the arc is null (empty).
@@ -166,7 +166,7 @@ class Arc:
             else:
                 return Arc.empty()
 
-    def shift(self, delta: Delta) -> Arc:
+    def shift(self, delta: CycleDelta) -> Arc:
         """Shift the arc by a given delta.
 
         Args:

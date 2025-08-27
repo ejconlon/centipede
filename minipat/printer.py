@@ -15,8 +15,8 @@ from minipat.pat import (
     PatPolymetric,
     PatProbability,
     PatPure,
-    PatReplicate,
     PatRepetition,
+    PatReplicate,
     PatSelect,
     PatSeq,
     PatSilence,
@@ -133,7 +133,7 @@ def print_pattern(pat: Pat[str]) -> str:
 
         case _:
             # This should never happen if all pattern types are handled above
-            assert False, f"Unhandled pattern type: {type(pat.unwrap).__name__}"
+            raise Exception(f"Unhandled pattern type: {type(pat.unwrap).__name__}")
 
 
 def print_pattern_grouped(pat: Pat[str]) -> str:

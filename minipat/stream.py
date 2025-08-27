@@ -412,7 +412,7 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
             return ReplicateStream(pattern_stream, count)
         case _:
             # This should never happen if all pattern types are handled above
-            assert False, f"Unhandled pattern type: {type(pat.unwrap).__name__}"
+            raise Exception(f"Unhandled pattern type: {type(pat.unwrap).__name__}")
 
 
 def _generate_euclidean(hits: int, steps: int, rotation: int) -> List[bool]:

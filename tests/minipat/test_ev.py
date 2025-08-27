@@ -1,7 +1,7 @@
 from fractions import Fraction
 
 from minipat.arc import Arc
-from minipat.common import CycleTime
+from minipat.common import CycleDelta, CycleTime
 from minipat.ev import Ev
 
 
@@ -17,7 +17,7 @@ def test_ev_shift():
     """Test Ev shift operation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     ev = Ev(arc, "test")
-    shifted = ev.shift(Fraction(1))
+    shifted = ev.shift(CycleDelta(Fraction(1)))
     assert shifted.arc.start == Fraction(2)
     assert shifted.arc.end == Fraction(3)
     assert shifted.val == "test"

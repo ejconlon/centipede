@@ -1,5 +1,7 @@
 """Common types and constants for minipat pattern system."""
 
+import time
+from abc import ABCMeta, abstractmethod
 from fractions import Fraction
 from typing import NewType
 
@@ -9,8 +11,11 @@ CycleTime = NewType("CycleTime", Fraction)
 PosixTime = NewType("PosixTime", float)
 """Time measured as POSIX timestamp (seconds since epoch)."""
 
-type Delta = Fraction
-"""Type alias for time deltas represented as fractions."""
+CycleDelta = NewType("CycleDelta", Fraction)
+"""Type for cycle time deltas represented as fractions."""
+
+PosixDelta = NewType("PosixDelta", float)
+"""Type for POSIX time deltas represented as floats."""
 
 type Factor = Fraction
 """Type alias for scaling factors represented as fractions."""
@@ -44,3 +49,55 @@ def format_fraction(frac: Fraction) -> str:
     else:
         # Always use parenthesized fraction format
         return f"({frac.numerator}/{frac.denominator})"
+
+
+class TimeOps[T, D](metaclass=ABCMeta):
+    """Operations on times (T) and their deltas (D)."""
+
+    def __new__(cls):
+        raise Exception("Cannot instantiate namespace")
+
+    @classmethod
+    @abstractmethod
+    def diff(cls, end: T, start: T) -> D:
+        """Returns end-start as a delta."""
+        raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
+    def add(cls, base: T, delta: D) -> T:
+        """Returns base+delta as a time."""
+        raise NotImplementedError
+
+
+class CycleTimeOps(TimeOps[CycleTime, CycleDelta]):
+    """Time operations for CycleTime."""
+
+    @classmethod
+    def diff(cls, end: CycleTime, start: CycleTime) -> CycleDelta:
+        return CycleDelta(end - start)
+
+    @classmethod
+    def add(cls, base: CycleTime, delta: CycleDelta) -> CycleTime:
+        return CycleTime(base + delta)
+
+
+class PosixTimeOps(TimeOps[PosixTime, PosixDelta]):
+    """Time operations for PosixTime."""
+
+    @classmethod
+    def diff(cls, end: PosixTime, start: PosixTime) -> PosixDelta:
+        return PosixDelta(end - start)
+
+    @classmethod
+    def add(cls, base: PosixTime, delta: PosixDelta) -> PosixTime:
+        return PosixTime(base + delta)
+
+
+def current_posix_time() -> PosixTime:
+    """Get the current POSIX time.
+
+    Returns:
+        The current time as a POSIX timestamp
+    """
+    return PosixTime(time.time())

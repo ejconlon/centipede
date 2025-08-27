@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from minipat.arc import Arc
-from minipat.common import Delta, Factor
+from minipat.common import CycleDelta, Factor
 from spiny import PHeapMap
 
 
@@ -21,7 +21,7 @@ class Ev[T]:
     arc: Arc
     val: T
 
-    def shift(self, delta: Delta) -> Ev[T]:
+    def shift(self, delta: CycleDelta) -> Ev[T]:
         """Shift the event by a time delta.
 
         Args:
