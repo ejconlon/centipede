@@ -120,12 +120,16 @@ def test_static_empty():
 
 def test_dkey_instance_and_key():
     """Test DKey instance creation and key method"""
-    name_key = NameKey.instance()
+    name_key = NameKey()
     assert isinstance(name_key, NameKey)
     assert name_key.key() == "NameKey"
+    name_key_2 = NameKey()
+    assert name_key_2 is name_key
+    assert name_key_2 == name_key
 
     age_key = AgeKey()
     assert age_key.key() == "AgeKey"
+    assert age_key is not name_key
 
 
 def test_multiple_key_types():

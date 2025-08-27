@@ -16,9 +16,12 @@ _MISSING = Missing()
 
 
 class DKey[K, V](metaclass=ABCMeta):
-    @classmethod
-    def instance(cls) -> Self:
-        return cls()
+    _instance: Optional[Self] = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     @classmethod
     def key(cls) -> str:

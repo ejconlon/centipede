@@ -40,6 +40,10 @@ class EvKey[T](DKey[AttrDom[T], Ev[T]]):
 type AttrMap[T] = DMap[AttrDom[T]]
 
 
+def mk_attr_map[T](orbit_id: int, ev: Ev[T]) -> AttrMap[T]:
+    return DMap[AttrDom[T]].empty().put(OrbitKey[T](), orbit_id).put(EvKey[T](), ev)
+
+
 @dataclass(frozen=True)
 class LiveEnv:
     """Environment configuration for live pattern playback.
