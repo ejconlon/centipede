@@ -111,6 +111,8 @@ class Backend[T](metaclass=ABCMeta):
     (e.g., to audio systems, MIDI, OSC, etc.).
     """
 
+    # TODO remove orbit_id, change events to PHeapMap[Arc, AttrMap[T]], add information to convert CycleTime to
+    # PosixTime
     @abstractmethod
     def send_events(self, attrs: PHeapMap[Arc, AttrMap[T]]) -> None:
         """Send events with attributes to the backend.
@@ -118,12 +120,7 @@ class Backend[T](metaclass=ABCMeta):
         Args:
             attrs: The events with their attributes to send.
         """
-        ...
-
-    @abstractmethod
-    def flush(self) -> None:
-        """Flush any pending events to the output."""
-        ...
+        raise NotImplementedError
 
 
 class LogBackend[T](Backend[T]):
@@ -141,10 +138,6 @@ class LogBackend[T](Backend[T]):
                     orbit_id = attr_map.get(OrbitKey[T]())
                     ev = attr_map.get(EvKey[T]())
                     self._logger.debug("Orbit %s Event @%s: %s", orbit_id, arc, ev)
-
-    @override
-    def flush(self) -> None:
-        pass
 
 
 @dataclass
@@ -313,9 +306,6 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
 
                 logger.debug("Sending %s events for orbit %s", len(events), orbit_id)
                 self._state.backend.send_events(attrs)
-
-        # Flush backend
-        self._state.backend.flush()
 
         # Advance cycle position
         self._state.domain.current_cycle = cycle_end

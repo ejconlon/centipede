@@ -1,7 +1,7 @@
 from fractions import Fraction
 
 from minipat.arc import Arc
-from minipat.common import CycleTime
+from minipat.common import CycleDelta, CycleTime
 
 
 def test_arc_creation():
@@ -108,17 +108,17 @@ def test_arc_intersect():
 def test_arc_shift():
     """Test Arc shift operation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
-    shifted = arc.shift(Fraction(2))
+    shifted = arc.shift(CycleDelta(Fraction(2)))
     assert shifted.start == Fraction(3)
     assert shifted.end == Fraction(5)
 
     # Shift by zero should return normalized arc
-    no_shift = arc.shift(Fraction(0))
+    no_shift = arc.shift(CycleDelta(Fraction(0)))
     assert no_shift == arc
 
     # Shift empty arc
     empty = Arc.empty()
-    shifted_empty = empty.shift(Fraction(1))
+    shifted_empty = empty.shift(CycleDelta(Fraction(1)))
     assert shifted_empty.null()
 
 
