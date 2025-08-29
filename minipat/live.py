@@ -177,28 +177,28 @@ class TransportMessage[T](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class SetCps[T](TransportMessage[T]):
+class TransportSetCps[T](TransportMessage[T]):
     """Set the cycles per second (tempo)."""
 
     cps: Fraction
 
 
 @dataclass(frozen=True)
-class SetPlaying[T](TransportMessage[T]):
+class TransportSetPlaying[T](TransportMessage[T]):
     """Set the playing state."""
 
     playing: bool
 
 
 @dataclass(frozen=True)
-class SetCycle[T](TransportMessage[T]):
+class TransportSetCycle[T](TransportMessage[T]):
     """Set the current cycle position."""
 
     cycle: CycleTime
 
 
 @dataclass(frozen=True)
-class Panic[T](TransportMessage[T]):
+class TransportPanic[T](TransportMessage[T]):
     """Emergency stop - clear all patterns and stop playback."""
 
     pass
@@ -211,14 +211,14 @@ class PatternMessage[T](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class GenerateEvents[T](PatternMessage[T]):
+class PatternGenerateEvents[T](PatternMessage[T]):
     """Request to generate events for a specific instant."""
 
     instant: Instant
 
 
 @dataclass(frozen=True)
-class SetOrbit[T](PatternMessage[T]):
+class PatternSetOrbit[T](PatternMessage[T]):
     """Set the stream for a specific orbit."""
 
     orbit: Orbit
@@ -226,7 +226,7 @@ class SetOrbit[T](PatternMessage[T]):
 
 
 @dataclass(frozen=True)
-class MuteOrbit[T](PatternMessage[T]):
+class PatternMuteOrbit[T](PatternMessage[T]):
     """Mute or unmute an orbit."""
 
     orbit: Orbit
@@ -234,7 +234,7 @@ class MuteOrbit[T](PatternMessage[T]):
 
 
 @dataclass(frozen=True)
-class SoloOrbit[T](PatternMessage[T]):
+class PatternSoloOrbit[T](PatternMessage[T]):
     """Solo or unsolo an orbit."""
 
     orbit: Orbit
@@ -242,7 +242,7 @@ class SoloOrbit[T](PatternMessage[T]):
 
 
 @dataclass(frozen=True)
-class ClearOrbits[T](PatternMessage[T]):
+class PatternClearOrbits[T](PatternMessage[T]):
     """Clear all patterns from orbits."""
 
     pass
@@ -290,7 +290,7 @@ class TimerTask[T](Task):
 
             if instant is not None:
                 # Send generation request
-                self._pattern_sender.send(GenerateEvents(instant))
+                self._pattern_sender.send(PatternGenerateEvents(instant))
 
                 # Wait for next interval or halt
                 if halt.wait(timeout=interval):
@@ -316,13 +316,13 @@ class TransportActor[T](Actor[TransportMessage[T]]):
     @override
     def on_message(self, env: ActorEnv, value: TransportMessage[T]) -> None:
         match value:
-            case SetCps(cps):
+            case TransportSetCps(cps):
                 self._set_cps(env.logger, cps)
-            case SetPlaying(playing):
+            case TransportSetPlaying(playing):
                 self._set_playing(env.logger, playing)
-            case SetCycle(cycle):
+            case TransportSetCycle(cycle):
                 self._set_cycle(env.logger, cycle)
-            case Panic():
+            case TransportPanic():
                 self._panic(env.logger)
 
     def _set_cps(self, logger: Logger, cps: Fraction) -> None:
@@ -380,15 +380,15 @@ class PatternActor[T](Actor[PatternMessage[T]]):
     @override
     def on_message(self, env: ActorEnv, value: PatternMessage[T]) -> None:
         match value:
-            case GenerateEvents(instant):
+            case PatternGenerateEvents(instant):
                 self._generate_events(env.logger, instant)
-            case SetOrbit(orbit, stream):
+            case PatternSetOrbit(orbit, stream):
                 self._set_orbit(env.logger, orbit, stream)
-            case MuteOrbit(orbit, muted):
+            case PatternMuteOrbit(orbit, muted):
                 self._mute_orbit(env.logger, orbit, muted)
-            case SoloOrbit(orbit, solo):
+            case PatternSoloOrbit(orbit, solo):
                 self._solo_orbit(env.logger, orbit, solo)
-            case ClearOrbits():
+            case PatternClearOrbits():
                 self.clear_all_patterns(env.logger)
 
     def _generate_events(self, logger: Logger, instant: Instant) -> None:
@@ -553,7 +553,7 @@ class LiveSystem[T]:
             orbit: The orbit identifier.
             stream: The stream to set, or None to clear.
         """
-        self._pattern_sender.send(SetOrbit(orbit, stream))
+        self._pattern_sender.send(PatternSetOrbit(orbit, stream))
 
     def set_cps(self, cps: Fraction) -> None:
         """Set the cycles per second (tempo).
@@ -561,7 +561,7 @@ class LiveSystem[T]:
         Args:
             cps: The new tempo in cycles per second.
         """
-        self._transport_sender.send(SetCps(cps))
+        self._transport_sender.send(TransportSetCps(cps))
 
     def set_cycle(self, cycle: CycleTime) -> None:
         """Set the current cycle position.
@@ -569,15 +569,15 @@ class LiveSystem[T]:
         Args:
             cycle: The cycle position to set.
         """
-        self._transport_sender.send(SetCycle(cycle))
+        self._transport_sender.send(TransportSetCycle(cycle))
 
     def play(self) -> None:
         """Start pattern playback."""
-        self._transport_sender.send(SetPlaying(True))
+        self._transport_sender.send(TransportSetPlaying(True))
 
     def pause(self) -> None:
         """Stop pattern playback."""
-        self._transport_sender.send(SetPlaying(False))
+        self._transport_sender.send(TransportSetPlaying(False))
 
     def mute(self, orbit: Orbit, muted: bool = True) -> None:
         """Mute or unmute an orbit.
@@ -586,7 +586,7 @@ class LiveSystem[T]:
             orbit: The orbit identifier.
             muted: Whether to mute the orbit.
         """
-        self._pattern_sender.send(MuteOrbit(orbit, muted))
+        self._pattern_sender.send(PatternMuteOrbit(orbit, muted))
 
     def unmute(self, orbit: Orbit) -> None:
         """Unmute an orbit.
@@ -603,7 +603,7 @@ class LiveSystem[T]:
             orbit: The orbit identifier.
             solo: Whether to solo the orbit.
         """
-        self._pattern_sender.send(SoloOrbit(orbit, solo))
+        self._pattern_sender.send(PatternSoloOrbit(orbit, solo))
 
     def unsolo(self, orbit: Orbit) -> None:
         """Unsolo an orbit.
@@ -615,5 +615,5 @@ class LiveSystem[T]:
 
     def panic(self) -> None:
         """Emergency stop - clear all patterns and stop playback."""
-        self._transport_sender.send(Panic())
-        self._pattern_sender.send(ClearOrbits())
+        self._transport_sender.send(TransportPanic())
+        self._pattern_sender.send(PatternClearOrbits())
