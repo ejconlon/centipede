@@ -16,8 +16,7 @@ def main():
 
     # Create pattern system
     system = new_system("live_test")
-    logger = logging.getLogger("minipat.live.backend")
-    backend: Backend[str] = LogBackend(logger)
+    backend: Backend[str] = LogBackend()
     live: LiveSystem[str] = LiveSystem.start(system, backend, LiveEnv(debug=True))
 
     try:

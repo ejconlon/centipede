@@ -15,9 +15,9 @@ from logging import Logger
 from threading import Event
 from typing import Dict, NewType, Optional, override
 
-from centipede.actor import Actor, ActorEnv, Sender, System, Task
+from centipede.actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
-from minipat.common import ONE, ZERO, CycleTime, PosixTime
+from minipat.common import ONE_HALF, ZERO, CycleTime, PosixTime
 from minipat.ev import Ev
 from minipat.stream import Stream
 from spiny.heapmap import PHeapMap
@@ -87,11 +87,14 @@ class TransportState:
     current_cycle: CycleTime = CycleTime(ZERO)
     """Current cycle position in the timeline."""
 
-    cps: Fraction = ONE
+    cps: Fraction = ONE_HALF
     """Current cycles per second (tempo)."""
 
     playback_start: PosixTime = PosixTime(0.0)
     """Wall clock time when playback started (seconds since epoch)."""
+
+
+# Use Mutex[TransportState] directly instead of custom wrapper
 
 
 @dataclass
@@ -165,20 +168,6 @@ class LogBackend[T](Backend[T]):
                         arc_end_posix,
                         ev,
                     )
-
-
-@dataclass
-class LiveState[T]:
-    """Complete state for the live pattern system.
-
-    Contains all configuration, separate state objects, and backend references.
-    """
-
-    logger: Logger
-    backend: Backend[T]
-    env: LiveEnv
-    transport_state: TransportState = field(default_factory=TransportState)
-    pattern_state: PatternState[T] = field(default_factory=PatternState)
 
 
 class TransportMessage[T](metaclass=ABCMeta):
@@ -267,46 +256,49 @@ class TimerTask[T](Task):
         pattern_sender: Sender[PatternMessage[T]],
         transport_sender: Sender[TransportMessage[T]],
         env: LiveEnv,
-        transport_state: TransportState,
+        transport_state_mutex: Mutex[TransportState],
     ):
         self._pattern_sender = pattern_sender
         self._transport_sender = transport_sender
         self._env = env
-        self._transport_state = transport_state
+        self._transport_state_mutex = transport_state_mutex
 
     @override
     def run(self, logger: Logger, halt: Event) -> None:
         logger.debug("Timer task starting")
 
         while not halt.is_set():
-            if self._transport_state.playing:
-                # Calculate current interval based on CPS
-                interval = 1.0 / (
-                    float(self._transport_state.cps) * self._env.generations_per_cycle
-                )
+            # Get current state and decide what to do
+            with self._transport_state_mutex as state:
+                playing = state.playing
+                if playing:
+                    interval = 1.0 / (
+                        float(state.cps) * self._env.generations_per_cycle
+                    )
+                    instant = Instant(
+                        cycle_time=state.current_cycle,
+                        cps=state.cps,
+                        posix_start=state.playback_start,
+                    )
+                else:
+                    interval = self._env.pause_interval
+                    instant = None
 
-                # Create instant for this generation
-                instant = Instant(
-                    cycle_time=self._transport_state.current_cycle,
-                    cps=self._transport_state.cps,
-                    posix_start=self._transport_state.playback_start,
-                )
-
+            if playing and instant is not None:
                 # Send generation request
                 self._pattern_sender.send(GenerateEvents(instant))
 
-                # Advance cycle position
-                cycle_length = Fraction(1) / self._env.generations_per_cycle
-                self._transport_state.current_cycle = CycleTime(
-                    self._transport_state.current_cycle + cycle_length
-                )
+                # Advance cycle position under lock
+                with self._transport_state_mutex as state:
+                    cycle_length = Fraction(1) / self._env.generations_per_cycle
+                    state.current_cycle = CycleTime(state.current_cycle + cycle_length)
 
                 # Wait for next interval or halt
                 if halt.wait(timeout=interval):
                     break
             else:
                 # Not playing, wait a bit before checking again
-                if halt.wait(timeout=self._env.pause_interval):
+                if halt.wait(timeout=interval):
                     break
 
         logger.debug("Timer task stopping")
@@ -315,8 +307,8 @@ class TimerTask[T](Task):
 class TransportActor[T](Actor[TransportMessage[T]]):
     """Actor that handles timing control messages."""
 
-    def __init__(self, transport_state: TransportState):
-        self._transport_state = transport_state
+    def __init__(self, transport_state_mutex: Mutex[TransportState]):
+        self._transport_state_mutex = transport_state_mutex
 
     @override
     def on_start(self, env: ActorEnv) -> None:
@@ -336,34 +328,37 @@ class TransportActor[T](Actor[TransportMessage[T]]):
 
     def _set_cps(self, logger: Logger, cps: Fraction) -> None:
         """Set the cycles per second (tempo)."""
-        self._transport_state.cps = cps
+        with self._transport_state_mutex as state:
+            state.cps = cps
         logger.debug("Set CPS to %s", cps)
 
     def _set_playing(self, logger: Logger, playing: bool) -> None:
         """Set the playing state."""
-        self._transport_state.playing = playing
+        with self._transport_state_mutex as state:
+            state.playing = playing
+            if playing:
+                # Record start time when starting
+                state.playback_start = PosixTime(time.time())
+            else:
+                # Reset start time when stopping
+                state.playback_start = PosixTime(0.0)
         logger.debug("Set playing to %s", playing)
-
-        if playing:
-            # Record start time when starting
-            self._transport_state.playback_start = PosixTime(time.time())
-        else:
-            # Reset start time when stopping
-            self._transport_state.playback_start = PosixTime(0.0)
 
     def _set_cycle(self, logger: Logger, cycle: CycleTime) -> None:
         """Set the current cycle position."""
-        self._transport_state.current_cycle = cycle
+        with self._transport_state_mutex as state:
+            state.current_cycle = cycle
         logger.debug("Set cycle to %s", cycle)
 
     def _panic(self, logger: Logger) -> None:
-        """Emergency stop - stop playback."""
+        """Emergency stop - stop playbook."""
         logger.info("PANIC: Stopping playback")
 
         # Stop playback
-        self._transport_state.playing = False
-        self._transport_state.playback_start = PosixTime(0.0)
-        self._transport_state.current_cycle = CycleTime(Fraction(0))
+        with self._transport_state_mutex as state:
+            state.playing = False
+            state.playback_start = PosixTime(0.0)
+            state.current_cycle = CycleTime(Fraction(0))
 
 
 class PatternActor[T](Actor[PatternMessage[T]]):
@@ -504,7 +499,6 @@ class LiveSystem[T]:
             env: Environment configuration.
         """
         self._logger = logging.getLogger("minipat.live")
-        self._state = LiveState(logger=self._logger, backend=backend, env=env)
         self._transport_sender = transport_sender
         self._pattern_sender = pattern_sender
 
@@ -527,8 +521,9 @@ class LiveSystem[T]:
         logger = logging.getLogger("minipat")
         logger.info("Starting live pattern system")
 
-        # Create temporary state objects for actors
+        # Create state objects for actors
         transport_state = TransportState()
+        transport_state_mutex = Mutex(transport_state)
         pattern_state = PatternState[T]()
 
         # Create the pattern actor
@@ -536,7 +531,7 @@ class LiveSystem[T]:
         pattern_sender = system.spawn_actor("pattern", pattern_actor)
 
         # Create the transport actor for handling control messages
-        transport_actor: TransportActor[T] = TransportActor(transport_state)
+        transport_actor: TransportActor[T] = TransportActor(transport_state_mutex)
         transport_sender = system.spawn_actor("transport", transport_actor)
 
         # Create the live system with the senders
@@ -547,7 +542,7 @@ class LiveSystem[T]:
             pattern_sender,
             transport_sender,
             env,
-            transport_state,
+            transport_state_mutex,
         )
         system.spawn_task("timer_loop", timer_task)
 
