@@ -267,31 +267,30 @@ class TimerTask[T](Task):
     def run(self, logger: Logger, halt: Event) -> None:
         logger.debug("Timer task starting")
 
+        frac_cycle_length = Fraction(1) / self._env.generations_per_cycle
+        float_cycle_length = float(frac_cycle_length)
+
         while not halt.is_set():
             # Get current state and decide what to do
             with self._transport_state_mutex as state:
                 playing = state.playing
                 if playing:
-                    interval = 1.0 / (
-                        float(state.cps) * self._env.generations_per_cycle
-                    )
+                    interval = float_cycle_length / state.cps
                     instant = Instant(
                         cycle_time=state.current_cycle,
                         cps=state.cps,
                         posix_start=state.playback_start,
                     )
+                    state.current_cycle = CycleTime(
+                        state.current_cycle + frac_cycle_length
+                    )
                 else:
                     interval = self._env.pause_interval
                     instant = None
 
-            if playing and instant is not None:
+            if instant is not None:
                 # Send generation request
                 self._pattern_sender.send(GenerateEvents(instant))
-
-                # Advance cycle position under lock
-                with self._transport_state_mutex as state:
-                    cycle_length = Fraction(1) / self._env.generations_per_cycle
-                    state.current_cycle = CycleTime(state.current_cycle + cycle_length)
 
                 # Wait for next interval or halt
                 if halt.wait(timeout=interval):
@@ -485,8 +484,6 @@ class LiveSystem[T]:
 
     def __init__(
         self,
-        env: LiveEnv,
-        backend: Backend[T],
         transport_sender: Sender[TransportMessage[T]],
         pattern_sender: Sender[PatternMessage[T]],
     ):
@@ -535,7 +532,7 @@ class LiveSystem[T]:
         transport_sender = system.spawn_actor("transport", transport_actor)
 
         # Create the live system with the senders
-        live_system = LiveSystem(env, backend, transport_sender, pattern_sender)
+        live_system = LiveSystem(transport_sender, pattern_sender)
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
