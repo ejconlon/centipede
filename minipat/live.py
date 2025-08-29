@@ -197,13 +197,6 @@ class TransportSetCycle[T](TransportMessage[T]):
     cycle: CycleTime
 
 
-@dataclass(frozen=True)
-class TransportPanic[T](TransportMessage[T]):
-    """Emergency stop - clear all patterns and stop playback."""
-
-    pass
-
-
 class PatternMessage[T](metaclass=ABCMeta):
     """Base class for messages sent to the pattern state actor."""
 
@@ -322,8 +315,6 @@ class TransportActor[T](Actor[TransportMessage[T]]):
                 self._set_playing(env.logger, playing)
             case TransportSetCycle(cycle):
                 self._set_cycle(env.logger, cycle)
-            case TransportPanic():
-                self._panic(env.logger)
 
     def _set_cps(self, logger: Logger, cps: Fraction) -> None:
         """Set the cycles per second (tempo)."""
@@ -348,16 +339,6 @@ class TransportActor[T](Actor[TransportMessage[T]]):
         with self._transport_state_mutex as state:
             state.current_cycle = cycle
         logger.debug("Set cycle to %s", cycle)
-
-    def _panic(self, logger: Logger) -> None:
-        """Emergency stop - stop playbook."""
-        logger.info("PANIC: Stopping playback")
-
-        # Stop playback
-        with self._transport_state_mutex as state:
-            state.playing = False
-            state.playback_start = PosixTime(0.0)
-            state.current_cycle = CycleTime(Fraction(0))
 
 
 class PatternActor[T](Actor[PatternMessage[T]]):
