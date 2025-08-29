@@ -130,8 +130,8 @@ class Backend[T](metaclass=ABCMeta):
 class LogBackend[T](Backend[T]):
     """Debug backend that logs events instead of playing them."""
 
-    def __init__(self, logger: Logger):
-        self._logger = logger
+    def __init__(self):
+        self._logger = logging.getLogger("log_backend")
 
     @override
     def send_events(
@@ -490,10 +490,10 @@ class LiveSystem[T]:
 
     def __init__(
         self,
+        env: LiveEnv,
         backend: Backend[T],
         transport_sender: Sender[TransportMessage[T]],
         pattern_sender: Sender[PatternMessage[T]],
-        env: LiveEnv = LiveEnv(),
     ):
         """Initialize the live system.
 
@@ -540,7 +540,7 @@ class LiveSystem[T]:
         transport_sender = system.spawn_actor("transport", transport_actor)
 
         # Create the live system with the senders
-        live_system = LiveSystem(backend, transport_sender, pattern_sender, env)
+        live_system = LiveSystem(env, backend, transport_sender, pattern_sender)
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
