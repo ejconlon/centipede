@@ -28,6 +28,20 @@ Orbit = NewType("Orbit", int)
 
 
 @dataclass(frozen=True)
+class Instant:
+    """Represents a specific moment in time with cycle and posix timing information."""
+
+    cycle_time: CycleTime
+    """The cycle time for this instant."""
+
+    cps: Fraction
+    """Cycles per second at this instant."""
+
+    posix_start: PosixTime
+    """Fixed posix time reference point."""
+
+
+@dataclass(frozen=True)
 class LiveEnv:
     """Environment configuration for live pattern playback.
 
@@ -97,18 +111,14 @@ class Backend[T](metaclass=ABCMeta):
     @abstractmethod
     def send_events(
         self,
+        instant: Instant,
         orbit_events: PMap[Orbit, PHeapMap[Arc, Ev[T]]],
-        current_cycle: CycleTime,
-        cps: Fraction,
-        playback_start_time: Optional[PosixTime],
     ) -> None:
         """Send events with attributes to the backend.
 
         Args:
+            instant: Timing information for this generation.
             orbit_events: Events grouped by orbit.
-            current_cycle: Current cycle time for timing conversion.
-            cps: Cycles per second for timing conversion.
-            playback_start_time: Wall clock time when playback started.
         """
         raise NotImplementedError
 
@@ -122,40 +132,35 @@ class LogBackend[T](Backend[T]):
     @override
     def send_events(
         self,
+        instant: Instant,
         orbit_events: PMap[Orbit, PHeapMap[Arc, Ev[T]]],
-        current_cycle: CycleTime,
-        cps: Fraction,
-        playback_start_time: Optional[PosixTime],
     ) -> None:
         total_events = sum(len(events) for events in orbit_events.values())
         self._logger.debug(
             "Received %d events across %d orbits at cycle %s (CPS: %s)",
             total_events,
             len(orbit_events),
-            current_cycle,
-            cps,
+            instant.cycle_time,
+            instant.cps,
         )
         if self._logger.getEffectiveLevel() <= logging.DEBUG:
             for orbit, events in orbit_events:
                 for arc, ev in events:
-                    # Log with or without posix time information
-                    if playback_start_time is not None:
-                        arc_start_posix = playback_start_time + (
-                            float(arc.start) / float(cps)
-                        )
-                        arc_end_posix = playback_start_time + (
-                            float(arc.end) / float(cps)
-                        )
-                        self._logger.debug(
-                            "Orbit %s Event @%s [posix: %.3f-%.3f]: %s",
-                            orbit,
-                            arc,
-                            arc_start_posix,
-                            arc_end_posix,
-                            ev,
-                        )
-                    else:
-                        self._logger.debug("Orbit %s Event @%s: %s", orbit, arc, ev)
+                    # Calculate posix time for the arc using instant timing info
+                    arc_start_posix = instant.posix_start + (
+                        float(arc.start) / float(instant.cps)
+                    )
+                    arc_end_posix = instant.posix_start + (
+                        float(arc.end) / float(instant.cps)
+                    )
+                    self._logger.debug(
+                        "Orbit %s Event @%s [posix: %.3f-%.3f]: %s",
+                        orbit,
+                        arc,
+                        arc_start_posix,
+                        arc_end_posix,
+                        ev,
+                    )
 
 
 @dataclass
@@ -327,13 +332,13 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
                 logger.debug("Generated %s events for orbit %s", len(events), orbit)
 
         # Send all events to backend if any exist
-        if orbit_events:
-            self._state.backend.send_events(
-                orbit_events,
-                self._state.domain.current_cycle,
-                self._state.domain.cps,
-                self._state.domain.playback_start_time,
+        if orbit_events and self._state.domain.playback_start_time is not None:
+            instant = Instant(
+                cycle_time=cycle_start,
+                cps=self._state.domain.cps,
+                posix_start=self._state.domain.playback_start_time,
             )
+            self._state.backend.send_events(instant, orbit_events)
 
         # Advance cycle position
         self._state.domain.current_cycle = cycle_end
