@@ -76,10 +76,10 @@ class OrbitState[T]:
 
 
 @dataclass
-class LiveDomain[T]:
-    """Mutable state for the live pattern system.
+class TransportState:
+    """Mutable state for transport control (timing, playback).
 
-    Tracks the current playback state including orbits, tempo, and cycles.
+    Handles tempo, playback state, and timing information.
     """
 
     playing: bool = False
@@ -88,17 +88,22 @@ class LiveDomain[T]:
     current_cycle: CycleTime = CycleTime(ZERO)
     """Current cycle position in the timeline."""
 
-    orbits: Dict[Orbit, OrbitState[T]] = field(default_factory=dict)
-    """Map of orbit to orbit state."""
-
     cps: Fraction = ONE
     """Current cycles per second (tempo)."""
 
-    generations_per_cycle: int = 4
-    """Current number of generations per cycle."""
-
     playback_start_time: Optional[PosixTime] = None
     """Wall clock time when playback started (seconds since epoch)."""
+
+
+@dataclass
+class PatternState[T]:
+    """Mutable state for pattern management.
+
+    Handles orbits, streams, and pattern-related state.
+    """
+
+    orbits: Dict[Orbit, OrbitState[T]] = field(default_factory=dict)
+    """Map of orbit to orbit state."""
 
 
 class Backend[T](metaclass=ABCMeta):
@@ -167,17 +172,39 @@ class LogBackend[T](Backend[T]):
 class LiveState[T]:
     """Complete state for the live pattern system.
 
-    Contains all configuration, mutable state, and backend references.
+    Contains all configuration, separate state objects, and backend references.
     """
 
     logger: Logger
     backend: Backend[T]
     env: LiveEnv
-    domain: LiveDomain[T] = field(default_factory=LiveDomain)
+    transport_state: TransportState = field(default_factory=TransportState)
+    pattern_state: PatternState[T] = field(default_factory=PatternState)
 
 
 class TransportMessage[T](metaclass=ABCMeta):
     """Base class for messages sent to the transport actor."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class SetCps[T](TransportMessage[T]):
+    """Set the cycles per second (tempo)."""
+
+    cps: Fraction
+
+
+@dataclass(frozen=True)
+class SetPlaying[T](TransportMessage[T]):
+    """Set the playing state."""
+
+    playing: bool
+
+
+@dataclass(frozen=True)
+class Panic[T](TransportMessage[T]):
+    """Emergency stop - clear all patterns and stop playback."""
 
     pass
 
@@ -220,22 +247,8 @@ class SoloOrbit[T](PatternMessage[T]):
 
 
 @dataclass(frozen=True)
-class SetCps[T](TransportMessage[T]):
-    """Set the cycles per second (tempo)."""
-
-    cps: Fraction
-
-
-@dataclass(frozen=True)
-class SetPlaying[T](TransportMessage[T]):
-    """Set the playing state."""
-
-    playing: bool
-
-
-@dataclass(frozen=True)
-class Panic[T](TransportMessage[T]):
-    """Emergency stop - clear all patterns and stop playbook."""
+class ClearOrbits[T](PatternMessage[T]):
+    """Clear all patterns from orbits."""
 
     pass
 
@@ -248,29 +261,32 @@ class TimerTask[T](Task):
         pattern_sender: Sender[PatternMessage[T]],
         transport_sender: Sender[TransportMessage[T]],
         env: LiveEnv,
-        domain: LiveDomain[T],
+        transport_state: TransportState,
     ):
         self._pattern_sender = pattern_sender
         self._transport_sender = transport_sender
         self._env = env
-        self._domain = domain
+        self._transport_state = transport_state
 
     @override
     def run(self, logger: Logger, halt: Event) -> None:
         logger.debug("Timer task starting")
 
         while not halt.is_set():
-            if self._domain.playing and self._domain.playback_start_time is not None:
+            if (
+                self._transport_state.playing
+                and self._transport_state.playback_start_time is not None
+            ):
                 # Calculate current interval based on CPS
                 interval = 1.0 / (
-                    float(self._domain.cps) * self._env.generations_per_cycle
+                    float(self._transport_state.cps) * self._env.generations_per_cycle
                 )
 
                 # Create instant for this generation
                 instant = Instant(
-                    cycle_time=self._domain.current_cycle,
-                    cps=self._domain.cps,
-                    posix_start=self._domain.playback_start_time,
+                    cycle_time=self._transport_state.current_cycle,
+                    cps=self._transport_state.cps,
+                    posix_start=self._transport_state.playback_start_time,
                 )
 
                 # Send generation request
@@ -278,8 +294,8 @@ class TimerTask[T](Task):
 
                 # Advance cycle position
                 cycle_length = Fraction(1) / self._env.generations_per_cycle
-                self._domain.current_cycle = CycleTime(
-                    self._domain.current_cycle + cycle_length
+                self._transport_state.current_cycle = CycleTime(
+                    self._transport_state.current_cycle + cycle_length
                 )
 
                 # Wait for next interval or halt
@@ -296,8 +312,8 @@ class TimerTask[T](Task):
 class TransportActor[T](Actor[TransportMessage[T]]):
     """Actor that handles timing control messages."""
 
-    def __init__(self, domain: LiveDomain[T]):
-        self._domain = domain
+    def __init__(self, transport_state: TransportState):
+        self._transport_state = transport_state
 
     @override
     def on_start(self, env: ActorEnv) -> None:
@@ -315,44 +331,48 @@ class TransportActor[T](Actor[TransportMessage[T]]):
 
     def _set_cps(self, logger: Logger, cps: Fraction) -> None:
         """Set the cycles per second (tempo)."""
-        self._domain.cps = cps
+        self._transport_state.cps = cps
         logger.debug("Set CPS to %s", cps)
 
     def _set_playing(self, logger: Logger, playing: bool) -> None:
         """Set the playing state."""
-        self._domain.playing = playing
+        self._transport_state.playing = playing
         logger.debug("Set playing to %s", playing)
 
         if playing:
             # Reset cycle position and record start time when starting
-            self._domain.current_cycle = CycleTime(Fraction(0))
-            self._domain.playback_start_time = PosixTime(time.time())
+            self._transport_state.current_cycle = CycleTime(Fraction(0))
+            self._transport_state.playback_start_time = PosixTime(time.time())
         else:
             # Clear start time when stopping
-            self._domain.playback_start_time = None
+            self._transport_state.playback_start_time = None
 
     def _panic(self, logger: Logger) -> None:
-        """Emergency stop - clear all patterns and stop playback."""
+        """Emergency stop - stop playback."""
         logger.info("PANIC: Stopping playback")
 
         # Stop playback
-        self._domain.playing = False
-        self._domain.playback_start_time = None
-        self._domain.current_cycle = CycleTime(Fraction(0))
+        self._transport_state.playing = False
+        self._transport_state.playback_start_time = None
+        self._transport_state.current_cycle = CycleTime(Fraction(0))
 
 
-class PatternStateActor[T](Actor[PatternMessage[T]]):
+class PatternActor[T](Actor[PatternMessage[T]]):
     """Actor that manages pattern state and generates events.
 
     Receives generation requests with timing information and produces events.
     """
 
-    def __init__(self, initial_state: LiveState[T]):
-        self._state = initial_state
+    def __init__(
+        self, pattern_state: PatternState[T], backend: Backend[T], env: LiveEnv
+    ):
+        self._pattern_state = pattern_state
+        self._backend = backend
+        self._env = env
 
     @override
     def on_start(self, env: ActorEnv) -> None:
-        env.logger.debug("Pattern state actor started")
+        env.logger.debug("Pattern actor started")
 
     @override
     def on_message(self, env: ActorEnv, value: PatternMessage[T]) -> None:
@@ -365,6 +385,8 @@ class PatternStateActor[T](Actor[PatternMessage[T]]):
                 self._mute_orbit(env.logger, orbit, muted)
             case SoloOrbit(orbit, solo):
                 self._solo_orbit(env.logger, orbit, solo)
+            case ClearOrbits():
+                self.clear_all_patterns(env.logger)
 
     def _generate_events(self, logger: Logger, instant: Instant) -> None:
         """Generate events for the given instant."""
@@ -372,17 +394,17 @@ class PatternStateActor[T](Actor[PatternMessage[T]]):
 
         # Calculate the time arc for this generation
         cycle_start = instant.cycle_time
-        cycle_length = Fraction(1) / self._state.domain.generations_per_cycle
+        cycle_length = Fraction(1) / self._env.generations_per_cycle
         cycle_end = CycleTime(cycle_start + cycle_length)
         arc = Arc(cycle_start, cycle_end)
 
         # Check if any orbits are soloed
-        has_solo = any(orbit.solo for orbit in self._state.domain.orbits.values())
+        has_solo = any(orbit.solo for orbit in self._pattern_state.orbits.values())
 
         # Collect events from all active orbits
         orbit_events = PMap[Orbit, PHeapMap[Arc, Ev[T]]].empty()
 
-        for orbit, orbit_state in self._state.domain.orbits.items():
+        for orbit, orbit_state in self._pattern_state.orbits.items():
             if orbit_state.stream is None:
                 continue
 
@@ -408,16 +430,16 @@ class PatternStateActor[T](Actor[PatternMessage[T]]):
 
         # Send all events to backend if any exist
         if orbit_events:
-            self._state.backend.send_events(instant, orbit_events)
+            self._backend.send_events(instant, orbit_events)
 
     def _set_orbit(
         self, logger: Logger, orbit: Orbit, stream: Optional[Stream[T]]
     ) -> None:
         """Set the stream for a specific orbit."""
-        if orbit not in self._state.domain.orbits:
-            self._state.domain.orbits[orbit] = OrbitState()
+        if orbit not in self._pattern_state.orbits:
+            self._pattern_state.orbits[orbit] = OrbitState()
 
-        self._state.domain.orbits[orbit].stream = stream
+        self._pattern_state.orbits[orbit].stream = stream
 
         if stream is None:
             logger.debug("Cleared orbit %s", orbit)
@@ -426,18 +448,18 @@ class PatternStateActor[T](Actor[PatternMessage[T]]):
 
     def _mute_orbit(self, logger: Logger, orbit: Orbit, muted: bool) -> None:
         """Mute or unmute an orbit."""
-        if orbit not in self._state.domain.orbits:
-            self._state.domain.orbits[orbit] = OrbitState()
+        if orbit not in self._pattern_state.orbits:
+            self._pattern_state.orbits[orbit] = OrbitState()
 
-        self._state.domain.orbits[orbit].muted = muted
+        self._pattern_state.orbits[orbit].muted = muted
         logger.debug("Set orbit %s muted to %s", orbit, muted)
 
     def _solo_orbit(self, logger: Logger, orbit: Orbit, solo: bool) -> None:
         """Solo or unsolo an orbit."""
-        if orbit not in self._state.domain.orbits:
-            self._state.domain.orbits[orbit] = OrbitState()
+        if orbit not in self._pattern_state.orbits:
+            self._pattern_state.orbits[orbit] = OrbitState()
 
-        self._state.domain.orbits[orbit].solo = solo
+        self._pattern_state.orbits[orbit].solo = solo
         logger.debug("Set orbit %s solo to %s", orbit, solo)
 
     def clear_all_patterns(self, logger: Logger) -> None:
@@ -445,7 +467,7 @@ class PatternStateActor[T](Actor[PatternMessage[T]]):
         logger.info("Clearing all patterns")
 
         # Clear all streams
-        for orbit_state in self._state.domain.orbits.values():
+        for orbit_state in self._pattern_state.orbits.values():
             orbit_state.stream = None
             orbit_state.muted = False
             orbit_state.solo = False
@@ -477,19 +499,24 @@ class LiveSystem[T]:
         """
         self._logger.info("Starting live pattern system")
 
-        # Create the pattern state actor
-        pattern_actor = PatternStateActor(self._state)
-        pattern_sender = system.spawn_actor("pattern_state", pattern_actor)
+        # Create the pattern actor
+        pattern_actor = PatternActor(
+            self._state.pattern_state, self._state.backend, self._state.env
+        )
+        pattern_sender = system.spawn_actor("pattern", pattern_actor)
         self._pattern_sender = pattern_sender
 
         # Create the transport actor for handling control messages
-        transport_actor = TransportActor(self._state.domain)
+        transport_actor = TransportActor(self._state.transport_state)
         transport_sender = system.spawn_actor("transport", transport_actor)
         self._transport_sender = transport_sender
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
-            pattern_sender, transport_sender, self._state.env, self._state.domain
+            pattern_sender,
+            transport_sender,
+            self._state.env,
+            self._state.transport_state,
         )
         system.spawn_task("timer_loop", timer_task)
 
@@ -565,8 +592,7 @@ class LiveSystem[T]:
         if self._transport_sender is not None:
             self._transport_sender.send(Panic())
         if self._pattern_sender is not None:
-            # Clear all patterns - we'll need a new message for this or handle it differently
-            pass
+            self._pattern_sender.send(ClearOrbits())
 
 
 def create_live_system[T](
