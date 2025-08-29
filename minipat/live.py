@@ -555,6 +555,9 @@ class LiveSystem[T]:
         """
         self._pattern_sender.send(PatternSetOrbit(orbit, stream))
 
+    def clear_orbits(self) -> None:
+        self._pattern_sender.send(PatternClearOrbits())
+
     def set_cps(self, cps: Fraction) -> None:
         """Set the cycles per second (tempo).
 
@@ -615,5 +618,5 @@ class LiveSystem[T]:
 
     def panic(self) -> None:
         """Emergency stop - clear all patterns and stop playback."""
-        self._transport_sender.send(TransportPanic())
-        self._pattern_sender.send(PatternClearOrbits())
+        self.pause()
+        self.clear_orbits()
