@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from logging import Logger
 from threading import Event
-from typing import Dict, Optional, override
+from typing import Dict, NewType, Optional, override
 
 from centipede.actor import Actor, ActorEnv, Sender, Task
 from minipat.arc import Arc
@@ -21,27 +21,10 @@ from minipat.common import ONE, ZERO, CycleTime, PosixTime
 from minipat.ev import Ev
 from minipat.pat import Pat
 from minipat.stream import Stream, pat_stream
-from spiny.dmap import DKey, DMap
 from spiny.heapmap import PHeapMap
+from spiny.pmap import PMap
 
-
-class AttrDom[T]:
-    pass
-
-
-class OrbitKey[T](DKey[AttrDom[T], int]):
-    pass
-
-
-class EvKey[T](DKey[AttrDom[T], Ev[T]]):
-    pass
-
-
-type AttrMap[T] = DMap[AttrDom[T]]
-
-
-def mk_attr_map[T](orbit_id: int, ev: Ev[T]) -> AttrMap[T]:
-    return DMap[AttrDom[T]].empty().put(OrbitKey[T](), orbit_id).put(EvKey[T](), ev)
+Orbit = NewType("Orbit", int)
 
 
 @dataclass(frozen=True)
@@ -91,8 +74,8 @@ class LiveDomain[T]:
     current_cycle: CycleTime = CycleTime(ZERO)
     """Current cycle position in the timeline."""
 
-    orbits: Dict[int, OrbitState[T]] = field(default_factory=dict)
-    """Map of orbit ID to orbit state."""
+    orbits: Dict[Orbit, OrbitState[T]] = field(default_factory=dict)
+    """Map of orbit to orbit state."""
 
     cps: Fraction = ONE
     """Current cycles per second (tempo)."""
@@ -111,14 +94,21 @@ class Backend[T](metaclass=ABCMeta):
     (e.g., to audio systems, MIDI, OSC, etc.).
     """
 
-    # TODO remove orbit_id, change events to PHeapMap[Arc, AttrMap[T]], add information to convert CycleTime to
-    # PosixTime
     @abstractmethod
-    def send_events(self, attrs: PHeapMap[Arc, AttrMap[T]]) -> None:
+    def send_events(
+        self,
+        orbit_events: PMap[Orbit, PHeapMap[Arc, Ev[T]]],
+        current_cycle: CycleTime,
+        cps: Fraction,
+        playback_start_time: Optional[PosixTime],
+    ) -> None:
         """Send events with attributes to the backend.
 
         Args:
-            attrs: The events with their attributes to send.
+            orbit_events: Events grouped by orbit.
+            current_cycle: Current cycle time for timing conversion.
+            cps: Cycles per second for timing conversion.
+            playback_start_time: Wall clock time when playback started.
         """
         raise NotImplementedError
 
@@ -130,14 +120,42 @@ class LogBackend[T](Backend[T]):
         self._logger = logger
 
     @override
-    def send_events(self, attrs: PHeapMap[Arc, AttrMap[T]]) -> None:
-        if not attrs:
-            self._logger.debug("Received %d events", len(attrs))
-            if self._logger.getEffectiveLevel() <= logging.DEBUG:
-                for arc, attr_map in attrs:
-                    orbit_id = attr_map.get(OrbitKey[T]())
-                    ev = attr_map.get(EvKey[T]())
-                    self._logger.debug("Orbit %s Event @%s: %s", orbit_id, arc, ev)
+    def send_events(
+        self,
+        orbit_events: PMap[Orbit, PHeapMap[Arc, Ev[T]]],
+        current_cycle: CycleTime,
+        cps: Fraction,
+        playback_start_time: Optional[PosixTime],
+    ) -> None:
+        total_events = sum(len(events) for events in orbit_events.values())
+        self._logger.debug(
+            "Received %d events across %d orbits at cycle %s (CPS: %s)",
+            total_events,
+            len(orbit_events),
+            current_cycle,
+            cps,
+        )
+        if self._logger.getEffectiveLevel() <= logging.DEBUG:
+            for orbit, events in orbit_events:
+                for arc, ev in events:
+                    # Log with or without posix time information
+                    if playback_start_time is not None:
+                        arc_start_posix = playback_start_time + (
+                            float(arc.start) / float(cps)
+                        )
+                        arc_end_posix = playback_start_time + (
+                            float(arc.end) / float(cps)
+                        )
+                        self._logger.debug(
+                            "Orbit %s Event @%s [posix: %.3f-%.3f]: %s",
+                            orbit,
+                            arc,
+                            arc_start_posix,
+                            arc_end_posix,
+                            ev,
+                        )
+                    else:
+                        self._logger.debug("Orbit %s Event @%s: %s", orbit, arc, ev)
 
 
 @dataclass
@@ -192,7 +210,7 @@ class GenerateEvents[T](GeneratorMessage[T]):
 class SetOrbit[T](GeneratorMessage[T]):
     """Set the stream for a specific orbit."""
 
-    orbit_id: int
+    orbit: Orbit
     stream: Optional[Stream[T]]
 
 
@@ -214,7 +232,7 @@ class SetPlaying[T](GeneratorMessage[T]):
 class MuteOrbit[T](GeneratorMessage[T]):
     """Mute or unmute an orbit."""
 
-    orbit_id: int
+    orbit: Orbit
     muted: bool
 
 
@@ -222,7 +240,7 @@ class MuteOrbit[T](GeneratorMessage[T]):
 class SoloOrbit[T](GeneratorMessage[T]):
     """Solo or unsolo an orbit."""
 
-    orbit_id: int
+    orbit: Orbit
     solo: bool
 
 
@@ -252,16 +270,16 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
         match value:
             case GenerateEvents():
                 self._generate_events(env.logger)
-            case SetOrbit(orbit_id, stream):
-                self._set_orbit(env.logger, orbit_id, stream)
+            case SetOrbit(orbit, stream):
+                self._set_orbit(env.logger, orbit, stream)
             case SetCps(cps):
                 self._set_cps(env.logger, cps)
             case SetPlaying(playing):
                 self._set_playing(env.logger, playing)
-            case MuteOrbit(orbit_id, muted):
-                self._mute_orbit(env.logger, orbit_id, muted)
-            case SoloOrbit(orbit_id, solo):
-                self._solo_orbit(env.logger, orbit_id, solo)
+            case MuteOrbit(orbit, muted):
+                self._mute_orbit(env.logger, orbit, muted)
+            case SoloOrbit(orbit, solo):
+                self._solo_orbit(env.logger, orbit, solo)
             case Panic():
                 self._panic(env.logger)
 
@@ -281,48 +299,58 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
         # Check if any orbits are soloed
         has_solo = any(orbit.solo for orbit in self._state.domain.orbits.values())
 
-        # Generate events for each active orbit
-        for orbit_id, orbit in self._state.domain.orbits.items():
-            if orbit.stream is None:
+        # Collect events from all active orbits
+        orbit_events = PMap[Orbit, PHeapMap[Arc, Ev[T]]].empty()
+
+        for orbit, orbit_state in self._state.domain.orbits.items():
+            if orbit_state.stream is None:
                 continue
 
             # Skip muted orbits, unless they're soloed
-            if orbit.muted and not orbit.solo:
+            if orbit_state.muted and not orbit_state.solo:
                 continue
 
             # If there are soloed orbits, only play soloed ones
-            if has_solo and not orbit.solo:
+            if has_solo and not orbit_state.solo:
                 continue
 
             # Generate events using the orbit stream
-            events = orbit.stream.unstream(arc)
+            events = orbit_state.stream.unstream(arc)
 
-            # Convert events to attribute format
+            # Add events to orbit events map
             if events:
-                attrs = PHeapMap[Arc, AttrMap[T]].empty()
+                event_map = PHeapMap[Arc, Ev[T]].empty()
                 for event_arc, ev in events:
-                    attr_map = mk_attr_map(orbit_id, ev)
-                    attrs = attrs.put(event_arc, attr_map)
+                    event_map = event_map.put(event_arc, ev)
 
-                logger.debug("Sending %s events for orbit %s", len(events), orbit_id)
-                self._state.backend.send_events(attrs)
+                orbit_events = orbit_events.put(orbit, event_map)
+                logger.debug("Generated %s events for orbit %s", len(events), orbit)
+
+        # Send all events to backend if any exist
+        if orbit_events:
+            self._state.backend.send_events(
+                orbit_events,
+                self._state.domain.current_cycle,
+                self._state.domain.cps,
+                self._state.domain.playback_start_time,
+            )
 
         # Advance cycle position
         self._state.domain.current_cycle = cycle_end
 
     def _set_orbit(
-        self, logger: Logger, orbit_id: int, stream: Optional[Stream[T]]
+        self, logger: Logger, orbit: Orbit, stream: Optional[Stream[T]]
     ) -> None:
         """Set the stream for a specific orbit."""
-        if orbit_id not in self._state.domain.orbits:
-            self._state.domain.orbits[orbit_id] = OrbitState()
+        if orbit not in self._state.domain.orbits:
+            self._state.domain.orbits[orbit] = OrbitState()
 
-        self._state.domain.orbits[orbit_id].stream = stream
+        self._state.domain.orbits[orbit].stream = stream
 
         if stream is None:
-            logger.debug("Cleared orbit %s", orbit_id)
+            logger.debug("Cleared orbit %s", orbit)
         else:
-            logger.debug("Set stream for orbit %s", orbit_id)
+            logger.debug("Set stream for orbit %s", orbit)
 
     def _set_cps(self, logger: Logger, cps: Fraction) -> None:
         """Set the cycles per second (tempo)."""
@@ -342,21 +370,21 @@ class PatternStateActor[T](Actor[GeneratorMessage[T]]):
             # Clear start time when stopping
             self._state.domain.playback_start_time = None
 
-    def _mute_orbit(self, logger: Logger, orbit_id: int, muted: bool) -> None:
+    def _mute_orbit(self, logger: Logger, orbit: Orbit, muted: bool) -> None:
         """Mute or unmute an orbit."""
-        if orbit_id not in self._state.domain.orbits:
-            self._state.domain.orbits[orbit_id] = OrbitState()
+        if orbit not in self._state.domain.orbits:
+            self._state.domain.orbits[orbit] = OrbitState()
 
-        self._state.domain.orbits[orbit_id].muted = muted
-        logger.debug("Set orbit %s muted to %s", orbit_id, muted)
+        self._state.domain.orbits[orbit].muted = muted
+        logger.debug("Set orbit %s muted to %s", orbit, muted)
 
-    def _solo_orbit(self, logger: Logger, orbit_id: int, solo: bool) -> None:
+    def _solo_orbit(self, logger: Logger, orbit: Orbit, solo: bool) -> None:
         """Solo or unsolo an orbit."""
-        if orbit_id not in self._state.domain.orbits:
-            self._state.domain.orbits[orbit_id] = OrbitState()
+        if orbit not in self._state.domain.orbits:
+            self._state.domain.orbits[orbit] = OrbitState()
 
-        self._state.domain.orbits[orbit_id].solo = solo
-        logger.debug("Set orbit %s solo to %s", orbit_id, solo)
+        self._state.domain.orbits[orbit].solo = solo
+        logger.debug("Set orbit %s solo to %s", orbit, solo)
 
     def _panic(self, logger: Logger) -> None:
         """Emergency stop - clear all streams and stop playback."""
@@ -417,15 +445,15 @@ class LiveSystem[T]:
 
         self._logger.info("Live pattern system started")
 
-    def set_orbit(self, orbit_id: int, stream: Optional[Stream[T]]) -> None:
+    def set_orbit(self, orbit: Orbit, stream: Optional[Stream[T]]) -> None:
         """Set the stream for a specific orbit.
 
         Args:
-            orbit_id: The orbit identifier.
+            orbit: The orbit identifier.
             stream: The stream to set, or None to clear.
         """
         if self._state_sender is not None:
-            self._state_sender.send(SetOrbit(orbit_id, stream))
+            self._state_sender.send(SetOrbit(orbit, stream))
 
     def set_cps(self, cps: Fraction) -> None:
         """Set the cycles per second (tempo).
@@ -446,41 +474,41 @@ class LiveSystem[T]:
         if self._state_sender is not None:
             self._state_sender.send(SetPlaying(False))
 
-    def mute_orbit(self, orbit_id: int, muted: bool = True) -> None:
+    def mute_orbit(self, orbit: Orbit, muted: bool = True) -> None:
         """Mute or unmute an orbit.
 
         Args:
-            orbit_id: The orbit identifier.
+            orbit: The orbit identifier.
             muted: Whether to mute the orbit.
         """
         if self._state_sender is not None:
-            self._state_sender.send(MuteOrbit(orbit_id, muted))
+            self._state_sender.send(MuteOrbit(orbit, muted))
 
-    def unmute_orbit(self, orbit_id: int) -> None:
+    def unmute_orbit(self, orbit: Orbit) -> None:
         """Unmute an orbit.
 
         Args:
-            orbit_id: The orbit identifier.
+            orbit: The orbit identifier.
         """
-        self.mute_orbit(orbit_id, False)
+        self.mute_orbit(orbit, False)
 
-    def solo_orbit(self, orbit_id: int, solo: bool = True) -> None:
+    def solo_orbit(self, orbit: Orbit, solo: bool = True) -> None:
         """Solo or unsolo an orbit.
 
         Args:
-            orbit_id: The orbit identifier.
+            orbit: The orbit identifier.
             solo: Whether to solo the orbit.
         """
         if self._state_sender is not None:
-            self._state_sender.send(SoloOrbit(orbit_id, solo))
+            self._state_sender.send(SoloOrbit(orbit, solo))
 
-    def unsolo_orbit(self, orbit_id: int) -> None:
+    def unsolo_orbit(self, orbit: Orbit) -> None:
         """Unsolo an orbit.
 
         Args:
-            orbit_id: The orbit identifier.
+            orbit: The orbit identifier.
         """
-        self.solo_orbit(orbit_id, False)
+        self.solo_orbit(orbit, False)
 
     def panic(self) -> None:
         """Emergency stop - clear all patterns and stop playback."""
@@ -536,8 +564,8 @@ if __name__ == "__main__":
         stream2 = pat_stream(pattern2)
 
         # Set streams on orbits
-        live.set_orbit(0, stream1)
-        live.set_orbit(1, stream2)
+        live.set_orbit(Orbit(0), stream1)
+        live.set_orbit(Orbit(1), stream2)
 
         # Set tempo and start playback
         live.set_cps(Fraction(2))  # 2 cycles per second
@@ -547,11 +575,11 @@ if __name__ == "__main__":
         time.sleep(3)
 
         # Test muting
-        live.mute_orbit(1)
+        live.mute_orbit(Orbit(1))
         time.sleep(2)
 
         # Test soloing
-        live.solo_orbit(0)
+        live.solo_orbit(Orbit(0))
         time.sleep(2)
 
         # Panic stop
