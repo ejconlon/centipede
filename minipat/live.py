@@ -15,14 +15,13 @@ from logging import Logger
 from threading import Event
 from typing import Dict, NewType, Optional, override
 
-from centipede.actor import Actor, ActorEnv, Sender, Task
+from centipede.actor import Actor, ActorEnv, Sender, System, Task
 from minipat.arc import Arc
 from minipat.common import ONE, ZERO, CycleTime, PosixTime
 from minipat.ev import Ev
-from minipat.pat import Pat
-from minipat.stream import Stream, pat_stream
+from minipat.stream import Stream
 from spiny.heapmap import PHeapMap
-from spiny.pmap import PMap
+from spiny.map import PMap
 
 Orbit = NewType("Orbit", int)
 
@@ -433,7 +432,7 @@ class PatternActor[T](Actor[PatternMessage[T]]):
             if events:
                 event_map = PHeapMap[Arc, Ev[T]].empty()
                 for event_arc, ev in events:
-                    event_map = event_map.put(event_arc, ev)
+                    event_map = event_map.insert(event_arc, ev)
 
                 orbit_events = orbit_events.put(orbit, event_map)
                 logger.debug("Generated %s events for orbit %s", len(events), orbit)
@@ -489,48 +488,71 @@ class LiveSystem[T]:
     Provides high-level controls for pattern playback using the actor system.
     """
 
-    def __init__(self, backend: Backend[T], env: LiveEnv = LiveEnv()):
+    def __init__(
+        self,
+        backend: Backend[T],
+        transport_sender: Sender[TransportMessage[T]],
+        pattern_sender: Sender[PatternMessage[T]],
+        env: LiveEnv = LiveEnv(),
+    ):
         """Initialize the live system.
 
         Args:
             backend: Backend for processing pattern events.
+            transport_sender: Sender for transport control messages.
+            pattern_sender: Sender for pattern messages.
             env: Environment configuration.
         """
         self._logger = logging.getLogger("minipat.live")
         self._state = LiveState(logger=self._logger, backend=backend, env=env)
-        self._transport_sender: Optional[Sender[TransportMessage[T]]] = None
-        self._pattern_sender: Optional[Sender[PatternMessage[T]]] = None
+        self._transport_sender = transport_sender
+        self._pattern_sender = pattern_sender
 
-    def start(self, system) -> None:
+    @staticmethod
+    def start(
+        system: System,
+        backend: Backend[T],
+        env: LiveEnv = LiveEnv(),
+    ) -> LiveSystem[T]:
         """Start the live pattern system.
 
         Args:
             system: The actor system to use.
+            backend: Backend for processing pattern events.
+            env: Environment configuration.
+
+        Returns:
+            A started LiveSystem instance.
         """
-        self._logger.info("Starting live pattern system")
+        logger = logging.getLogger("minipat")
+        logger.info("Starting live pattern system")
+
+        # Create temporary state objects for actors
+        transport_state = TransportState()
+        pattern_state = PatternState[T]()
 
         # Create the pattern actor
-        pattern_actor = PatternActor(
-            self._state.pattern_state, self._state.backend, self._state.env
-        )
+        pattern_actor = PatternActor(pattern_state, backend, env)
         pattern_sender = system.spawn_actor("pattern", pattern_actor)
-        self._pattern_sender = pattern_sender
 
         # Create the transport actor for handling control messages
-        transport_actor = TransportActor(self._state.transport_state)
+        transport_actor: TransportActor[T] = TransportActor(transport_state)
         transport_sender = system.spawn_actor("transport", transport_actor)
-        self._transport_sender = transport_sender
+
+        # Create the live system with the senders
+        live_system = LiveSystem(backend, transport_sender, pattern_sender, env)
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
             pattern_sender,
             transport_sender,
-            self._state.env,
-            self._state.transport_state,
+            env,
+            transport_state,
         )
         system.spawn_task("timer_loop", timer_task)
 
-        self._logger.info("Live pattern system started")
+        logger.info("Live pattern system started")
+        return live_system
 
     def set_orbit(self, orbit: Orbit, stream: Optional[Stream[T]]) -> None:
         """Set the stream for a specific orbit.
@@ -539,8 +561,7 @@ class LiveSystem[T]:
             orbit: The orbit identifier.
             stream: The stream to set, or None to clear.
         """
-        if self._pattern_sender is not None:
-            self._pattern_sender.send(SetOrbit(orbit, stream))
+        self._pattern_sender.send(SetOrbit(orbit, stream))
 
     def set_cps(self, cps: Fraction) -> None:
         """Set the cycles per second (tempo).
@@ -548,8 +569,7 @@ class LiveSystem[T]:
         Args:
             cps: The new tempo in cycles per second.
         """
-        if self._transport_sender is not None:
-            self._transport_sender.send(SetCps(cps))
+        self._transport_sender.send(SetCps(cps))
 
     def set_cycle(self, cycle: CycleTime) -> None:
         """Set the current cycle position.
@@ -557,134 +577,51 @@ class LiveSystem[T]:
         Args:
             cycle: The cycle position to set.
         """
-        if self._transport_sender is not None:
-            self._transport_sender.send(SetCycle(cycle))
+        self._transport_sender.send(SetCycle(cycle))
 
-    def start_playback(self) -> None:
+    def play(self) -> None:
         """Start pattern playback."""
-        if self._transport_sender is not None:
-            self._transport_sender.send(SetPlaying(True))
+        self._transport_sender.send(SetPlaying(True))
 
-    def stop_playback(self) -> None:
+    def pause(self) -> None:
         """Stop pattern playback."""
-        if self._transport_sender is not None:
-            self._transport_sender.send(SetPlaying(False))
+        self._transport_sender.send(SetPlaying(False))
 
-    def mute_orbit(self, orbit: Orbit, muted: bool = True) -> None:
+    def mute(self, orbit: Orbit, muted: bool = True) -> None:
         """Mute or unmute an orbit.
 
         Args:
             orbit: The orbit identifier.
             muted: Whether to mute the orbit.
         """
-        if self._pattern_sender is not None:
-            self._pattern_sender.send(MuteOrbit(orbit, muted))
+        self._pattern_sender.send(MuteOrbit(orbit, muted))
 
-    def unmute_orbit(self, orbit: Orbit) -> None:
+    def unmute(self, orbit: Orbit) -> None:
         """Unmute an orbit.
 
         Args:
             orbit: The orbit identifier.
         """
-        self.mute_orbit(orbit, False)
+        self.mute(orbit, False)
 
-    def solo_orbit(self, orbit: Orbit, solo: bool = True) -> None:
+    def solo(self, orbit: Orbit, solo: bool = True) -> None:
         """Solo or unsolo an orbit.
 
         Args:
             orbit: The orbit identifier.
             solo: Whether to solo the orbit.
         """
-        if self._pattern_sender is not None:
-            self._pattern_sender.send(SoloOrbit(orbit, solo))
+        self._pattern_sender.send(SoloOrbit(orbit, solo))
 
-    def unsolo_orbit(self, orbit: Orbit) -> None:
+    def unsolo(self, orbit: Orbit) -> None:
         """Unsolo an orbit.
 
         Args:
             orbit: The orbit identifier.
         """
-        self.solo_orbit(orbit, False)
+        self.solo(orbit, False)
 
     def panic(self) -> None:
         """Emergency stop - clear all patterns and stop playback."""
-        if self._transport_sender is not None:
-            self._transport_sender.send(Panic())
-        if self._pattern_sender is not None:
-            self._pattern_sender.send(ClearOrbits())
-
-
-def create_live_system[T](
-    backend: Optional[Backend[T]] = None,
-    env: Optional[LiveEnv] = None,
-    debug: bool = False,
-) -> LiveSystem[T]:
-    """Create a new live pattern system.
-
-    Args:
-        backend: Backend for processing events. If None, uses LogBackend.
-        env: Environment configuration. If None, uses default.
-        debug: Whether to enable debug mode.
-
-    Returns:
-        A new LiveSystem instance.
-    """
-    if env is None:
-        env = LiveEnv(debug=debug)
-
-    if backend is None:
-        logger = logging.getLogger("minipat.live.backend")
-        backend = LogBackend(logger)
-
-    return LiveSystem(backend, env)
-
-
-# Example usage and testing
-if __name__ == "__main__":
-    import logging
-
-    from centipede.actor import new_system
-    from minipat.pat import Pat
-
-    # Set up logging
-    logging.basicConfig(level=logging.DEBUG)
-
-    # Create pattern system
-    system = new_system("live_test")
-    live: LiveSystem[str] = create_live_system(debug=True)
-    live.start(system)
-
-    try:
-        # Create some simple patterns and convert to streams
-        pattern1 = Pat.pure("kick")
-        pattern2 = Pat.seq([Pat.pure("snare"), Pat.silence()])
-        stream1 = pat_stream(pattern1)
-        stream2 = pat_stream(pattern2)
-
-        # Set streams on orbits
-        live.set_orbit(Orbit(0), stream1)
-        live.set_orbit(Orbit(1), stream2)
-
-        # Set tempo and start playback
-        live.set_cps(Fraction(2))  # 2 cycles per second
-        live.start_playback()
-
-        # Let it play for a few seconds
-        time.sleep(3)
-
-        # Test muting
-        live.mute_orbit(Orbit(1))
-        time.sleep(2)
-
-        # Test soloing
-        live.solo_orbit(Orbit(0))
-        time.sleep(2)
-
-        # Panic stop
-        live.panic()
-        time.sleep(1)
-
-    finally:
-        # Clean shutdown
-        system.stop()
-        system.wait()
+        self._transport_sender.send(Panic())
+        self._pattern_sender.send(ClearOrbits())
