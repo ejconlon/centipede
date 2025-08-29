@@ -91,7 +91,7 @@ class TransportState:
     cps: Fraction = ONE
     """Current cycles per second (tempo)."""
 
-    playback_start_time: Optional[PosixTime] = None
+    playback_start: PosixTime = PosixTime(0.0)
     """Wall clock time when playback started (seconds since epoch)."""
 
 
@@ -203,6 +203,13 @@ class SetPlaying[T](TransportMessage[T]):
 
 
 @dataclass(frozen=True)
+class SetCycle[T](TransportMessage[T]):
+    """Set the current cycle position."""
+
+    cycle: CycleTime
+
+
+@dataclass(frozen=True)
 class Panic[T](TransportMessage[T]):
     """Emergency stop - clear all patterns and stop playback."""
 
@@ -273,10 +280,7 @@ class TimerTask[T](Task):
         logger.debug("Timer task starting")
 
         while not halt.is_set():
-            if (
-                self._transport_state.playing
-                and self._transport_state.playback_start_time is not None
-            ):
+            if self._transport_state.playing:
                 # Calculate current interval based on CPS
                 interval = 1.0 / (
                     float(self._transport_state.cps) * self._env.generations_per_cycle
@@ -286,7 +290,7 @@ class TimerTask[T](Task):
                 instant = Instant(
                     cycle_time=self._transport_state.current_cycle,
                     cps=self._transport_state.cps,
-                    posix_start=self._transport_state.playback_start_time,
+                    posix_start=self._transport_state.playback_start,
                 )
 
                 # Send generation request
@@ -326,6 +330,8 @@ class TransportActor[T](Actor[TransportMessage[T]]):
                 self._set_cps(env.logger, cps)
             case SetPlaying(playing):
                 self._set_playing(env.logger, playing)
+            case SetCycle(cycle):
+                self._set_cycle(env.logger, cycle)
             case Panic():
                 self._panic(env.logger)
 
@@ -340,12 +346,16 @@ class TransportActor[T](Actor[TransportMessage[T]]):
         logger.debug("Set playing to %s", playing)
 
         if playing:
-            # Reset cycle position and record start time when starting
-            self._transport_state.current_cycle = CycleTime(Fraction(0))
-            self._transport_state.playback_start_time = PosixTime(time.time())
+            # Record start time when starting
+            self._transport_state.playback_start = PosixTime(time.time())
         else:
-            # Clear start time when stopping
-            self._transport_state.playback_start_time = None
+            # Reset start time when stopping
+            self._transport_state.playback_start = PosixTime(0.0)
+
+    def _set_cycle(self, logger: Logger, cycle: CycleTime) -> None:
+        """Set the current cycle position."""
+        self._transport_state.current_cycle = cycle
+        logger.debug("Set cycle to %s", cycle)
 
     def _panic(self, logger: Logger) -> None:
         """Emergency stop - stop playback."""
@@ -353,7 +363,7 @@ class TransportActor[T](Actor[TransportMessage[T]]):
 
         # Stop playback
         self._transport_state.playing = False
-        self._transport_state.playback_start_time = None
+        self._transport_state.playback_start = PosixTime(0.0)
         self._transport_state.current_cycle = CycleTime(Fraction(0))
 
 
@@ -540,6 +550,15 @@ class LiveSystem[T]:
         """
         if self._transport_sender is not None:
             self._transport_sender.send(SetCps(cps))
+
+    def set_cycle(self, cycle: CycleTime) -> None:
+        """Set the current cycle position.
+
+        Args:
+            cycle: The cycle position to set.
+        """
+        if self._transport_sender is not None:
+            self._transport_sender.send(SetCycle(cycle))
 
     def start_playback(self) -> None:
         """Start pattern playback."""
