@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import List, Optional, override
 
-from minipat.arc import Arc
+from minipat.arc import Arc, Span
 from minipat.common import CycleTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
 from minipat.pat import (
@@ -30,12 +30,36 @@ from spiny import PSeq
 from spiny.heapmap import PHeapMap
 
 
+def _create_span(original_arc: Arc, query_arc: Arc) -> Optional[Span]:
+    """Create a span for an event within a query arc.
+
+    Args:
+        original_arc: The original arc of the event
+        query_arc: The query arc to intersect with
+
+    Returns:
+        A span with active arc as intersection, whole arc as original if different,
+        or None if intersection is null
+    """
+    active = original_arc.intersect(query_arc)
+    if active.null():
+        return None
+
+    # Only set whole if original extends beyond the active area
+    if original_arc == active:
+        whole = None
+    else:
+        whole = original_arc
+
+    return Span(active=active, whole=whole)
+
+
 # sealed
 class Stream[T](metaclass=ABCMeta):
     """A stream of events in time."""
 
     @abstractmethod
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         """Emit all events that start or end in the given arc.
 
         Args:
@@ -52,7 +76,7 @@ class SilenceStream[T](Stream[T]):
     """Specialized stream for silence patterns."""
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         return ev_heap_empty()
 
 
@@ -63,10 +87,11 @@ class PureStream[T](Stream[T]):
     value: T
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
-        return ev_heap_singleton(Ev(arc, self.value))
+        span = Span(active=arc, whole=None)
+        return ev_heap_singleton(Ev(span, self.value))
 
 
 @dataclass(frozen=True)
@@ -76,11 +101,11 @@ class SeqStream[T](Stream[T]):
     children: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.children) == 0:
             return ev_heap_empty()
 
-        seq_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        seq_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
         child_duration = arc.length() / len(self.children)
 
         for i, child in enumerate(self.children):
@@ -93,8 +118,16 @@ class SeqStream[T](Stream[T]):
             if not intersection.null():
                 child_events = child.unstream(child_arc)
                 for _, ev in child_events:
-                    if not arc.intersect(ev.arc).null():
-                        seq_result = ev_heap_push(ev, seq_result)
+                    # Create proper span for this event within the query arc
+                    span = _create_span(ev.span.active, arc)
+                    if span is not None:
+                        # Preserve the child's whole information if it exists, otherwise use the child's active as whole
+                        if ev.span.whole is not None:
+                            span = Span(active=span.active, whole=ev.span.whole)
+                        elif ev.span.active != span.active:
+                            span = Span(active=span.active, whole=ev.span.active)
+                        new_ev = Ev(span, ev.val)
+                        seq_result = ev_heap_push(new_ev, seq_result)
 
         return seq_result
 
@@ -106,11 +139,11 @@ class ParStream[T](Stream[T]):
     children: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
 
-        par_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        par_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
         for child in self.children:
             child_events = child.unstream(arc)
             for _, ev in child_events:
@@ -125,7 +158,7 @@ class ChoiceStream[T](Stream[T]):
     choices: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.choices) == 0:
             return ev_heap_empty()
 
@@ -152,11 +185,11 @@ class EuclideanStream[T](Stream[T]):
         return cls(atom, hits, steps, rotation, pattern)
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.steps <= 0 or self.hits <= 0:
             return ev_heap_empty()
 
-        euc_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        euc_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
         step_duration = arc.length() / self.steps
 
         for i, is_hit in enumerate(self.pattern):
@@ -169,8 +202,10 @@ class EuclideanStream[T](Stream[T]):
                 if not arc.intersect(step_arc).null():
                     atom_events = self.atom.unstream(step_arc)
                     for _, ev in atom_events:
-                        step_ev = Ev(step_arc, ev.val)
-                        if not arc.intersect(step_ev.arc).null():
+                        # Create span for this step within the query arc
+                        span = _create_span(step_arc, arc)
+                        if span is not None:
+                            step_ev = Ev(span, ev.val)
                             euc_result = ev_heap_push(step_ev, euc_result)
 
         return euc_result
@@ -184,11 +219,11 @@ class PolymetricStream[T](Stream[T]):
     subdivision: Optional[int]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.patterns) == 0:
             return ev_heap_empty()
 
-        polymetric_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        polymetric_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
         if self.subdivision is None:
             # All patterns play simultaneously
@@ -205,8 +240,15 @@ class PolymetricStream[T](Stream[T]):
                 pattern_events = pattern.unstream(sub_arc)
                 for _, ev in pattern_events:
                     scaled_ev = ev.scale(Fraction(self.subdivision))
-                    if not arc.intersect(scaled_ev.arc).null():
-                        polymetric_result = ev_heap_push(scaled_ev, polymetric_result)
+                    span = _create_span(scaled_ev.span.active, arc)
+                    if span is not None:
+                        # Preserve the whole information from scaling
+                        if scaled_ev.span.whole is not None:
+                            span = Span(active=span.active, whole=scaled_ev.span.whole)
+                        elif scaled_ev.span.active != span.active:
+                            span = Span(active=span.active, whole=scaled_ev.span.active)
+                        new_ev = Ev(span, scaled_ev.val)
+                        polymetric_result = ev_heap_push(new_ev, polymetric_result)
 
         return polymetric_result
 
@@ -220,11 +262,11 @@ class RepetitionStream[T](Stream[T]):
     count: int
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        rep_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        rep_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
         match self.operator:
             case RepetitionOp.Fast:
@@ -233,8 +275,19 @@ class RepetitionStream[T](Stream[T]):
                     pattern_events = self.pattern.unstream(scaled_arc)
                     for _, ev in pattern_events:
                         fast_ev = ev.scale(Fraction(self.count))
-                        if not arc.intersect(fast_ev.arc).null():
-                            rep_result = ev_heap_push(fast_ev, rep_result)
+                        span = _create_span(fast_ev.span.active, arc)
+                        if span is not None:
+                            # Preserve the whole information from scaling
+                            if fast_ev.span.whole is not None:
+                                span = Span(
+                                    active=span.active, whole=fast_ev.span.whole
+                                )
+                            elif fast_ev.span.active != span.active:
+                                span = Span(
+                                    active=span.active, whole=fast_ev.span.active
+                                )
+                            new_ev = Ev(span, fast_ev.val)
+                            rep_result = ev_heap_push(new_ev, rep_result)
                 else:
                     int_count = (
                         int(self.count)
@@ -253,16 +306,34 @@ class RepetitionStream[T](Stream[T]):
                             if not arc.intersect(rep_arc).null():
                                 pattern_events = self.pattern.unstream(rep_arc)
                                 for _, ev in pattern_events:
-                                    if not arc.intersect(ev.arc).null():
-                                        rep_result = ev_heap_push(ev, rep_result)
+                                    span = _create_span(ev.span.active, arc)
+                                    if span is not None:
+                                        # Preserve the child's whole information if it exists
+                                        if ev.span.whole is not None:
+                                            span = Span(
+                                                active=span.active, whole=ev.span.whole
+                                            )
+                                        elif ev.span.active != span.active:
+                                            span = Span(
+                                                active=span.active, whole=ev.span.active
+                                            )
+                                        new_ev = Ev(span, ev.val)
+                                        rep_result = ev_heap_push(new_ev, rep_result)
 
             case RepetitionOp.Slow:
                 stretched_arc = arc.scale(Fraction(self.count))
                 pattern_events = self.pattern.unstream(stretched_arc)
                 for _, ev in pattern_events:
                     slow_ev = ev.scale(Fraction(1, self.count))
-                    if not arc.intersect(slow_ev.arc).null():
-                        rep_result = ev_heap_push(slow_ev, rep_result)
+                    span = _create_span(slow_ev.span.active, arc)
+                    if span is not None:
+                        # Preserve the whole information from scaling
+                        if slow_ev.span.whole is not None:
+                            span = Span(active=span.active, whole=slow_ev.span.whole)
+                        elif slow_ev.span.active != span.active:
+                            span = Span(active=span.active, whole=slow_ev.span.active)
+                        new_ev = Ev(span, slow_ev.val)
+                        rep_result = ev_heap_push(new_ev, rep_result)
 
         return rep_result
 
@@ -275,18 +346,25 @@ class ElongationStream[T](Stream[T]):
     count: int
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
         stretched_arc = arc.scale(Fraction(self.count))
         pattern_events = self.pattern.unstream(stretched_arc)
-        elong_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        elong_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
         for _, ev in pattern_events:
             elongated_ev = ev.scale(Fraction(1, self.count))
-            if not arc.intersect(elongated_ev.arc).null():
-                elong_result = ev_heap_push(elongated_ev, elong_result)
+            span = _create_span(elongated_ev.span.active, arc)
+            if span is not None:
+                # Preserve the whole information from scaling
+                if elongated_ev.span.whole is not None:
+                    span = Span(active=span.active, whole=elongated_ev.span.whole)
+                elif elongated_ev.span.active != span.active:
+                    span = Span(active=span.active, whole=elongated_ev.span.active)
+                new_ev = Ev(span, elongated_ev.val)
+                elong_result = ev_heap_push(new_ev, elong_result)
 
         return elong_result
 
@@ -299,7 +377,7 @@ class ProbabilityStream[T](Stream[T]):
     prob: Fraction
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
 
@@ -317,7 +395,7 @@ class SelectStream[T](Stream[T]):
     selector: str
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         return self.pattern.unstream(arc)
 
 
@@ -328,7 +406,7 @@ class AlternatingStream[T](Stream[T]):
     patterns: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.patterns) == 0:
             return ev_heap_empty()
 
@@ -345,11 +423,11 @@ class ReplicateStream[T](Stream[T]):
     count: int
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Arc, Ev[T]]:
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        replicate_result: PHeapMap[Arc, Ev[T]] = ev_heap_empty()
+        replicate_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
         rep_duration = arc.length() / self.count
 
         for i in range(self.count):
@@ -358,8 +436,15 @@ class ReplicateStream[T](Stream[T]):
             if not arc.intersect(rep_arc).null():
                 child_events = self.pattern.unstream(rep_arc)
                 for _, ev in child_events:
-                    if not arc.intersect(ev.arc).null():
-                        replicate_result = ev_heap_push(ev, replicate_result)
+                    span = _create_span(ev.span.active, arc)
+                    if span is not None:
+                        # Preserve the child's whole information if it exists
+                        if ev.span.whole is not None:
+                            span = Span(active=span.active, whole=ev.span.whole)
+                        elif ev.span.active != span.active:
+                            span = Span(active=span.active, whole=ev.span.active)
+                        new_ev = Ev(span, ev.val)
+                        replicate_result = ev_heap_push(new_ev, replicate_result)
         return replicate_result
 
 

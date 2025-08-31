@@ -17,7 +17,7 @@ def test_pure_pattern():
 
     assert len(event_list) == 1
     _, event = event_list[0]
-    assert event.arc == arc
+    assert event.span.active == arc
     assert event.val == "x"
 
 
@@ -41,20 +41,20 @@ def test_sequence_pattern():
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
+    event_list = sorted(events, key=lambda x: x[0].active.start)
 
     assert len(event_list) == 2
 
     # First event: x from 0 to 0.5
     _, first_event = event_list[0]
-    assert first_event.arc.start == Fraction(0)
-    assert first_event.arc.end == Fraction(1, 2)
+    assert first_event.span.active.start == Fraction(0)
+    assert first_event.span.active.end == Fraction(1, 2)
     assert first_event.val == "x"
 
     # Second event: y from 0.5 to 1
     _, second_event = event_list[1]
-    assert second_event.arc.start == Fraction(1, 2)
-    assert second_event.arc.end == Fraction(1)
+    assert second_event.span.active.start == Fraction(1, 2)
+    assert second_event.span.active.end == Fraction(1)
     assert second_event.val == "y"
 
 
@@ -72,7 +72,7 @@ def test_parallel_pattern():
 
     # Both events should span the full arc
     for _, event in event_list:
-        assert event.arc == arc
+        assert event.span.active == arc
         assert event.val in ["x", "y"]
 
     # Should have both x and y
@@ -90,20 +90,20 @@ def test_repetition_fast():
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
+    event_list = sorted(events, key=lambda x: x[0].active.start)
 
     assert len(event_list) == 2
 
     # First repetition: 0 to 0.5
     _, first_event = event_list[0]
-    assert first_event.arc.start == Fraction(0)
-    assert first_event.arc.end == Fraction(1, 2)
+    assert first_event.span.active.start == Fraction(0)
+    assert first_event.span.active.end == Fraction(1, 2)
     assert first_event.val == "x"
 
     # Second repetition: 0.5 to 1
     _, second_event = event_list[1]
-    assert second_event.arc.start == Fraction(1, 2)
-    assert second_event.arc.end == Fraction(1)
+    assert second_event.span.active.start == Fraction(1, 2)
+    assert second_event.span.active.end == Fraction(1)
     assert second_event.val == "x"
 
 
@@ -121,8 +121,8 @@ def test_repetition_slow():
     assert len(event_list) == 1
     _, event = event_list[0]
     # Slow repetition stretches the pattern and scales back - results in compressed event
-    assert event.arc.start == Fraction(0)
-    assert event.arc.end == Fraction(
+    assert event.span.active.start == Fraction(0)
+    assert event.span.active.end == Fraction(
         1
     )  # Actually fills the whole arc after scaling back
     assert event.val == "x"
@@ -142,8 +142,8 @@ def test_elongation_pattern():
     assert len(event_list) == 1
     _, event = event_list[0]
     # Elongation stretches then scales back down - net result fills arc
-    assert event.arc.start == Fraction(0)
-    assert event.arc.end == Fraction(
+    assert event.span.active.start == Fraction(0)
+    assert event.span.active.end == Fraction(
         1
     )  # Actually fills the whole arc after scaling back
     assert event.val == "x"
@@ -183,7 +183,7 @@ def test_euclidean_pattern():
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
+    event_list = sorted(events, key=lambda x: x[0].active.start)
 
     # Should have 3 events distributed across 8 steps
     assert len(event_list) == 3
@@ -194,7 +194,7 @@ def test_euclidean_pattern():
     for i, (_, event) in enumerate(event_list):
         assert event.val == "x"
         # Each event should span one step
-        assert event.arc.length() == step_duration
+        assert event.span.active.length() == step_duration
 
 
 def test_polymetric_pattern():
@@ -213,7 +213,7 @@ def test_polymetric_pattern():
     # All events should span the full arc
     values = []
     for _, event in event_list:
-        assert event.arc == arc
+        assert event.span.active == arc
         values.append(event.val)
 
     # Should have all three values
@@ -280,31 +280,31 @@ def test_complex_nested_pattern():
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
+    event_list = sorted(events, key=lambda x: x[0].active.start)
 
     # Should have 4 events: x, y, x, y (sequence replicated twice)
     assert len(event_list) == 4
 
     # First repetition
     _, first_event = event_list[0]
-    assert first_event.arc.start == Fraction(0)
-    assert first_event.arc.end == Fraction(1, 4)
+    assert first_event.span.active.start == Fraction(0)
+    assert first_event.span.active.end == Fraction(1, 4)
     assert first_event.val == "x"
 
     _, second_event = event_list[1]
-    assert second_event.arc.start == Fraction(1, 4)
-    assert second_event.arc.end == Fraction(1, 2)
+    assert second_event.span.active.start == Fraction(1, 4)
+    assert second_event.span.active.end == Fraction(1, 2)
     assert second_event.val == "y"
 
     # Second repetition
     _, third_event = event_list[2]
-    assert third_event.arc.start == Fraction(1, 2)
-    assert third_event.arc.end == Fraction(3, 4)
+    assert third_event.span.active.start == Fraction(1, 2)
+    assert third_event.span.active.end == Fraction(3, 4)
     assert third_event.val == "x"
 
     _, fourth_event = event_list[3]
-    assert fourth_event.arc.start == Fraction(3, 4)
-    assert fourth_event.arc.end == Fraction(1)
+    assert fourth_event.span.active.start == Fraction(3, 4)
+    assert fourth_event.span.active.end == Fraction(1)
     assert fourth_event.val == "y"
 
 
@@ -354,9 +354,9 @@ def test_partial_arc_query():
 
     # Events should only be ones that intersect with our query arc
     for _, event in event_list:
-        intersection = arc.intersect(event.arc)
+        intersection = arc.intersect(event.span.active)
         assert not intersection.null(), (
-            f"Event {event.val} at {event.arc.start}-{event.arc.end} should intersect with {arc.start}-{arc.end}"
+            f"Event {event.val} at {event.span.active.start}-{event.span.active.end} should intersect with {arc.start}-{arc.end}"
         )
 
 
@@ -372,7 +372,7 @@ def test_replicate_stream():
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
+    event_list = sorted(events, key=lambda x: x[0].active.start)
 
     # Should have 3 events (pattern replicated 3 times)
     assert len(event_list) == 3
@@ -386,8 +386,8 @@ def test_replicate_stream():
     for i, (_, event) in enumerate(event_list):
         expected_start = i * expected_duration
         expected_end = (i + 1) * expected_duration
-        assert event.arc.start == expected_start
-        assert event.arc.end == expected_end
+        assert event.span.active.start == expected_start
+        assert event.span.active.end == expected_end
 
 
 def test_ratio_stream():
@@ -438,7 +438,7 @@ def test_dot_grouping_stream():
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].start)
+    event_list = sorted(events, key=lambda x: x[0].active.start)
 
     # Should have 4 events total
     assert len(event_list) == 4

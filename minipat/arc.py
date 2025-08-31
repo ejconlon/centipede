@@ -8,7 +8,7 @@ from fractions import Fraction
 from math import ceil, floor
 from typing import Iterator, Optional, Tuple
 
-from minipat.common import ZERO, CycleTime, CycleDelta, CycleTimeOps, Factor
+from minipat.common import ZERO, CycleDelta, CycleTime, CycleTimeOps, Factor
 
 
 @dataclass(frozen=True, order=True)
@@ -214,4 +214,70 @@ class Arc:
             return Arc(self.start, end)
 
 
-_EMPTY_ARC = Arc(CycleTime(ZERO), CycleTime(ZERO))
+_EMPTY_ARC = Arc(start=CycleTime(ZERO), end=CycleTime(ZERO))
+
+
+@dataclass(frozen=True, order=True)
+class Span:
+    """Annotates an Arc optionally contained within a wider Arc.
+    This is useful to communicate that certain intervals belong
+    to larger intervals.
+
+    Args:
+        active: The interval in question
+        whole: If present, a wider interval containing active
+    """
+
+    active: Arc
+    whole: Optional[Arc] = None
+
+    @staticmethod
+    def empty() -> Span:
+        """Create an empty span
+
+        Returns:
+            An empty span
+        """
+        return _EMPTY_SPAN
+
+    def shift(self, delta: CycleDelta) -> Span:
+        """Shift the span by a given delta.
+
+        Args:
+            delta: The amount to shift by
+
+        Returns:
+            A new span shifted by delta
+        """
+        new_active = self.active.shift(delta)
+        new_whole = self.whole.shift(delta) if self.whole is not None else None
+        return Span(active=new_active, whole=new_whole)
+
+    def scale(self, factor: Factor) -> Span:
+        """Scale the span by a given factor.
+
+        Args:
+            factor: The scaling factor
+
+        Returns:
+            A new span scaled by the factor
+        """
+        new_active = self.active.scale(factor)
+        new_whole = self.whole.scale(factor) if self.whole is not None else None
+        return Span(active=new_active, whole=new_whole)
+
+    def clip(self, factor: Factor) -> Span:
+        """Clip the span to a fraction of its length.
+
+        Args:
+            factor: The fraction to clip to (0 to 1)
+
+        Returns:
+            A new span clipped to the given fraction
+        """
+        new_active = self.active.clip(factor)
+        new_whole = self.whole.clip(factor) if self.whole is not None else None
+        return Span(active=new_active, whole=new_whole)
+
+
+_EMPTY_SPAN = Span(active=_EMPTY_ARC, whole=None)

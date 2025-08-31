@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from minipat.arc import Arc
+from minipat.arc import Span
 from minipat.common import CycleDelta, Factor
 from spiny import PHeapMap
 
@@ -18,7 +18,7 @@ class Ev[T]:
         val: The value of the event
     """
 
-    arc: Arc
+    span: Span
     val: T
 
     def shift(self, delta: CycleDelta) -> Ev[T]:
@@ -30,10 +30,10 @@ class Ev[T]:
         Returns:
             A new event shifted by the delta
         """
-        return Ev(self.arc.shift(delta), self.val)
+        return Ev(self.span.shift(delta), self.val)
 
     def scale(self, factor: Factor) -> Ev[T]:
-        """Scale the event's arc by a factor.
+        """Scale the event's span by a factor.
 
         Args:
             factor: The scaling factor
@@ -41,21 +41,21 @@ class Ev[T]:
         Returns:
             A new event with scaled arc
         """
-        return Ev(self.arc.scale(factor), self.val)
+        return Ev(self.span.scale(factor), self.val)
 
     def clip(self, factor: Factor) -> Ev[T]:
-        """Clip the event's arc to a fraction of its length.
+        """Clip the event's span to a fraction of its length.
 
         Args:
             factor: The fraction to clip to (0 to 1)
 
         Returns:
-            A new event with clipped arc
+            A new event with clipped span
         """
-        return Ev(self.arc.clip(factor), self.val)
+        return Ev(self.span.clip(factor), self.val)
 
 
-type EvHeap[T] = PHeapMap[Arc, Ev[T]]
+type EvHeap[T] = PHeapMap[Span, Ev[T]]
 """Type alias for a heap map of events indexed by their arcs."""
 
 
@@ -77,7 +77,7 @@ def ev_heap_singleton[T](ev: Ev[T]) -> EvHeap[T]:
     Returns:
         An event heap containing only the given event
     """
-    return PHeapMap.singleton(ev.arc, ev)
+    return PHeapMap.singleton(ev.span, ev)
 
 
 def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
@@ -90,4 +90,4 @@ def ev_heap_push[T](ev: Ev[T], heap: EvHeap[T]) -> EvHeap[T]:
     Returns:
         A new event heap with the event added
     """
-    return heap.insert(ev.arc, ev)
+    return heap.insert(ev.span, ev)
