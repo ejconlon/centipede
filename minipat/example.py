@@ -4,10 +4,38 @@ import logging
 import time
 from fractions import Fraction
 
-from centipede.actor import new_system
-from minipat.live import Backend, LiveEnv, LiveSystem, LogBackend, Orbit
+from centipede.actor import Actor, ActorEnv, new_system
+from minipat.live import (
+    BackendMessage,
+    BackendEvents,
+    BackendPanic,
+    LiveEnv,
+    LiveSystem,
+    LogProcessor,
+    Orbit,
+    Processor,
+)
 from minipat.pat import Pat
 from minipat.stream import pat_stream
+
+
+class LogBackendActor(Actor[BackendMessage[str]]):
+    """Backend actor that handles processed events by logging them."""
+
+    def __init__(self):
+        self._logger = logging.getLogger("log_backend")
+
+    def on_start(self, env: ActorEnv) -> None:
+        env.logger.debug("Log backend actor started")
+
+    def on_message(self, env: ActorEnv, value: BackendMessage[str]) -> None:
+        match value:
+            case BackendPanic():
+                self._logger.info("PANIC: Clearing all backend state")
+            case BackendEvents(events):
+                self._logger.debug(f"Received {len(events)} processed events")
+                for event in events:
+                    self._logger.info(f"Backend Event: {event}")
 
 
 def main():
@@ -16,8 +44,15 @@ def main():
 
     # Create pattern system
     system = new_system("live_test")
-    backend: Backend[str] = LogBackend()
-    live: LiveSystem[str] = LiveSystem.start(system, backend, LiveEnv(debug=True))
+
+    # Create processor and backend actor
+    processor: Processor[str, str] = LogProcessor()
+    backend_actor = LogBackendActor()
+    backend_sender = system.spawn_actor("log_backend", backend_actor)
+
+    live: LiveSystem[str, str] = LiveSystem.start(
+        system, processor, backend_sender, LiveEnv(debug=True)
+    )
 
     try:
         # Create some simple patterns and convert to streams
