@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from logging import Logger
 from threading import Event
-from typing import Dict, NewType, Optional, override
+from typing import NewType, Optional, override
 
 from centipede.actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
@@ -104,8 +104,26 @@ class PatternState[T]:
     Handles orbits, streams, and pattern-related state.
     """
 
-    orbits: Dict[Orbit, OrbitState[T]] = field(default_factory=dict)
+    orbits: PMap[Orbit, OrbitState[T]] = field(default_factory=PMap.empty)
     """Map of orbit to orbit state."""
+
+
+# class Processor[T, U](metaclass=ABCMeta):
+#     @abstractmethod
+#     def process_event(self, instant: Instant, orbit: Orbit, arc: Arc, val: T) -> PSeq[U]:
+#         raise NotImplementedError
+#
+#     @abstractmethod
+#     def process_play(self) -> U:
+#         raise NotImplementedError
+#
+#     @abstractmethod
+#     def process_pause(self) -> U:
+#         raise NotImplementedError
+#
+#     @abstractmethod
+#     def process_mute(self, orbit: Orbit) -> U:
+#         raise NotImplementedError
 
 
 class Backend[T](metaclass=ABCMeta):
@@ -184,7 +202,7 @@ class TransportSetCps[T](TransportMessage[T]):
 
 
 @dataclass(frozen=True)
-class TransportSetPlaying[T](TransportMessage[T]):
+class TransportPlay[T](TransportMessage[T]):
     """Set the playing state."""
 
     playing: bool
@@ -204,7 +222,7 @@ class PatternMessage[T](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class PatternGenerateEvents[T](PatternMessage[T]):
+class PatternGenerate[T](PatternMessage[T]):
     """Request to generate events for a specific instant."""
 
     instant: Instant
@@ -231,13 +249,17 @@ class PatternSoloOrbit[T](PatternMessage[T]):
     """Solo or unsolo an orbit."""
 
     orbit: Orbit
-    solo: bool
+    soloed: bool
 
 
 @dataclass(frozen=True)
 class PatternClearOrbits[T](PatternMessage[T]):
     """Clear all patterns from orbits."""
 
+    pass
+
+
+class BackendMessage[T](metaclass=ABCMeta):
     pass
 
 
@@ -283,7 +305,7 @@ class TimerTask[T](Task):
 
             if instant is not None:
                 # Send generation request
-                self._pattern_sender.send(PatternGenerateEvents(instant))
+                self._pattern_sender.send(PatternGenerate(instant))
 
                 # Wait for next interval or halt
                 if halt.wait(timeout=interval):
@@ -311,7 +333,7 @@ class TransportActor[T](Actor[TransportMessage[T]]):
         match value:
             case TransportSetCps(cps):
                 self._set_cps(env.logger, cps)
-            case TransportSetPlaying(playing):
+            case TransportPlay(playing):
                 self._set_playing(env.logger, playing)
             case TransportSetCycle(cycle):
                 self._set_cycle(env.logger, cycle)
@@ -361,7 +383,7 @@ class PatternActor[T](Actor[PatternMessage[T]]):
     @override
     def on_message(self, env: ActorEnv, value: PatternMessage[T]) -> None:
         match value:
-            case PatternGenerateEvents(instant):
+            case PatternGenerate(instant):
                 self._generate_events(env.logger, instant)
             case PatternSetOrbit(orbit, stream):
                 self._set_orbit(env.logger, orbit, stream)
@@ -383,12 +405,14 @@ class PatternActor[T](Actor[PatternMessage[T]]):
         arc = Arc(cycle_start, cycle_end)
 
         # Check if any orbits are soloed
-        has_solo = any(orbit.solo for orbit in self._pattern_state.orbits.values())
+        has_solo = any(
+            orbit_state.solo for _, orbit_state in self._pattern_state.orbits
+        )
 
         # Collect events from all active orbits
         orbit_events = PMap[Orbit, PHeapMap[Arc, Ev[T]]].empty()
 
-        for orbit, orbit_state in self._pattern_state.orbits.items():
+        for orbit, orbit_state in self._pattern_state.orbits:
             if orbit_state.stream is None:
                 continue
 
@@ -420,10 +444,14 @@ class PatternActor[T](Actor[PatternMessage[T]]):
         self, logger: Logger, orbit: Orbit, stream: Optional[Stream[T]]
     ) -> None:
         """Set the stream for a specific orbit."""
-        if orbit not in self._pattern_state.orbits:
-            self._pattern_state.orbits[orbit] = OrbitState()
-
-        self._pattern_state.orbits[orbit].stream = stream
+        # Get existing orbit state or create new one
+        existing_state = self._pattern_state.orbits.get(orbit, OrbitState())
+        updated_state = OrbitState(
+            stream=stream, muted=existing_state.muted, solo=existing_state.solo
+        )
+        self._pattern_state.orbits = self._pattern_state.orbits.put(
+            orbit, updated_state
+        )
 
         if stream is None:
             logger.debug("Cleared orbit %s", orbit)
@@ -432,18 +460,26 @@ class PatternActor[T](Actor[PatternMessage[T]]):
 
     def _mute_orbit(self, logger: Logger, orbit: Orbit, muted: bool) -> None:
         """Mute or unmute an orbit."""
-        if orbit not in self._pattern_state.orbits:
-            self._pattern_state.orbits[orbit] = OrbitState()
-
-        self._pattern_state.orbits[orbit].muted = muted
+        # Get existing orbit state or create new one
+        existing_state = self._pattern_state.orbits.get(orbit, OrbitState())
+        updated_state = OrbitState(
+            stream=existing_state.stream, muted=muted, solo=existing_state.solo
+        )
+        self._pattern_state.orbits = self._pattern_state.orbits.put(
+            orbit, updated_state
+        )
         logger.debug("Set orbit %s muted to %s", orbit, muted)
 
     def _solo_orbit(self, logger: Logger, orbit: Orbit, solo: bool) -> None:
         """Solo or unsolo an orbit."""
-        if orbit not in self._pattern_state.orbits:
-            self._pattern_state.orbits[orbit] = OrbitState()
-
-        self._pattern_state.orbits[orbit].solo = solo
+        # Get existing orbit state or create new one
+        existing_state = self._pattern_state.orbits.get(orbit, OrbitState())
+        updated_state = OrbitState(
+            stream=existing_state.stream, muted=existing_state.muted, solo=solo
+        )
+        self._pattern_state.orbits = self._pattern_state.orbits.put(
+            orbit, updated_state
+        )
         logger.debug("Set orbit %s solo to %s", orbit, solo)
 
     def clear_all_patterns(self, logger: Logger) -> None:
@@ -451,10 +487,7 @@ class PatternActor[T](Actor[PatternMessage[T]]):
         logger.info("Clearing all patterns")
 
         # Clear all streams
-        for orbit_state in self._pattern_state.orbits.values():
-            orbit_state.stream = None
-            orbit_state.muted = False
-            orbit_state.solo = False
+        self._pattern_state.orbits = PMap.empty()
 
 
 class LiveSystem[T]:
@@ -555,13 +588,13 @@ class LiveSystem[T]:
         """
         self._transport_sender.send(TransportSetCycle(cycle))
 
-    def play(self) -> None:
+    def play(self, playing: bool = True) -> None:
         """Start pattern playback."""
-        self._transport_sender.send(TransportSetPlaying(True))
+        self._transport_sender.send(TransportPlay(playing))
 
     def pause(self) -> None:
         """Stop pattern playback."""
-        self._transport_sender.send(TransportSetPlaying(False))
+        self.play(False)
 
     def mute(self, orbit: Orbit, muted: bool = True) -> None:
         """Mute or unmute an orbit.
@@ -580,14 +613,14 @@ class LiveSystem[T]:
         """
         self.mute(orbit, False)
 
-    def solo(self, orbit: Orbit, solo: bool = True) -> None:
+    def solo(self, orbit: Orbit, soloed: bool = True) -> None:
         """Solo or unsolo an orbit.
 
         Args:
             orbit: The orbit identifier.
             solo: Whether to solo the orbit.
         """
-        self._pattern_sender.send(PatternSoloOrbit(orbit, solo))
+        self._pattern_sender.send(PatternSoloOrbit(orbit, soloed))
 
     def unsolo(self, orbit: Orbit) -> None:
         """Unsolo an orbit.
