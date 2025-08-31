@@ -18,10 +18,10 @@ from typing import NewType, Optional, override
 from centipede.actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
 from minipat.common import ONE_HALF, ZERO, CycleTime, PosixTime
-from minipat.ev import Ev
+from minipat.ev import EvHeap
 from minipat.stream import Stream
-from spiny.heapmap import PHeapMap
 from spiny.map import PMap
+from spiny.seq import PSeq
 
 Orbit = NewType("Orbit", int)
 
@@ -126,66 +126,52 @@ class PatternState[T]:
 #         raise NotImplementedError
 
 
-class Backend[T](metaclass=ABCMeta):
-    """Abstract interface for pattern event backends.
+class Processor[T, U](metaclass=ABCMeta):
+    """Abstract interface for processing pattern events.
 
-    Backends are responsible for processing and outputting pattern events
-    (e.g., to audio systems, MIDI, OSC, etc.).
+    Processors transform pattern events from one type to another
+    (e.g., to MIDI messages, OSC messages, audio events, etc.).
     """
 
     @abstractmethod
-    def send_events(
-        self,
-        instant: Instant,
-        orbit_events: PMap[Orbit, PHeapMap[Arc, Ev[T]]],
-    ) -> None:
-        """Send events with attributes to the backend.
+    def process(self, instant: Instant, orbit: Orbit, events: EvHeap[T]) -> PSeq[U]:
+        """Process events from a single orbit.
 
         Args:
             instant: Timing information for this generation.
-            orbit_events: Events grouped by orbit.
+            orbit: The orbit these events belong to.
+            events: Events to process.
+
+        Returns:
+            Processed events as a sequence.
         """
         raise NotImplementedError
 
 
-class LogBackend[T](Backend[T]):
-    """Debug backend that logs events instead of playing them."""
+class LogProcessor[T](Processor[T, str]):
+    """Debug processor that converts events to log strings."""
 
     def __init__(self):
-        self._logger = logging.getLogger("log_backend")
+        self._logger = logging.getLogger("log_processor")
 
     @override
-    def send_events(
-        self,
-        instant: Instant,
-        orbit_events: PMap[Orbit, PHeapMap[Arc, Ev[T]]],
-    ) -> None:
-        total_events = sum(len(events) for events in orbit_events.values())
-        self._logger.debug(
-            "Received %d events across %d orbits at cycle %s (CPS: %s)",
-            total_events,
-            len(orbit_events),
-            instant.cycle_time,
-            instant.cps,
-        )
-        if self._logger.getEffectiveLevel() <= logging.DEBUG:
-            for orbit, events in orbit_events:
-                for arc, ev in events:
-                    # Calculate posix time for the arc using instant timing info
-                    arc_start_posix = instant.posix_start + (
-                        float(arc.start) / float(instant.cps)
-                    )
-                    arc_end_posix = instant.posix_start + (
-                        float(arc.end) / float(instant.cps)
-                    )
-                    self._logger.debug(
-                        "Orbit %s Event @%s [posix: %.3f-%.3f]: %s",
-                        orbit,
-                        arc,
-                        arc_start_posix,
-                        arc_end_posix,
-                        ev,
-                    )
+    def process(self, instant: Instant, orbit: Orbit, events: EvHeap[T]) -> PSeq[str]:
+        """Process events into log strings."""
+        log_messages = []
+
+        for span, ev in events:
+            # Calculate posix time for the arc using instant timing info
+            arc_start_posix = instant.posix_start + (
+                float(span.active.start) / float(instant.cps)
+            )
+            arc_end_posix = instant.posix_start + (
+                float(span.active.end) / float(instant.cps)
+            )
+
+            log_msg = f"Orbit {orbit} Event @{span.active} [posix: {arc_start_posix:.3f}-{arc_end_posix:.3f}]: {ev}"
+            log_messages.append(log_msg)
+
+        return PSeq.mk(log_messages)
 
 
 class TransportMessage[T](metaclass=ABCMeta):
@@ -259,8 +245,24 @@ class PatternClearOrbits[T](PatternMessage[T]):
     pass
 
 
-class BackendMessage[T](metaclass=ABCMeta):
+class BackendMessage[U](metaclass=ABCMeta):
+    """Base class for messages sent to backend processors."""
+
     pass
+
+
+@dataclass(frozen=True)
+class BackendPanic[U](BackendMessage[U]):
+    """Signal that the system should panic and clear all state."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class BackendEvents[U](BackendMessage[U]):
+    """Events to be processed by the backend."""
+
+    events: PSeq[U]
 
 
 class TimerTask[T](Task):
@@ -363,17 +365,22 @@ class TransportActor[T](Actor[TransportMessage[T]]):
         logger.debug("Set cycle to %s", cycle)
 
 
-class PatternActor[T](Actor[PatternMessage[T]]):
+class PatternActor[T, U](Actor[PatternMessage[T]]):
     """Actor that manages pattern state and generates events.
 
     Receives generation requests with timing information and produces events.
     """
 
     def __init__(
-        self, pattern_state: PatternState[T], backend: Backend[T], env: LiveEnv
+        self,
+        pattern_state: PatternState[T],
+        processor: Processor[T, U],
+        backend_sender: Sender[BackendMessage[U]],
+        env: LiveEnv,
     ):
         self._pattern_state = pattern_state
-        self._backend = backend
+        self._processor = processor
+        self._backend_sender = backend_sender
         self._env = env
 
     @override
@@ -409,8 +416,8 @@ class PatternActor[T](Actor[PatternMessage[T]]):
             orbit_state.solo for _, orbit_state in self._pattern_state.orbits
         )
 
-        # Collect events from all active orbits
-        orbit_events = PMap[Orbit, PHeapMap[Arc, Ev[T]]].empty()
+        # Collect and process events from all active orbits
+        all_processed_events: list[U] = []
 
         for orbit, orbit_state in self._pattern_state.orbits:
             if orbit_state.stream is None:
@@ -427,18 +434,23 @@ class PatternActor[T](Actor[PatternMessage[T]]):
             # Generate events using the orbit stream
             events = orbit_state.stream.unstream(arc)
 
-            # Add events to orbit events map
+            # Convert events to EvHeap
             if events:
-                event_map = PHeapMap[Arc, Ev[T]].empty()
-                for event_arc, ev in events:
-                    event_map = event_map.insert(event_arc, ev)
+                from minipat.ev import ev_heap_empty
 
-                orbit_events = orbit_events.put(orbit, event_map)
+                event_heap: EvHeap[T] = ev_heap_empty()
+                for span, ev in events:
+                    event_heap = event_heap.insert(span, ev)
+
+                # Process events for this orbit
+                processed_events = self._processor.process(instant, orbit, event_heap)
+                all_processed_events.extend(processed_events)
                 logger.debug("Generated %s events for orbit %s", len(events), orbit)
 
-        # Send all events to backend if any exist
-        if orbit_events:
-            self._backend.send_events(instant, orbit_events)
+        # Send all processed events to backend if any exist
+        if all_processed_events:
+            combined_events: PSeq[U] = PSeq.mk(all_processed_events)
+            self._backend_sender.send(BackendEvents(combined_events))
 
     def _set_orbit(
         self, logger: Logger, orbit: Orbit, stream: Optional[Stream[T]]
@@ -490,7 +502,7 @@ class PatternActor[T](Actor[PatternMessage[T]]):
         self._pattern_state.orbits = PMap.empty()
 
 
-class LiveSystem[T]:
+class LiveSystem[T, U]:
     """Main interface for the live pattern system.
 
     Provides high-level controls for pattern playback using the actor system.
@@ -500,30 +512,33 @@ class LiveSystem[T]:
         self,
         transport_sender: Sender[TransportMessage[T]],
         pattern_sender: Sender[PatternMessage[T]],
+        backend_sender: Sender[BackendMessage[U]],
     ):
         """Initialize the live system.
 
         Args:
-            backend: Backend for processing pattern events.
             transport_sender: Sender for transport control messages.
             pattern_sender: Sender for pattern messages.
-            env: Environment configuration.
+            backend_sender: Sender for backend messages.
         """
         self._logger = logging.getLogger("minipat.live")
         self._transport_sender = transport_sender
         self._pattern_sender = pattern_sender
+        self._backend_sender = backend_sender
 
     @staticmethod
     def start(
         system: System,
-        backend: Backend[T],
+        processor: Processor[T, U],
+        backend_sender: Sender[BackendMessage[U]],
         env: LiveEnv = LiveEnv(),
-    ) -> LiveSystem[T]:
+    ) -> LiveSystem[T, U]:
         """Start the live pattern system.
 
         Args:
             system: The actor system to use.
-            backend: Backend for processing pattern events.
+            processor: Processor for transforming pattern events.
+            backend_sender: Sender for backend messages.
             env: Environment configuration.
 
         Returns:
@@ -538,7 +553,7 @@ class LiveSystem[T]:
         pattern_state = PatternState[T]()
 
         # Create the pattern actor
-        pattern_actor = PatternActor(pattern_state, backend, env)
+        pattern_actor = PatternActor(pattern_state, processor, backend_sender, env)
         pattern_sender = system.spawn_actor("pattern", pattern_actor)
 
         # Create the transport actor for handling control messages
@@ -546,7 +561,7 @@ class LiveSystem[T]:
         transport_sender = system.spawn_actor("transport", transport_actor)
 
         # Create the live system with the senders
-        live_system = LiveSystem(transport_sender, pattern_sender)
+        live_system = LiveSystem(transport_sender, pattern_sender, backend_sender)
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
@@ -634,3 +649,4 @@ class LiveSystem[T]:
         """Emergency stop - clear all patterns and stop playback."""
         self.pause()
         self.clear_orbits()
+        self._backend_sender.send(BackendPanic())
