@@ -14,6 +14,12 @@ from minipat.common import ONE_HALF
 from spiny import Box, PSeq
 
 
+@dataclass(frozen=True, order=True)
+class Selected[T]:
+    value: T
+    selector: Optional[str]
+
+
 class RepetitionOp(Enum):
     """Enumeration for repetition operators."""
 
@@ -190,21 +196,6 @@ class Pat[T]:
             A pattern that plays with the given probability
         """
         return Pat(PatProbability(pattern, prob))
-
-    @staticmethod
-    def select(pattern: Pat[T], selector: str) -> Pat[T]:
-        """Create a sample selection pattern.
-
-        Textual form: pattern:selector
-
-        Args:
-            pattern: The pattern to select from
-            selector: The selection identifier
-
-        Returns:
-            A pattern with sample selection applied
-        """
-        return Pat(PatSelect(pattern, selector))
 
     @staticmethod
     def alternating(patterns: Iterable[Pat[T]]) -> Pat[T]:
@@ -431,21 +422,6 @@ class PatProbability[T, R](PatF[T, R]):
 
 
 @dataclass(frozen=True)
-class PatSelect[T, R](PatF[T, R]):
-    """Pattern functor for sample selection.
-
-    Textual form: pattern:selector
-
-    Args:
-        pattern: The pattern to select from
-        selector: The selection identifier
-    """
-
-    pattern: R
-    selector: str
-
-
-@dataclass(frozen=True)
 class PatAlternating[T, R](PatF[T, R]):
     """Pattern functor for alternating patterns.
 
@@ -514,9 +490,6 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
             case PatProbability(p, prob):
                 pz = wrapper(env, p)
                 return fn(env, PatProbability(pz, prob))
-            case PatSelect(p, selector):
-                pz = wrapper(env, p)
-                return fn(env, PatSelect(pz, selector))
             case PatAlternating(ps):
                 pzs = PSeq.mk(wrapper(env, p) for p in ps)
                 return fn(env, PatAlternating(pzs))
@@ -598,8 +571,6 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
                 return Pat(PatElongation(p, count))
             case PatProbability(p, prob):
                 return Pat(PatProbability(p, prob))
-            case PatSelect(p, selector):
-                return Pat(PatSelect(p, selector))
             case PatAlternating(ps):
                 return Pat(PatAlternating(ps))
             case PatReplicate(p, count):

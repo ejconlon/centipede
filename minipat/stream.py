@@ -1,13 +1,16 @@
 """Stream implementation for converting patterns to timed events."""
 
+from __future__ import annotations
+
 import random
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
+from enum import Enum, auto
 from fractions import Fraction
-from typing import List, Optional, override
+from typing import Callable, List, Optional, override
 
 from minipat.arc import Arc, Span
-from minipat.common import CycleTime
+from minipat.common import CycleDelta, CycleTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
 from minipat.pat import (
     Pat,
@@ -21,13 +24,21 @@ from minipat.pat import (
     PatPure,
     PatRepetition,
     PatReplicate,
-    PatSelect,
     PatSeq,
     PatSilence,
     RepetitionOp,
 )
 from spiny import PSeq
 from spiny.heapmap import PHeapMap
+
+
+class MergeStrat(Enum):
+    """Merge strategy for combining stream events."""
+
+    InnerJoin = auto()
+    LeftJoin = auto()
+    RightJoin = auto()
+    OuterJoin = auto()
 
 
 def _create_span(original_arc: Arc, query_arc: Arc) -> Optional[Span]:
@@ -69,6 +80,90 @@ class Stream[T](metaclass=ABCMeta):
             A heap map of events within the arc
         """
         raise NotImplementedError
+
+    def stream_filter(self, predicate: Callable[[T], bool]) -> Stream[T]:
+        """Filter events in a stream based on a predicate.
+
+        Args:
+            predicate: Function to test each event value
+
+        Returns:
+            A new stream with only events passing the predicate
+        """
+        return FilterStream(self, predicate)
+
+    def bind[B](
+        self, merge_strat: MergeStrat, func: Callable[[T], Stream[B]]
+    ) -> Stream[B]:
+        """Bind a stream with a merge strategy.
+
+        Args:
+            merge_strat: Strategy for merging overlapping events
+            func: Function to transform each event value into a new stream
+
+        Returns:
+            A new stream with transformed and merged events
+        """
+        return BindStream(self, merge_strat, func)
+
+    def apply[B, C](
+        self, merge_strat: MergeStrat, func: Callable[[T, B], C], other: Stream[B]
+    ) -> Stream[C]:
+        """Apply a function across two streams.
+
+        Args:
+            merge_strat: Strategy for merging overlapping events
+            func: Function to combine values from both streams
+            other: The other stream to combine with
+
+        Returns:
+            A new stream with combined events
+        """
+        return ApplyStream(self, merge_strat, func, other)
+
+    def fast_by(self, factor: Fraction) -> Stream[T]:
+        """Speed up stream events by a given factor.
+
+        Args:
+            factor: Factor to speed up by (> 1 makes it faster)
+
+        Returns:
+            A new stream with events sped up
+        """
+        return FastStream(self, factor)
+
+    def slow_by(self, factor: Fraction) -> Stream[T]:
+        """Slow down stream events by a given factor.
+
+        Args:
+            factor: Factor to slow down by (> 1 makes it slower)
+
+        Returns:
+            A new stream with events slowed down
+        """
+        return SlowStream(self, factor)
+
+    def early_by(self, delta: CycleDelta) -> Stream[T]:
+        """Shift stream events earlier in time.
+
+        Args:
+            delta: Amount to shift earlier
+
+        Returns:
+            A new stream with events shifted earlier
+        """
+        return EarlyStream(self, delta)
+
+    def late_by(self, delta: CycleDelta) -> Stream[T]:
+        """Shift stream events later in time.
+
+        Args:
+            delta: Amount to shift later
+
+        Returns:
+            A new stream with events shifted later
+        """
+        return LateStream(self, delta)
 
 
 @dataclass(frozen=True)
@@ -388,18 +483,6 @@ class ProbabilityStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class SelectStream[T](Stream[T]):
-    """Specialized stream for select patterns."""
-
-    pattern: Stream[T]
-    selector: str
-
-    @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
-        return self.pattern.unstream(arc)
-
-
-@dataclass(frozen=True)
 class AlternatingStream[T](Stream[T]):
     """Specialized stream for alternating patterns."""
 
@@ -448,6 +531,308 @@ class ReplicateStream[T](Stream[T]):
         return replicate_result
 
 
+@dataclass(frozen=True)
+class FilterStream[T](Stream[T]):
+    """Stream that filters events based on a predicate."""
+
+    source: Stream[T]
+    predicate: Callable[[T], bool]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        source_events = self.source.unstream(arc)
+        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            if self.predicate(ev.val):
+                result = ev_heap_push(ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class BindStream[A, B](Stream[B]):
+    """Stream that binds another stream with a transformation function."""
+
+    source: Stream[A]
+    merge_strat: MergeStrat
+    func: Callable[[A], Stream[B]]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[B]]:
+        source_events = self.source.unstream(arc)
+        result: PHeapMap[Span, Ev[B]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            inner_stream = self.func(ev.val)
+            # Use the event's span to determine the query arc for the inner stream
+            query_arc = ev.span.whole if ev.span.whole else ev.span.active
+            inner_events = inner_stream.unstream(query_arc)
+
+            for _, inner_ev in inner_events:
+                # Apply merge strategy here if needed
+                result = ev_heap_push(inner_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class ApplyStream[A, B, C](Stream[C]):
+    """Stream that applies a function across two streams."""
+
+    left: Stream[A]
+    merge_strat: MergeStrat
+    func: Callable[[A, B], C]
+    right: Stream[B]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[C]]:
+        left_events = self.left.unstream(arc)
+        right_events = self.right.unstream(arc)
+        result: PHeapMap[Span, Ev[C]] = ev_heap_empty()
+
+        # Simple inner join strategy - only combine events that overlap
+        for _, left_ev in left_events:
+            for _, right_ev in right_events:
+                left_arc = (
+                    left_ev.span.whole if left_ev.span.whole else left_ev.span.active
+                )
+                right_arc = (
+                    right_ev.span.whole if right_ev.span.whole else right_ev.span.active
+                )
+
+                intersection = left_arc.intersect(right_arc)
+                if not intersection.null():
+                    combined_val = self.func(left_ev.val, right_ev.val)
+                    combined_span = Span(active=intersection, whole=None)
+                    combined_ev = Ev(combined_span, combined_val)
+                    result = ev_heap_push(combined_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class FastStream[T](Stream[T]):
+    """Stream that speeds up events by a factor."""
+
+    source: Stream[T]
+    factor: Fraction
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null() or self.factor == 0:
+            return ev_heap_empty()
+
+        # Scale the query arc down by the factor
+        scaled_arc = arc.scale(Fraction(1) / self.factor)
+        source_events = self.source.unstream(scaled_arc)
+        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            # Scale the event back up by the factor
+            fast_ev = ev.scale(self.factor)
+            span = _create_span(fast_ev.span.active, arc)
+            if span is not None:
+                if fast_ev.span.whole is not None:
+                    span = Span(active=span.active, whole=fast_ev.span.whole)
+                elif fast_ev.span.active != span.active:
+                    span = Span(active=span.active, whole=fast_ev.span.active)
+                new_ev = Ev(span, fast_ev.val)
+                result = ev_heap_push(new_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class SlowStream[T](Stream[T]):
+    """Stream that slows down events by a factor."""
+
+    source: Stream[T]
+    factor: Fraction
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null() or self.factor == 0:
+            return ev_heap_empty()
+
+        # Scale the query arc up by the factor
+        scaled_arc = arc.scale(self.factor)
+        source_events = self.source.unstream(scaled_arc)
+        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            # Scale the event down by the factor
+            slow_ev = ev.scale(Fraction(1) / self.factor)
+            span = _create_span(slow_ev.span.active, arc)
+            if span is not None:
+                if slow_ev.span.whole is not None:
+                    span = Span(active=span.active, whole=slow_ev.span.whole)
+                elif slow_ev.span.active != span.active:
+                    span = Span(active=span.active, whole=slow_ev.span.active)
+                new_ev = Ev(span, slow_ev.val)
+                result = ev_heap_push(new_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class EarlyStream[T](Stream[T]):
+    """Stream that shifts events earlier in time."""
+
+    source: Stream[T]
+    delta: CycleDelta
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null():
+            return ev_heap_empty()
+
+        # Shift the query arc later to get events that will be shifted earlier
+        shifted_arc = Arc(
+            CycleTime(arc.start + self.delta), CycleTime(arc.end + self.delta)
+        )
+        source_events = self.source.unstream(shifted_arc)
+        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            # Shift the event earlier
+            early_active = Arc(
+                CycleTime(ev.span.active.start - self.delta),
+                CycleTime(ev.span.active.end - self.delta),
+            )
+            early_whole = None
+            if ev.span.whole is not None:
+                early_whole = Arc(
+                    CycleTime(ev.span.whole.start - self.delta),
+                    CycleTime(ev.span.whole.end - self.delta),
+                )
+
+            span = _create_span(early_active, arc)
+            if span is not None:
+                if early_whole is not None:
+                    span = Span(active=span.active, whole=early_whole)
+                elif early_active != span.active:
+                    span = Span(active=span.active, whole=early_active)
+                new_ev = Ev(span, ev.val)
+                result = ev_heap_push(new_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class LateStream[T](Stream[T]):
+    """Stream that shifts events later in time."""
+
+    source: Stream[T]
+    delta: CycleDelta
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null():
+            return ev_heap_empty()
+
+        # Shift the query arc earlier to get events that will be shifted later
+        shifted_arc = Arc(
+            CycleTime(arc.start - self.delta), CycleTime(arc.end - self.delta)
+        )
+        source_events = self.source.unstream(shifted_arc)
+        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            # Shift the event later
+            late_active = Arc(
+                CycleTime(ev.span.active.start + self.delta),
+                CycleTime(ev.span.active.end + self.delta),
+            )
+            late_whole = None
+            if ev.span.whole is not None:
+                late_whole = Arc(
+                    CycleTime(ev.span.whole.start + self.delta),
+                    CycleTime(ev.span.whole.end + self.delta),
+                )
+
+            span = _create_span(late_active, arc)
+            if span is not None:
+                if late_whole is not None:
+                    span = Span(active=span.active, whole=late_whole)
+                elif late_active != span.active:
+                    span = Span(active=span.active, whole=late_active)
+                new_ev = Ev(span, ev.val)
+                result = ev_heap_push(new_ev, result)
+
+        return result
+
+
+def stream_rand[T](streams: PSeq[Stream[T]]) -> Stream[T]:
+    """Randomly select a stream from a sequence.
+
+    Args:
+        streams: Sequence of streams to choose from
+
+    Returns:
+        A stream that randomly selects from the input streams
+    """
+    return RandStream(streams)
+
+
+def stream_alt[T](streams: PSeq[Stream[T]]) -> Stream[T]:
+    """Alternately select streams from a sequence.
+
+    Args:
+        streams: Sequence of streams to cycle through
+
+    Returns:
+        A stream that alternates through the input streams
+    """
+    return AltStream(streams)
+
+
+def stream_par[T](streams: PSeq[Stream[T]]) -> Stream[T]:
+    """Combine multiple streams in parallel.
+
+    Args:
+        streams: Sequence of streams to combine
+
+    Returns:
+        A stream that plays all input streams simultaneously
+    """
+    return ParStream(streams)
+
+
+@dataclass(frozen=True)
+class RandStream[T](Stream[T]):
+    """Stream that randomly selects from a sequence of streams."""
+
+    streams: PSeq[Stream[T]]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null() or len(self.streams) == 0:
+            return ev_heap_empty()
+
+        # Use arc start as seed for deterministic randomness
+        random.seed(hash(arc.start))
+        selected_stream = self.streams[random.randint(0, len(self.streams) - 1)]
+        return selected_stream.unstream(arc)
+
+
+@dataclass(frozen=True)
+class AltStream[T](Stream[T]):
+    """Stream that alternates through a sequence of streams."""
+
+    streams: PSeq[Stream[T]]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null() or len(self.streams) == 0:
+            return ev_heap_empty()
+
+        # Cycle through streams based on cycle position
+        cycle_index = int(arc.start) % len(self.streams)
+        selected_stream = self.streams[cycle_index]
+        return selected_stream.unstream(arc)
+
+
 def pat_stream[T](pat: Pat[T]) -> Stream[T]:
     """Create a specialized stream for the given pattern.
 
@@ -486,9 +871,6 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
         case PatProbability(pattern, prob):
             pattern_stream = pat_stream(pattern)
             return ProbabilityStream(pattern_stream, prob)
-        case PatSelect(pattern, selector):
-            pattern_stream = pat_stream(pattern)
-            return SelectStream(pattern_stream, selector)
         case PatAlternating(patterns):
             pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in patterns)
             return AlternatingStream(pattern_streams)

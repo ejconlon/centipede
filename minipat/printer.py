@@ -17,13 +17,13 @@ from minipat.pat import (
     PatPure,
     PatRepetition,
     PatReplicate,
-    PatSelect,
     PatSeq,
     PatSilence,
+    Selected,
 )
 
 
-def print_pattern(pat: Pat[str]) -> str:
+def print_pattern(pat: Pat[Selected[str]]) -> str:
     """Print a Pat pattern back to mini notation string format.
 
     Args:
@@ -39,8 +39,11 @@ def print_pattern(pat: Pat[str]) -> str:
         case PatSilence():
             return "~"
 
-        case PatPure(val):
-            return str(val)
+        case PatPure(sel):
+            if sel.selector is None:
+                return sel.value
+            else:
+                return f"{sel.value}:{sel.selector}"
 
         case PatSeq(children):
             if len(children) == 1:
@@ -108,10 +111,6 @@ def print_pattern(pat: Pat[str]) -> str:
             else:
                 return f"{pattern_str}?{format_fraction(probability)}"
 
-        case PatSelect(pattern, selector):
-            pattern_str = print_pattern(pattern)
-            return f"{pattern_str}:{selector}"
-
         case PatAlternating(patterns):
             pattern_strs = [print_pattern(pattern) for pattern in patterns]
             return f"<{' '.join(pattern_strs)}>"
@@ -136,7 +135,7 @@ def print_pattern(pat: Pat[str]) -> str:
             raise Exception(f"Unhandled pattern type: {type(pat.unwrap).__name__}")
 
 
-def print_pattern_grouped(pat: Pat[str]) -> str:
+def print_pattern_grouped(pat: Pat[Selected[str]]) -> str:
     """Print a pattern with grouping brackets if it's a sequence.
 
     This is useful for printing sub-patterns that might need bracketing

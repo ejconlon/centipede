@@ -2,13 +2,13 @@ from fractions import Fraction
 
 from minipat.arc import Arc
 from minipat.common import CycleTime
-from minipat.pat import Pat, RepetitionOp
+from minipat.pat import Pat, RepetitionOp, Selected
 from minipat.stream import pat_stream
 
 
 def test_pure_pattern():
     """Test pure pattern generates single event spanning arc."""
-    pattern = Pat.pure("x")
+    pattern = Pat.pure(Selected("x", None))
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -18,7 +18,7 @@ def test_pure_pattern():
     assert len(event_list) == 1
     _, event = event_list[0]
     assert event.span.active == arc
-    assert event.val == "x"
+    assert event.val.value == "x" and event.val.selector is None
 
 
 def test_silence_pattern():
@@ -36,7 +36,7 @@ def test_silence_pattern():
 def test_sequence_pattern():
     """Test sequence pattern divides time proportionally."""
     # Pattern equivalent to "x y"
-    pattern = Pat.seq([Pat.pure("x"), Pat.pure("y")])
+    pattern = Pat.seq([Pat.pure(Selected("x", None)), Pat.pure(Selected("y", None))])
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -49,19 +49,19 @@ def test_sequence_pattern():
     _, first_event = event_list[0]
     assert first_event.span.active.start == Fraction(0)
     assert first_event.span.active.end == Fraction(1, 2)
-    assert first_event.val == "x"
+    assert first_event.val.value == "x" and first_event.val.selector is None
 
     # Second event: y from 0.5 to 1
     _, second_event = event_list[1]
     assert second_event.span.active.start == Fraction(1, 2)
     assert second_event.span.active.end == Fraction(1)
-    assert second_event.val == "y"
+    assert second_event.val.value == "y" and second_event.val.selector is None
 
 
 def test_parallel_pattern():
     """Test parallel pattern plays all children simultaneously."""
     # Pattern equivalent to "[x,y]"
-    pattern = Pat.par([Pat.pure("x"), Pat.pure("y")])
+    pattern = Pat.par([Pat.pure(Selected("x", None)), Pat.pure(Selected("y", None))])
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -73,18 +73,19 @@ def test_parallel_pattern():
     # Both events should span the full arc
     for _, event in event_list:
         assert event.span.active == arc
-        assert event.val in ["x", "y"]
+        assert event.val.value in ["x", "y"]
+        assert event.val.selector is None
 
     # Should have both x and y
     values = [event.val for _, event in event_list]
-    assert "x" in values
-    assert "y" in values
+    assert any(v.value == "x" and v.selector is None for v in values)
+    assert any(v.value == "y" and v.selector is None for v in values)
 
 
 def test_repetition_fast():
     """Test fast repetition pattern."""
     # Pattern equivalent to "x!" with count 2
-    base_pattern = Pat.pure("x")
+    base_pattern = Pat.pure(Selected("x", None))
     pattern = Pat.repetition(base_pattern, RepetitionOp.Fast, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -98,19 +99,19 @@ def test_repetition_fast():
     _, first_event = event_list[0]
     assert first_event.span.active.start == Fraction(0)
     assert first_event.span.active.end == Fraction(1, 2)
-    assert first_event.val == "x"
+    assert first_event.val.value == "x" and first_event.val.selector is None
 
     # Second repetition: 0.5 to 1
     _, second_event = event_list[1]
     assert second_event.span.active.start == Fraction(1, 2)
     assert second_event.span.active.end == Fraction(1)
-    assert second_event.val == "x"
+    assert second_event.val.value == "x" and second_event.val.selector is None
 
 
 def test_repetition_slow():
     """Test slow repetition pattern."""
     # Pattern equivalent to "x" slowed down by factor of 2
-    base_pattern = Pat.pure("x")
+    base_pattern = Pat.pure(Selected("x", None))
     pattern = Pat.repetition(base_pattern, RepetitionOp.Slow, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -125,13 +126,13 @@ def test_repetition_slow():
     assert event.span.active.end == Fraction(
         1
     )  # Actually fills the whole arc after scaling back
-    assert event.val == "x"
+    assert event.val.value == "x" and event.val.selector is None
 
 
 def test_elongation_pattern():
     """Test elongation pattern."""
     # Pattern equivalent to "x@2"
-    base_pattern = Pat.pure("x")
+    base_pattern = Pat.pure(Selected("x", None))
     pattern = Pat.elongation(base_pattern, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -146,13 +147,13 @@ def test_elongation_pattern():
     assert event.span.active.end == Fraction(
         1
     )  # Actually fills the whole arc after scaling back
-    assert event.val == "x"
+    assert event.val.value == "x" and event.val.selector is None
 
 
 def test_choice_pattern():
     """Test choice pattern selects based on cycle."""
     # Pattern with two choices
-    pattern = Pat.choice([Pat.pure("x"), Pat.pure("y")])
+    pattern = Pat.choice([Pat.pure(Selected("x", None)), Pat.pure(Selected("y", None))])
     stream = pat_stream(pattern)
 
     # Test cycle 0 (arc starting at 0)
@@ -162,7 +163,9 @@ def test_choice_pattern():
 
     assert len(event_list0) == 1
     _, event0 = event_list0[0]
-    assert event0.val == "x"  # First choice
+    assert event0.val.value == "x" and len(event_list0) == 1
+    _, event0 = event_list0[0]
+    assert event0.val.selector is None  # First choice
 
     # Test cycle 1 (arc starting at 1)
     arc1 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
@@ -171,13 +174,15 @@ def test_choice_pattern():
 
     assert len(event_list1) == 1
     _, event1 = event_list1[0]
-    assert event1.val == "y"  # Second choice
+    assert event1.val.value == "y" and len(event_list1) == 1
+    _, event1 = event_list1[0]
+    assert event1.val.selector is None  # Second choice
 
 
 def test_euclidean_pattern():
     """Test euclidean rhythm pattern."""
     # Pattern equivalent to "x(3,8)" - 3 hits in 8 steps
-    atom = Pat.pure("x")
+    atom = Pat.pure(Selected("x", None))
     pattern = Pat.euclidean(atom, 3, 8, 0)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -192,7 +197,13 @@ def test_euclidean_pattern():
 
     # Events should be at positions determined by euclidean algorithm
     for i, (_, event) in enumerate(event_list):
-        assert event.val == "x"
+        assert event.val.value == "x" and len(event_list) == 3
+
+    step_duration = Fraction(1, 8)
+
+    # Events should be at positions determined by euclidean algorithm
+    for i, (_, event) in enumerate(event_list):
+        assert event.val.selector is None
         # Each event should span one step
         assert event.span.active.length() == step_duration
 
@@ -200,7 +211,11 @@ def test_euclidean_pattern():
 def test_polymetric_pattern():
     """Test polymetric pattern plays all patterns simultaneously."""
     # Pattern with multiple rhythmic patterns
-    patterns = [Pat.pure("x"), Pat.pure("y"), Pat.pure("z")]
+    patterns = [
+        Pat.pure(Selected("x", None)),
+        Pat.pure(Selected("y", None)),
+        Pat.pure(Selected("z", None)),
+    ]
     pattern = Pat.polymetric(patterns)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -217,15 +232,15 @@ def test_polymetric_pattern():
         values.append(event.val)
 
     # Should have all three values
-    assert "x" in values
-    assert "y" in values
-    assert "z" in values
+    assert any(v.value == "x" and v.selector is None for v in values)
+    assert any(v.value == "y" and v.selector is None for v in values)
+    assert any(v.value == "z" and v.selector is None for v in values)
 
 
 def test_alternating_pattern():
     """Test alternating pattern cycles through choices."""
     # Pattern that alternates between x and y
-    patterns = [Pat.pure("x"), Pat.pure("y")]
+    patterns = [Pat.pure(Selected("x", None)), Pat.pure(Selected("y", None))]
     pattern = Pat.alternating(patterns)
     stream = pat_stream(pattern)
 
@@ -236,7 +251,9 @@ def test_alternating_pattern():
 
     assert len(event_list0) == 1
     _, event0 = event_list0[0]
-    assert event0.val == "x"  # First pattern
+    assert event0.val.value == "x" and len(event_list0) == 1
+    _, event0 = event_list0[0]
+    assert event0.val.selector is None  # First pattern
 
     arc1 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     events1 = stream.unstream(arc1)
@@ -244,12 +261,14 @@ def test_alternating_pattern():
 
     assert len(event_list1) == 1
     _, event1 = event_list1[0]
-    assert event1.val == "y"  # Second pattern
+    assert event1.val.value == "y" and len(event_list1) == 1
+    _, event1 = event_list1[0]
+    assert event1.val.selector is None  # Second pattern
 
 
 def test_probability_pattern():
     """Test probability pattern (deterministic based on arc)."""
-    base_pattern = Pat.pure("x")
+    base_pattern = Pat.pure(Selected("x", None))
     pattern = Pat.probability(base_pattern, Fraction(1))  # Always include
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -259,7 +278,7 @@ def test_probability_pattern():
 
     assert len(event_list) == 1
     _, event = event_list[0]
-    assert event.val == "x"
+    assert event.val.value == "x" and event.val.selector is None
 
     # Test with 0 probability
     pattern_never = Pat.probability(base_pattern, Fraction(0))
@@ -274,7 +293,7 @@ def test_probability_pattern():
 def test_complex_nested_pattern():
     """Test complex nested pattern combining multiple operations."""
     # Pattern equivalent to "[x y]!2" - sequence replicated twice
-    seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
+    seq = Pat.seq([Pat.pure(Selected("x", None)), Pat.pure(Selected("y", None))])
     pattern = Pat.replicate(seq, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -289,23 +308,23 @@ def test_complex_nested_pattern():
     _, first_event = event_list[0]
     assert first_event.span.active.start == Fraction(0)
     assert first_event.span.active.end == Fraction(1, 4)
-    assert first_event.val == "x"
+    assert first_event.val.value == "x" and first_event.val.selector is None
 
     _, second_event = event_list[1]
     assert second_event.span.active.start == Fraction(1, 4)
     assert second_event.span.active.end == Fraction(1, 2)
-    assert second_event.val == "y"
+    assert second_event.val.value == "y" and second_event.val.selector is None
 
     # Second repetition
     _, third_event = event_list[2]
     assert third_event.span.active.start == Fraction(1, 2)
     assert third_event.span.active.end == Fraction(3, 4)
-    assert third_event.val == "x"
+    assert third_event.val.value == "x" and third_event.val.selector is None
 
     _, fourth_event = event_list[3]
     assert fourth_event.span.active.start == Fraction(3, 4)
     assert fourth_event.span.active.end == Fraction(1)
-    assert fourth_event.val == "y"
+    assert fourth_event.val.value == "y" and fourth_event.val.selector is None
 
 
 def test_empty_sequence():
@@ -322,7 +341,7 @@ def test_empty_sequence():
 
 def test_null_arc():
     """Test null arc generates no events."""
-    pattern = Pat.pure("x")
+    pattern = Pat.pure(Selected("x", None))
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(1)))  # null arc
 
@@ -335,7 +354,13 @@ def test_null_arc():
 def test_partial_arc_query():
     """Test querying a partial arc of a sequence."""
     # Pattern "x y z"
-    pattern = Pat.seq([Pat.pure("x"), Pat.pure("y"), Pat.pure("z")])
+    pattern = Pat.seq(
+        [
+            Pat.pure(Selected("x", None)),
+            Pat.pure(Selected("y", None)),
+            Pat.pure(Selected("z", None)),
+        ]
+    )
     stream = pat_stream(pattern)
 
     # Query only the middle third (should get "y")
@@ -379,7 +404,11 @@ def test_replicate_stream():
 
     # Each event should be "bd"
     for _, event in event_list:
-        assert event.val == "bd"
+        assert event.val.value == "bd" and len(event_list) == 3
+
+    # Each event should be "bd"
+    for _, event in event_list:
+        assert event.val.selector is None
 
     # Events should be evenly spaced
     expected_duration = Fraction(1, 3)
@@ -406,7 +435,11 @@ def test_ratio_stream():
 
     # All events should be "bd"
     for _, event in event_list:
-        assert event.val == "bd"
+        assert event.val.value == "bd" and len(event_list) >= 1
+
+    # All events should be "bd"
+    for _, event in event_list:
+        assert event.val.selector is None
 
 
 def test_polymetric_subdivision_stream():
@@ -425,8 +458,8 @@ def test_polymetric_subdivision_stream():
 
     # Should have both "bd" and "sd" events
     values = [event.val for _, event in event_list]
-    assert "bd" in values
-    assert "sd" in values
+    assert any(v.value == "bd" and v.selector is None for v in values)
+    assert any(v.value == "sd" and v.selector is None for v in values)
 
 
 def test_dot_grouping_stream():
@@ -445,7 +478,11 @@ def test_dot_grouping_stream():
 
     # Should have all the expected values
     values = [event.val for _, event in event_list]
-    assert values == ["bd", "sd", "hh", "cp"]
+    assert len(values) == 4
+    assert values[0].value == "bd" and values[0].selector is None
+    assert values[1].value == "sd" and values[1].selector is None
+    assert values[2].value == "hh" and values[2].selector is None
+    assert values[3].value == "cp" and values[3].selector is None
 
 
 def test_new_features_stream_integration():
@@ -485,5 +522,5 @@ def test_complex_new_features_stream():
 
     # Should contain both bd and sd
     values = [event.val for _, event in event_list]
-    assert "bd" in values
-    assert "sd" in values
+    assert any(v.value == "bd" and v.selector is None for v in values)
+    assert any(v.value == "sd" and v.selector is None for v in values)

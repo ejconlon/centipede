@@ -6,8 +6,7 @@ from fractions import Fraction
 
 from lark import Lark, Transformer
 
-from minipat.common import format_fraction
-from minipat.pat import Pat, PatElongation, PatSeq, RepetitionOp
+from minipat.pat import Pat, PatElongation, PatSeq, RepetitionOp, Selected
 
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
@@ -29,6 +28,7 @@ AT: "@"
 EXCLAMATION: "!"
 PERCENT: "%"
 DOT: "."
+COLON: ":"
 
 // Numeric values - supports integers, decimals, and fractions
 numeric_value: NUMBER | DECIMAL | fraction | "(" fraction ")"
@@ -44,10 +44,10 @@ element_sequence: element (UNDERSCORE+ | element)*
 element: elongation | repetition | replicate | probability | atom | seq | choice | parallel | alternating | euclidean | polymetric
 
 // Basic atoms
-atom: select | symbol | silence
-symbol: SYMBOL
+atom: symbol | silence
+symbol: symbol_with_selector | SYMBOL
+symbol_with_selector: SYMBOL COLON SYMBOL
 silence: "~"
-select: SYMBOL ":" (numeric_value | SYMBOL)
 
 // Grouping structures
 seq: "[" pattern "]"
@@ -137,32 +137,23 @@ class PatternTransformer(Transformer):
         """Transform a symbol."""
         return items[0]
 
+    def symbol_with_selector(self, items):
+        """Transform a symbol with selector (e.g., 'bd:kick')."""
+        # items[0] and items[2] are already transformed Pat[Selected[str]] objects from SYMBOL
+        symbol_pat = items[0]
+        selector_pat = items[2]
+
+        # Extract the actual string values from the Selected objects
+        symbol_selected = symbol_pat.unwrap.value
+        selector_selected = selector_pat.unwrap.value
+
+        # Create new Selected with the symbol and selector values
+        selected_value = Selected(symbol_selected.value, selector_selected.value)
+        return Pat.pure(selected_value)
+
     def silence(self, _items):
         """Transform silence into empty pattern."""
         return Pat.silence()
-
-    def select(self, items):
-        """Transform sample selection like 'bd:2' or 'bd:bar'."""
-        symbol_token, selector_token = items
-        # Create a pattern from the symbol token and use the selector as string
-        # Extract the actual symbol string if it's already transformed
-        if hasattr(symbol_token, "unwrap") and hasattr(symbol_token.unwrap, "value"):
-            symbol_str = symbol_token.unwrap.value
-        else:
-            symbol_str = str(symbol_token)
-        symbol_pat = Pat.pure(symbol_str)
-
-        # Extract selector value - could be Fraction, string, or raw value
-        if isinstance(selector_token, Fraction):
-            selector = format_fraction(selector_token)
-        elif hasattr(selector_token, "unwrap") and hasattr(
-            selector_token.unwrap, "value"
-        ):
-            selector = selector_token.unwrap.value
-        else:
-            selector = str(selector_token)
-
-        return Pat.select(symbol_pat, selector)
 
     def seq(self, items):
         """Transform grouping [...] or .pattern."""
@@ -319,8 +310,9 @@ class PatternTransformer(Transformer):
         return Fraction(numerator, denominator)
 
     def SYMBOL(self, token):
-        """Transform a symbol token into a pure pattern."""
-        return Pat.pure(str(token))
+        """Transform a symbol token into a pure pattern with Selected value."""
+        selected_value = Selected(str(token), None)
+        return Pat.pure(selected_value)
 
     def NUMBER(self, token):
         """Transform a number token."""
@@ -331,7 +323,7 @@ class PatternTransformer(Transformer):
         return Fraction(str(token))
 
 
-def parse_pattern(pattern_str: str) -> Pat[str]:
+def parse_pattern(pattern_str: str) -> Pat[Selected[str]]:
     """Parse a pattern string into a Pat object.
 
     Args:
