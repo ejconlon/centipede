@@ -24,13 +24,13 @@ class ViewportConfig(MappedComponentConfig[Config]):
     and fretboard coordinates, including layout orientation and offsets.
     """
 
-    num_strings: int  # Number of strings in the instrument tuning
+    num_strings: int
     """Number of strings in the current instrument tuning."""
-    layout: Layout  # Visual layout orientation (horizontal/vertical)
+    layout: Layout
     """The layout orientation (Horiz or Vert) for the fretboard display."""
-    str_offset: int  # String scrolling offset
+    str_offset: int
     """Offset for scrolling through strings (negative values scroll down)."""
-    fret_offset: int  # Fret scrolling offset
+    fret_offset: int
     """Offset for scrolling through frets (negative values scroll left)."""
 
     @classmethod

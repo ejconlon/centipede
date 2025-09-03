@@ -21,9 +21,9 @@ class Pos:
     musical layout where higher pitches are towards the top-right.
     """
 
-    row: int  # Row position (0-7, bottom to top)
+    row: int
     """Row position on the pad grid (0-7, where 0 is bottom)."""
-    col: int  # Column position (0-7, left to right)
+    col: int
     """Column position on the pad grid (0-7, where 0 is left)."""
 
     def __iter__(self) -> Generator[int, None, None]:
@@ -91,7 +91,7 @@ class ChanSelPos:
     used for channel-specific functions and navigation.
     """
 
-    col: int  # Column position (0-7)
+    col: int
     """Column position on the channel selector strip (0-7)."""
 
     def to_control(self) -> int:
@@ -138,7 +138,7 @@ class GridSelPos:
     functions and navigation, typically above the main pad grid.
     """
 
-    col: int  # Column position (0-7)
+    col: int
     """Column position on the grid selector strip (0-7)."""
 
     def to_control(self) -> int:

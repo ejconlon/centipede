@@ -149,7 +149,7 @@ class Scale:
     """The human-readable name of this musical scale."""
     intervals: List[int]  # Semitone intervals from root (always starts with 0)
     """List of semitone intervals from the root note.
-    
+
     Always starts with 0 (the root) and contains ascending intervals
     for all notes in the scale. For example, major scale: [0, 2, 4, 5, 7, 9, 11].
     """
