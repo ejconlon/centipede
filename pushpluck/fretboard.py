@@ -67,7 +67,7 @@ class FretboardMessage:
     """The primary string position that triggered this message."""
     equivs: List[StringPos]
     """All equivalent string positions that produce the same note.
-    
+
     Note: These positions may be on different MIDI channels depending on
     the channel mapping configuration.
     """
@@ -586,12 +586,22 @@ class NoteTracker:
 
         Returns:
             NoteEffects that would turn off all notes and reset visuals.
-
-        Raises:
-            Exception: Currently not implemented. The challenge is converting
-                      the internal MIDI messages back to FretboardMessage format.
         """
-        raise Exception("TODO - turn msgs into fretboard msgs")
+        # Create note-off messages for all active notes
+        msgs: List[FretboardMessage] = []
+        for channel, notes in self._notemap.items():
+            for note in notes:
+                # Create a minimal FretboardMessage for note-off
+                # We use StringPos(0, 0) as a placeholder since this is cleanup
+                msg = FrozenMessage(type="note_off", channel=channel, note=note)
+                fret_msg = FretboardMessage(
+                    str_pos=StringPos(str_index=0, fret=0),
+                    equivs=[],
+                    msg=msg,
+                )
+                msgs.append(fret_msg)
+        vis = {str_pos: VisState.Off for str_pos in self._vis.keys()}
+        return NoteEffects(vis, msgs)
 
 
 class PolyNoteHandler(NoteHandler):
