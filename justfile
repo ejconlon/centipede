@@ -1,4 +1,6 @@
 python := ".venv/bin/python3 -Xgil=0"
+packages := "spiny centipede minipat pushpluck"
+mypy_packages := "-p spiny -p centipede -p minipat -p pushpluck"
 
 # No default tasks
 default:
@@ -8,24 +10,27 @@ default:
 freeze:
   uv pip freeze > dev-requirements.txt
 
-# Create the virtual environment
-venv:
+# Create the virtual environment with pip
+venv-frozen:
   python3.13 -m venv --upgrade-deps .venv
   {{python}} -m pip install -r dev-requirements.txt
 
+# Create the virtual environment with uv
+venv:
+  uv sync
+
 # Format - sort with isort and format with ruff
 format:
-  {{python}} -m isort --settings-path=pyproject.toml centipede tests
-  {{python}} -m ruff format
+  {{python}} -m isort --settings-path=pyproject.toml {{packages}} tests
+  {{python}} -m ruff format {{packages}} tests
 
 # Typecheck with mypy
 typecheck:
-  {{python}} -m mypy --config-file=pyproject.toml -p centipede
-  {{python}} -m mypy --config-file=pyproject.toml -p tests
+  {{python}} -m mypy --config-file=pyproject.toml {{mypy_packages}} -p tests
 
 # Lint with ruff
 lint:
-  {{python}} -m ruff check
+  {{python}} -m ruff check {{packages}} tests
 
 # Unit test with pytest in parallel
 unit:
@@ -49,14 +54,10 @@ clean:
 repl:
   {{python}}
 
-# Run the main entrypoint
-main ARGS="":
-  {{python}} -m centipede.main {{ARGS}}
-
 # Generate HTML documentation
 docs:
   rm -rf docs
-  {{python}} -m pdoc -o docs -d markdown --include-undocumented centipede
+  {{python}} -m pdoc -o docs -d markdown --include-undocumented {{packages}}
 
 # Start fluidsynth as midi target
 fluid:

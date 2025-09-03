@@ -6,8 +6,8 @@ from fractions import Fraction
 
 from centipede.actor import Actor, ActorEnv, new_system
 from minipat.live import (
-    BackendMessage,
     BackendEvents,
+    BackendMessage,
     BackendPanic,
     LiveEnv,
     LiveSystem,
