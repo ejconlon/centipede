@@ -1,3 +1,10 @@
+"""Main entry point for the PushPluck application.
+
+This module contains the main function and command-line argument handling
+for the PushPluck guitar fretboard application. It sets up logging,
+connects to MIDI ports, and runs the main event loop.
+"""
+
 import logging
 from argparse import ArgumentParser
 
@@ -10,6 +17,15 @@ from pushpluck.shadow import PushShadow
 
 
 def main_with_ports(ports: PushPorts, min_velocity: int) -> None:
+    """Run the main application with the given MIDI ports.
+
+    This function initializes the application components, sets up the controller,
+    and runs the main event loop that processes MIDI input from the Push controller.
+
+    Args:
+        ports: The MIDI port connections to use.
+        min_velocity: The minimum MIDI velocity for note output.
+    """
     scheme = default_scheme()
     layout = default_menu_layout()
     config = init_config(min_velocity)
@@ -40,6 +56,12 @@ def main_with_ports(ports: PushPorts, min_velocity: int) -> None:
 
 
 def make_parser() -> ArgumentParser:
+    """Create the command-line argument parser.
+
+    Returns:
+        An ArgumentParser configured with all the command-line options
+        for the PushPluck application.
+    """
     parser = ArgumentParser()
     parser.add_argument("--log-level", default="INFO")
     parser.add_argument(
@@ -54,13 +76,23 @@ def make_parser() -> ArgumentParser:
 
 
 def configure_logging(log_level: str) -> None:
+    """Configure the logging system with the specified log level.
+
+    Args:
+        log_level: The logging level (e.g., 'DEBUG', 'INFO', 'WARNING').
+    """
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(filename)s:%(lineno)d -- %(message)s",
         level=log_level,
     )
 
 
-def main():
+def main() -> None:
+    """Main entry point for the PushPluck application.
+
+    Parses command-line arguments, configures logging, opens MIDI ports,
+    and starts the main application loop.
+    """
     parser = make_parser()
     args = parser.parse_args()
     configure_logging(args.log_level)

@@ -1,24 +1,56 @@
+"""Color utilities and definitions for the PushPluck application.
+
+This module provides RGB color representation and a collection of predefined
+colors used throughout the application for UI elements and visualization.
+"""
+
 from dataclasses import dataclass
 from typing import Dict, Generator
 
 
 @dataclass(frozen=True)
 class Color:
+    """Represents an RGB color with integer components."""
+
     red: int
+    """Red component (0-255)."""
     green: int
+    """Green component (0-255)."""
     blue: int
+    """Blue component (0-255)."""
 
     def __iter__(self) -> Generator[int, None, None]:
+        """Iterate over RGB components in order.
+
+        Yields:
+            Red, green, and blue components in sequence.
+        """
         yield self.red
         yield self.green
         yield self.blue
 
     def to_code(self) -> str:
+        """Convert the color to a hexadecimal color code.
+
+        Returns:
+            A string in the format '#RRGGBB' with uppercase hex digits.
+        """
         nums = "".join(f"{x:02x}" for x in self)
         return f"#{nums.upper()}"
 
     @classmethod
     def from_code(cls, code: str) -> "Color":
+        """Create a Color from a hexadecimal color code.
+
+        Args:
+            code: A hex color string in the format '#RRGGBB'.
+
+        Returns:
+            A Color instance with the corresponding RGB values.
+
+        Raises:
+            AssertionError: If the code doesn't start with '#'.
+        """
         assert code[0] == "#"
         red = int(code[1:3], 16)
         green = int(code[3:5], 16)
@@ -27,6 +59,7 @@ class Color:
 
 
 COLORS: Dict[str, Color] = {
+    # Predefined color palette for the application
     "Black": Color.from_code("#000000"),
     "DarkGrey": Color.from_code("#A9A9A9"),
     "Gray": Color.from_code("#808080"),

@@ -1,3 +1,10 @@
+"""Push controller interface and MIDI message handling.
+
+This module provides the core interface for communicating with the
+Ableton Push controller, including MIDI message creation, event parsing,
+port management, and the abstract PushInterface for display updates.
+"""
+
 import logging
 import time
 from abc import ABCMeta, abstractmethod
@@ -23,6 +30,14 @@ from pushpluck.pos import ChanSelPos, GridSelPos, Pos
 
 
 def frame_sysex(raw_data: List[int]) -> FrozenMessage:
+    """Frame raw data as a Push SysEx message.
+
+    Args:
+        raw_data: The payload data to include in the SysEx message.
+
+    Returns:
+        A FrozenMessage containing the properly framed SysEx data.
+    """
     data: List[int] = []
     data.extend(constants.PUSH_SYSEX_PREFIX)
     data.extend(raw_data)
@@ -30,6 +45,15 @@ def frame_sysex(raw_data: List[int]) -> FrozenMessage:
 
 
 def make_color_msg(pos: Pos, color: Color) -> FrozenMessage:
+    """Create a SysEx message to set a pad's RGB color.
+
+    Args:
+        pos: The pad position to color.
+        color: The RGB color to set.
+
+    Returns:
+        A FrozenMessage containing the color setting SysEx command.
+    """
     index = pos.to_index()
     msb = [(x & 240) >> 4 for x in color]
     lsb = [x & 15 for x in color]
@@ -38,33 +62,73 @@ def make_color_msg(pos: Pos, color: Color) -> FrozenMessage:
 
 
 def make_led_msg(pos: Pos, value: int) -> FrozenMessage:
+    """Create a MIDI message to set a pad's LED brightness.
+
+    Args:
+        pos: The pad position to control.
+        value: The brightness value (0-127, 0 = off).
+
+    Returns:
+        A FrozenMessage note_on with the specified velocity.
+    """
     note = pos.to_note()
     return FrozenMessage("note_on", note=note, velocity=value)
 
 
 def make_lcd_msg(row: int, offset: int, text: str) -> FrozenMessage:
+    """Create a SysEx message to display text on the Push LCD.
+
+    Args:
+        row: The display row (0-3).
+        offset: The column offset for the text.
+        text: The text string to display.
+
+    Returns:
+        A FrozenMessage containing the LCD text SysEx command.
+    """
     raw_data = [27 - row, 0, len(text) + 1, offset]
     for c in text:
         raw_data.append(ord(c))
     return frame_sysex(raw_data)
 
 
-E = TypeVar("E", bound="PushEvent")
+E = TypeVar("E", bound="PushEvent")  # Type variable for Push event types
 
 
 class PushEvent(metaclass=ABCMeta):
+    """Abstract base class for Push controller events.
+
+    All Push events implement a match method to parse MIDI messages
+    into typed event objects.
+    """
+
     @classmethod
     @abstractmethod
     def match(cls: Type[E], msg: FrozenMessage) -> Optional[E]:
+        """Parse a MIDI message into this event type.
+
+        Args:
+            msg: The MIDI message to parse.
+
+        Returns:
+            An instance of this event type if the message matches,
+            None otherwise.
+        """
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class KnobEvent(PushEvent):
-    knob: KnobCC
-    group: KnobGroup
-    offset: int
-    clockwise: bool
+    """Represents a knob turn event from the Push controller."""
+
+    knob: KnobCC  # Which specific knob was turned
+    """The specific knob that was turned."""
+    group: KnobGroup  # Which group the knob belongs to (left, center, right)
+    """The group this knob belongs to (Left, Center, Right)."""
+    offset: int  # Offset within the group
+    """The offset of this knob within its group."""
+    clockwise: bool  # Direction of turn
+    """True if turned clockwise, False if counterclockwise."""
 
     @classmethod
     def match(cls, msg: FrozenMessage) -> Optional["KnobEvent"]:
@@ -78,8 +142,12 @@ class KnobEvent(PushEvent):
 
 @dataclass(frozen=True)
 class ButtonEvent(PushEvent):
-    button: ButtonCC
-    pressed: bool
+    """Represents a button press/release event from the Push controller."""
+
+    button: ButtonCC  # Which button was pressed/released
+    """The specific button that was pressed or released."""
+    pressed: bool  # True for press, False for release
+    """True if the button was pressed, False if released."""
 
     @classmethod
     def match(cls, msg: FrozenMessage) -> Optional["ButtonEvent"]:
@@ -92,8 +160,12 @@ class ButtonEvent(PushEvent):
 
 @dataclass(frozen=True)
 class PadEvent(PushEvent):
-    pos: Pos
-    velocity: int
+    """Represents a pad press/release event from the Push controller."""
+
+    pos: Pos  # Position of the pad that was hit
+    """The position of the pad that was pressed or released."""
+    velocity: int  # MIDI velocity (0 = release, >0 = press)
+    """The MIDI velocity (0 for release, >0 for press with dynamics)."""
 
     @classmethod
     def match(cls, msg: FrozenMessage) -> Optional["PadEvent"]:
@@ -147,6 +219,18 @@ class ChanSelEvent(PushEvent):
 
 
 def match_event(msg: FrozenMessage) -> Optional[PushEvent]:
+    """Parse a MIDI message into a Push event.
+
+    Attempts to parse the message as different event types in order,
+    returning the first successful match.
+
+    Args:
+        msg: The MIDI message to parse.
+
+    Returns:
+        A PushEvent instance if the message matches any known event type,
+        None otherwise.
+    """
     knob_event = KnobEvent.match(msg)
     if knob_event is not None:
         return knob_event
@@ -171,14 +255,33 @@ def match_event(msg: FrozenMessage) -> Optional[PushEvent]:
 
 @dataclass(frozen=True)
 class PushPorts(Closeable):
-    midi_in: MidiInput
-    midi_out: MidiOutput
-    midi_processed: MidiOutput
+    """Container for all MIDI port connections used by PushPluck.
+
+    Manages the input port from the Push, output port to the Push,
+    and the virtual output port for processed musical notes.
+    """
+
+    midi_in: MidiInput  # Input from the Push controller
+    """MIDI input port receiving messages from the Push controller."""
+    midi_out: MidiOutput  # Output to the Push controller
+    """MIDI output port for sending messages to the Push controller."""
+    midi_processed: MidiOutput  # Virtual output for processed notes
+    """Virtual MIDI output port for the processed musical notes."""
 
     @classmethod
     def open(
         cls, push_port_name: str, processed_port_name: str, delay: Optional[float]
     ) -> "PushPorts":
+        """Open all required MIDI ports for PushPluck.
+
+        Args:
+            push_port_name: Name of the Push controller's MIDI port.
+            processed_port_name: Name for the virtual processed output port.
+            delay: Optional delay for rate limiting Push messages.
+
+        Returns:
+            A PushPorts instance with all ports opened and connected.
+        """
         midi_in = MidiInput.open(push_port_name)
         midi_out = MidiOutput.open(push_port_name, delay=delay)
         midi_processed = MidiOutput.open(processed_port_name, virtual=True)
@@ -194,6 +297,19 @@ class PushPorts(Closeable):
 def push_ports_context(
     push_port_name: str, processed_port_name: str, delay: Optional[float]
 ) -> Generator[PushPorts, None, None]:
+    """Context manager for Push MIDI port lifecycle management.
+
+    Opens all required MIDI ports and ensures they are properly closed
+    when done, even if an exception occurs.
+
+    Args:
+        push_port_name: Name of the Push controller's MIDI port.
+        processed_port_name: Name for the virtual processed output port.
+        delay: Optional delay for rate limiting Push messages.
+
+    Yields:
+        A PushPorts instance with all ports opened and ready for use.
+    """
     logging.info("opening ports")
     ports = PushPorts.open(
         push_port_name=push_port_name,
@@ -210,6 +326,13 @@ def push_ports_context(
 
 
 class PushInterface(Resettable, metaclass=ABCMeta):
+    """Abstract interface for controlling the Push controller display.
+
+    This class defines the complete interface for updating the Push
+    controller's visual elements: pads, LCD display, and buttons.
+    Implementations handle the actual MIDI communication.
+    """
+
     @abstractmethod
     def pad_led_off(self, pos: Pos) -> None:
         raise NotImplementedError()
@@ -321,7 +444,18 @@ class PushInterface(Resettable, metaclass=ABCMeta):
 
 
 class PushOutput(PushInterface):
+    """Concrete implementation of PushInterface using MIDI output.
+
+    This class implements all the Push interface methods by sending
+    appropriate MIDI messages to the Push controller.
+    """
+
     def __init__(self, midi_out: MidiOutput) -> None:
+        """Initialize with a MIDI output port.
+
+        Args:
+            midi_out: The MIDI output port connected to the Push.
+        """
         self._midi_out = midi_out
 
     def _pad_led_on(self, pos: Pos, value: int = 100) -> None:
@@ -371,6 +505,15 @@ class PushOutput(PushInterface):
 
 
 def rainbow(push: PushOutput) -> None:
+    """Display a rainbow color sequence on all pads for testing.
+
+    Cycles through rainbow colors (ROYGBIV) on all pads with a
+    1-second delay between each color. Useful for testing the
+    Push connection and color display.
+
+    Args:
+        push: The Push output interface to use.
+    """
     names = ["Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet"]
     for name in names:
         color = COLORS[name]

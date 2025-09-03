@@ -1,3 +1,11 @@
+"""Menu system for configuring PushPluck settings via the Push controller.
+
+This module implements a comprehensive menu system that allows users to
+configure various aspects of the PushPluck application using the Push
+controller's knobs, buttons, and display. It supports different pages
+(Device, Scales, Browse) and provides real-time parameter adjustment.
+"""
+
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, replace
 from enum import Enum, auto, unique
@@ -9,12 +17,14 @@ from pushpluck.constants import ButtonCC, ButtonIllum, KnobGroup
 from pushpluck.push import ButtonEvent, KnobEvent, PushEvent, PushInterface
 from pushpluck.scale import SCALES, NoteName
 
-N = TypeVar("N")
-Y = TypeVar("Y")
+N = TypeVar("N")  # Type variable for menu value types
+Y = TypeVar("Y")  # Type variable for configuration structure types
 
 
 @unique
 class Page(Enum):
+    """Represents the different pages available in the menu system."""
+
     Device = auto()
     Scales = auto()
     Browse = auto()
@@ -54,6 +64,8 @@ ACTIVE_BUTTONS: List[ButtonCC] = [
 
 
 class ValRange(Generic[N], metaclass=ABCMeta):
+    """Abstract base class for value ranges used in menu controls."""
+
     @abstractmethod
     def render(self, value: N) -> str:
         raise NotImplementedError()
@@ -257,6 +269,7 @@ class MenuLayout:
 
 
 def default_menu_layout() -> MenuLayout:
+    """Create the default menu layout with standard controls."""
     high_sens = 1
     low_sens = 4
     return MenuLayout(
@@ -375,6 +388,8 @@ class MenuState:
 
 
 class Menu:
+    """Main menu controller that handles user interaction and configuration."""
+
     def __init__(self, layout: MenuLayout, config: Config):
         self._layout = layout
         self._init_config = config

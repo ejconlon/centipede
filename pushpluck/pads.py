@@ -1,3 +1,10 @@
+"""Pad interface management for the PushPluck fretboard.
+
+This module manages the visual and interactive aspects of the pad grid,
+including color mapping based on musical scales, note triggering,
+and coordination with the fretboard and viewport systems.
+"""
+
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -13,29 +20,74 @@ from pushpluck.viewport import Viewport
 
 @dataclass(frozen=True)
 class PadsConfig:
-    scale: Scale
-    root: NoteName
+    """Configuration for the pads interface extracted from the main config.
+
+    Contains the musical information needed to determine pad colors
+    and behavior based on scale theory.
+    """
+
+    scale: Scale  # The current musical scale
+    """The musical scale used for note classification and coloring."""
+    root: NoteName  # The root note of the scale
+    """The root note of the current scale."""
 
     @classmethod
     def extract(cls, root_config: Config) -> "PadsConfig":
+        """Extract pad-relevant configuration from the main config.
+
+        Args:
+            root_config: The main application configuration.
+
+        Returns:
+            A PadsConfig with the scale and root information.
+        """
         return PadsConfig(scale=root_config.scale, root=root_config.root)
 
 
 @dataclass
 class SinglePadState:
-    mapper: PadColorMapper
-    vis: VisState
+    """State information for an individual pad.
+
+    Tracks both the color mapping strategy (based on note type) and
+    the current visual state (active, disabled, etc.) for a single pad.
+    """
+
+    mapper: PadColorMapper  # Strategy for determining pad color
+    """The color mapping strategy for this pad (note, misc, or control)."""
+    vis: VisState  # Current visual state
+    """The current visual state of this pad (Off, OnPrimary, etc.)."""
 
     def color(self, scheme: ColorScheme) -> Optional[Color]:
+        """Get the current color for this pad.
+
+        Args:
+            scheme: The color scheme to use.
+
+        Returns:
+            The color this pad should display, or None if off.
+        """
         return self.mapper.get_color(scheme, self.vis)
 
 
 @dataclass
 class PadsState:
-    lookup: Dict[Pos, SinglePadState]
+    """Overall state for the entire pad grid.
+
+    Maintains the state of all individual pads in the 8x8 grid,
+    providing a centralized place to manage pad colors and states.
+    """
+
+    lookup: Dict[Pos, SinglePadState]  # State for each pad position
+    """Dictionary mapping pad positions to their individual states."""
 
     @classmethod
     def default(cls) -> "PadsState":
+        """Create a default pad state with all pads off.
+
+        Returns:
+            A PadsState with all pads set to non-interactive misc pads
+            in the Off visual state.
+        """
         return cls(
             {
                 pos: SinglePadState(PadColorMapper.misc(False), VisState.Off)
@@ -45,8 +97,25 @@ class PadsState:
 
 
 class Pads:
+    """Manages the pad grid interface for the PushPluck fretboard.
+
+    This class coordinates between the viewport, fretboard, and visual
+    display to provide an interactive musical interface on the Push
+    controller's pad grid. It handles note triggering, color updates,
+    and configuration changes.
+    """
+
     @classmethod
     def construct(cls, scheme: ColorScheme, root_config: Config) -> "Pads":
+        """Construct a Pads instance from configuration.
+
+        Args:
+            scheme: The color scheme for pad visualization.
+            root_config: The main application configuration.
+
+        Returns:
+            A new Pads instance configured with the given parameters.
+        """
         config = PadsConfig.extract(root_config)
         viewport = Viewport.construct(root_config)
         bounds = viewport.str_bounds()
@@ -61,6 +130,14 @@ class Pads:
         fretboard: Fretboard,
         viewport: Viewport,
     ) -> None:
+        """Initialize the pads interface.
+
+        Args:
+            scheme: Color scheme for pad visualization.
+            config: Pad-specific configuration.
+            fretboard: Fretboard for note logic.
+            viewport: Viewport for coordinate mapping.
+        """
         self._scheme = scheme
         self._config = config
         self._fretboard = fretboard
@@ -80,6 +157,11 @@ class Pads:
             push.pad_set_color(pos, color)
 
     def redraw(self, push: PushInterface) -> None:
+        """Redraw all pads on the Push interface.
+
+        Args:
+            push: The Push interface for sending display updates.
+        """
         for pos in Pos.iter_all():
             self._redraw_pos(push, pos)
 
@@ -113,6 +195,13 @@ class Pads:
     def handle_event(
         self, push: PushInterface, sink: MidiSink, event: PadEvent
     ) -> None:
+        """Handle a pad press/release event.
+
+        Args:
+            push: The Push interface for visual updates.
+            sink: MIDI sink for note output.
+            event: The pad event to process.
+        """
         str_pos = self._viewport.str_pos_from_pad_pos(event.pos)
         if str_pos is not None:
             fx = self._fretboard.trigger(str_pos, event.velocity)
@@ -121,6 +210,14 @@ class Pads:
     def handle_config(
         self, push: PushInterface, sink: MidiSink, root_config: Config, reset: bool
     ) -> None:
+        """Handle a configuration change.
+
+        Args:
+            push: The Push interface for visual updates.
+            sink: MIDI sink for note output.
+            root_config: The new configuration to apply.
+            reset: Whether this is a reset operation.
+        """
         unit = self._viewport.handle_config(root_config, reset)
         if unit is not None:
             # If there is an updated config, force reset and redraw of pads
