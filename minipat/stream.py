@@ -35,10 +35,9 @@ from spiny.heapmap import PHeapMap
 class MergeStrat(Enum):
     """Merge strategy for combining stream events."""
 
-    InnerJoin = auto()
-    LeftJoin = auto()
-    RightJoin = auto()
-    OuterJoin = auto()
+    Inner = auto()
+    Outer = auto()
+    Mixed = auto()
 
 
 def _create_span(original_arc: Arc, query_arc: Arc) -> Optional[Span]:
@@ -81,7 +80,14 @@ class Stream[T](metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    def stream_filter(self, predicate: Callable[[T], bool]) -> Stream[T]:
+    # TODO mirror all pat constructors and turn pat_stream into Stream.pat
+    @staticmethod
+    def silence() -> Stream[T]:
+        return SilenceStream()
+
+    # TODO implement map
+
+    def filter(self, predicate: Callable[[T], bool]) -> Stream[T]:
         """Filter events in a stream based on a predicate.
 
         Args:
