@@ -27,37 +27,6 @@ class Resettable(metaclass=ABCMeta):
         raise NotImplementedError()
 
 
-class Void:
-    """A type with no valid instances, representing impossible values.
-
-    None is the type with 1 inhabitant (None). Void is the type with 0 inhabitants.
-    This is useful in type theory and for representing impossible states.
-    """
-
-    def __init__(self) -> None:
-        """Prevent instantiation of Void.
-
-        Raises:
-            Exception: Always raises an exception as Void cannot be instantiated.
-        """
-        raise Exception("Cannot instantiate Void")
-
-    def absurd[X](self) -> X:  # type: ignore
-        """Return any type from a Void value (which cannot exist).
-
-        This allows you to trivially satisfy type checking by returning
-        `void.absurd()` since it's impossible for `void` to exist in the first place.
-        This is the principle of "ex falso quodlibet" - from a contradiction, anything follows.
-
-        Returns:
-            Any type X, but this will never actually return.
-
-        Raises:
-            Exception: Always raises an exception.
-        """
-        raise Exception("Absurd")
-
-
 @dataclass(frozen=True)
 class Unit:
     """A singleton type with exactly one value.
