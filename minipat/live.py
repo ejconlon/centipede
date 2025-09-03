@@ -108,24 +108,6 @@ class PatternState[T]:
     """Map of orbit to orbit state."""
 
 
-# class Processor[T, U](metaclass=ABCMeta):
-#     @abstractmethod
-#     def process_event(self, instant: Instant, orbit: Orbit, arc: Arc, val: T) -> PSeq[U]:
-#         raise NotImplementedError
-#
-#     @abstractmethod
-#     def process_play(self) -> U:
-#         raise NotImplementedError
-#
-#     @abstractmethod
-#     def process_pause(self) -> U:
-#         raise NotImplementedError
-#
-#     @abstractmethod
-#     def process_mute(self, orbit: Orbit) -> U:
-#         raise NotImplementedError
-
-
 class Processor[T, U](metaclass=ABCMeta):
     """Abstract interface for processing pattern events.
 
@@ -252,8 +234,8 @@ class BackendMessage[U](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class BackendPanic[U](BackendMessage[U]):
-    """Signal that the system should panic and clear all state."""
+class BackendReset[U](BackendMessage[U]):
+    """Signal that the system should reset and clear all state."""
 
     pass
 
@@ -649,4 +631,4 @@ class LiveSystem[T, U]:
         """Emergency stop - clear all patterns and stop playback."""
         self.pause()
         self.clear_orbits()
-        self._backend_sender.send(BackendPanic())
+        self._backend_sender.send(BackendReset())
