@@ -80,12 +80,182 @@ class Stream[T](metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    # TODO mirror all pat constructors and turn pat_stream into Stream.pat
     @staticmethod
     def silence() -> Stream[T]:
+        """Create a silent stream.
+
+        Returns:
+            A stream representing silence
+        """
         return SilenceStream()
 
-    # TODO implement map
+    @staticmethod
+    def pure(val: T) -> Stream[T]:
+        """Create a stream with a single value.
+
+        Args:
+            val: The value to wrap
+
+        Returns:
+            A stream containing the single value
+        """
+        return PureStream(val)
+
+    @staticmethod
+    def seq(streams: PSeq[Stream[T]]) -> Stream[T]:
+        """Create a sequential stream.
+
+        Args:
+            streams: The streams to sequence
+
+        Returns:
+            A stream that plays the given streams in sequence
+        """
+        return SeqStream(streams)
+
+    @staticmethod
+    def par(streams: PSeq[Stream[T]]) -> Stream[T]:
+        """Create a parallel stream.
+
+        Args:
+            streams: The streams to play in parallel
+
+        Returns:
+            A stream that plays the given streams simultaneously
+        """
+        return ParStream(streams)
+
+    @staticmethod
+    def choice(choices: PSeq[Stream[T]]) -> Stream[T]:
+        """Create a choice stream.
+
+        Args:
+            choices: The streams to choose from
+
+        Returns:
+            A stream that cycles through the given choices
+        """
+        return ChoiceStream(choices)
+
+    @staticmethod
+    def euclidean(
+        stream: Stream[T], hits: int, steps: int, rotation: int = 0
+    ) -> Stream[T]:
+        """Create a Euclidean rhythm stream.
+
+        Args:
+            stream: The stream to distribute
+            hits: Number of hits to distribute
+            steps: Total number of steps
+            rotation: Optional rotation offset
+
+        Returns:
+            A stream with Euclidean rhythm distribution
+        """
+        return EuclideanStream.create(stream, hits, steps, rotation)
+
+    @staticmethod
+    def polymetric(
+        patterns: PSeq[Stream[T]], subdivision: Optional[int] = None
+    ) -> Stream[T]:
+        """Create a polymetric stream.
+
+        Args:
+            patterns: The streams to play polymetrically
+            subdivision: Optional subdivision factor
+
+        Returns:
+            A polymetric stream with or without subdivision
+        """
+        return PolymetricStream(patterns, subdivision)
+
+    @staticmethod
+    def repetition(stream: Stream[T], operator: RepetitionOp, count: int) -> Stream[T]:
+        """Create a repetition stream.
+
+        Args:
+            stream: The stream to repeat
+            operator: The repetition operator (Fast or Slow)
+            count: The repetition count
+
+        Returns:
+            A stream with the specified repetition
+        """
+        return RepetitionStream(stream, operator, count)
+
+    @staticmethod
+    def elongation(stream: Stream[T], count: int) -> Stream[T]:
+        """Create an elongated stream.
+
+        Args:
+            stream: The stream to elongate
+            count: The elongation count
+
+        Returns:
+            A stream stretched by the given count
+        """
+        return ElongationStream(stream, count)
+
+    @staticmethod
+    def probability(stream: Stream[T], prob: Fraction) -> Stream[T]:
+        """Create a probabilistic stream.
+
+        Args:
+            stream: The stream to apply probability to
+            prob: The probability (0 to 1 as a Fraction)
+
+        Returns:
+            A stream that plays with the given probability
+        """
+        return ProbabilityStream(stream, prob)
+
+    @staticmethod
+    def alternating(patterns: PSeq[Stream[T]]) -> Stream[T]:
+        """Create an alternating stream.
+
+        Args:
+            patterns: The streams to alternate between
+
+        Returns:
+            A stream that alternates between the given streams
+        """
+        return AlternatingStream(patterns)
+
+    @staticmethod
+    def replicate(stream: Stream[T], count: int) -> Stream[T]:
+        """Create a replicate stream.
+
+        Args:
+            stream: The stream to replicate
+            count: The number of times to replicate
+
+        Returns:
+            A replicated stream
+        """
+        return ReplicateStream(stream, count)
+
+    @staticmethod
+    def pat(pattern: Pat[T]) -> Stream[T]:
+        """Create a stream from a pattern.
+
+        Args:
+            pattern: The pattern to convert to a stream
+
+        Returns:
+            A specialized stream for the pattern
+        """
+        return pat_stream(pattern)
+
+    def map[U](self, func: Callable[[T], U]) -> Stream[U]:
+        """Map a function over the stream values.
+
+        Args:
+            func: The function to apply to each value
+
+        Returns:
+            A new stream with transformed values
+        """
+        return MapStream(self, func)
 
     def filter(self, predicate: Callable[[T], bool]) -> Stream[T]:
         """Filter events in a stream based on a predicate.
@@ -721,6 +891,26 @@ class EarlyStream[T](Stream[T]):
                     span = Span(active=span.active, whole=early_active)
                 new_ev = Ev(span, ev.val)
                 result = ev_heap_push(new_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class MapStream[T, U](Stream[U]):
+    """Stream that maps a function over values."""
+
+    source: Stream[T]
+    func: Callable[[T], U]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[U]]:
+        source_events = self.source.unstream(arc)
+        result: PHeapMap[Span, Ev[U]] = ev_heap_empty()
+
+        for _, ev in source_events:
+            mapped_val = self.func(ev.val)
+            mapped_ev = Ev(ev.span, mapped_val)
+            result = ev_heap_push(mapped_ev, result)
 
         return result
 

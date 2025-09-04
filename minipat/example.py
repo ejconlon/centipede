@@ -8,7 +8,7 @@ from centipede.actor import Actor, ActorEnv, new_system
 from minipat.live import (
     BackendEvents,
     BackendMessage,
-    BackendPanic,
+    BackendPlay,
     LiveEnv,
     LiveSystem,
     LogProcessor,
@@ -24,14 +24,19 @@ class LogBackendActor(Actor[BackendMessage[str]]):
 
     def __init__(self):
         self._logger = logging.getLogger("log_backend")
+        self._playing = False
 
     def on_start(self, env: ActorEnv) -> None:
         env.logger.debug("Log backend actor started")
 
     def on_message(self, env: ActorEnv, value: BackendMessage[str]) -> None:
         match value:
-            case BackendPanic():
-                self._logger.info("PANIC: Clearing all backend state")
+            case BackendPlay(playing):
+                self._playing = playing
+                if playing:
+                    self._logger.info("PLAY: Processing messages")
+                else:
+                    self._logger.info("PAUSE: Ignoring messages")
             case BackendEvents(events):
                 self._logger.debug(f"Received {len(events)} processed events")
                 for event in events:

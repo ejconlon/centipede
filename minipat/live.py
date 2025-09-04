@@ -234,10 +234,12 @@ class BackendMessage[U](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class BackendReset[U](BackendMessage[U]):
-    """Signal that the system should reset and clear all state."""
+class BackendPlay[U](BackendMessage[U]):
+    """If playing, the backend should resume processing new messages.
+    Otherwise, it should reset, clear all state, and discard new messages.
+    """
 
-    pass
+    playing: bool
 
 
 @dataclass(frozen=True)
@@ -588,6 +590,7 @@ class LiveSystem[T, U]:
     def play(self, playing: bool = True) -> None:
         """Start pattern playback."""
         self._transport_sender.send(TransportPlay(playing))
+        self._backend_sender.send(BackendPlay(playing))
 
     def pause(self) -> None:
         """Stop pattern playback."""
@@ -631,4 +634,3 @@ class LiveSystem[T, U]:
         """Emergency stop - clear all patterns and stop playback."""
         self.pause()
         self.clear_orbits()
-        self._backend_sender.send(BackendReset())
