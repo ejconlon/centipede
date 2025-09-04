@@ -13,6 +13,10 @@ from minipat.midi import (
     Vel,
     VelKey,
     combine,
+    get_channel,
+    get_note,
+    get_velocity,
+    has_msg_type,
     make_note,
     make_vel,
     note,
@@ -140,16 +144,16 @@ def test_midi_processor():
     note_off_msg = message_list[1]
 
     # Check note on message
-    assert getattr(note_on_msg.message, "type") == "note_on"
-    assert getattr(note_on_msg.message, "note") == 60
-    assert getattr(note_on_msg.message, "velocity") == 80
-    assert getattr(note_on_msg.message, "channel") == 0  # Orbit 0 -> Channel 0
+    assert has_msg_type(note_on_msg.message, "note_on")
+    assert get_note(note_on_msg.message) == 60
+    assert get_velocity(note_on_msg.message) == 80
+    assert get_channel(note_on_msg.message) == 0  # Orbit 0 -> Channel 0
 
     # Check note off message
-    assert getattr(note_off_msg.message, "type") == "note_off"
-    assert getattr(note_off_msg.message, "note") == 60
-    assert getattr(note_off_msg.message, "velocity") == 0
-    assert getattr(note_off_msg.message, "channel") == 0
+    assert has_msg_type(note_off_msg.message, "note_off")
+    assert get_note(note_off_msg.message) == 60
+    assert get_velocity(note_off_msg.message) == 0
+    assert get_channel(note_off_msg.message) == 0
 
     # Check timing
     assert note_on_msg.time == PosixTime(0.0)  # Start of arc
@@ -184,9 +188,9 @@ def test_midi_processor_defaults():
     note_on_msg = message_list[0]
 
     # Should use default velocity and orbit as channel
-    assert getattr(note_on_msg.message, "velocity") == 100
-    assert getattr(note_on_msg.message, "channel") == 1  # Orbit 1 -> Channel 1
-    assert getattr(note_on_msg.message, "note") == 72
+    assert get_velocity(note_on_msg.message) == 100
+    assert get_channel(note_on_msg.message) == 1  # Orbit 1 -> Channel 1
+    assert get_note(note_on_msg.message) == 72
 
 
 def test_midi_processor_empty_events():
@@ -231,8 +235,8 @@ def test_midi_processor_clamps_values():
     note_on_msg = message_list[0]
 
     # Should clamp to valid MIDI range
-    assert getattr(note_on_msg.message, "note") == 127  # Clamped from 200
-    assert getattr(note_on_msg.message, "velocity") == 0  # Clamped from -10
+    assert get_note(note_on_msg.message) == 127  # Clamped from 200
+    assert get_velocity(note_on_msg.message) == 0  # Clamped from -10
 
 
 def test_midi_processor_orbit_as_channel():
@@ -259,4 +263,4 @@ def test_midi_processor_orbit_as_channel():
         message_list = list(timed_messages)
 
         expected_channel = min(15, orbit_num)  # Should clamp to 0-15 range
-        assert getattr(message_list[0].message, "channel") == expected_channel
+        assert get_channel(message_list[0].message) == expected_channel

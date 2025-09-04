@@ -8,13 +8,15 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
+from threading import Event, Thread
+from time import sleep
 from typing import Any, NewType, Optional, Tuple, cast, override
 
 import mido
 from mido.frozen import FrozenMessage, freeze_message
 
 from centipede.actor import Actor, ActorEnv, Callback, Mutex, Sender, System, new_system
-from minipat.common import PosixTime
+from minipat.common import PosixTime, current_posix_time
 from minipat.ev import EvHeap
 from minipat.live import (
     BackendEvents,
@@ -102,11 +104,295 @@ def msg_pc(channel: Channel, program: Program) -> FrozenMessage:
 
 
 # =============================================================================
+# MIDI Message Field Access
+# =============================================================================
+
+
+def get_msg_type(msg: FrozenMessage) -> Optional[str]:
+    """Get the message type from a MIDI message.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The message type (e.g., 'note_on', 'note_off', 'program_change'),
+        or None if the message has no type field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> get_msg_type(msg)
+        'note_on'
+    """
+    return getattr(msg, "type", None)
+
+
+def has_msg_type(msg: FrozenMessage, msg_type: str) -> bool:
+    """Check if a MIDI message has a specific type.
+
+    Args:
+        msg: The MIDI message to check.
+        msg_type: The expected message type (e.g., 'note_on', 'note_off').
+
+    Returns:
+        True if the message has the specified type, False otherwise.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> has_msg_type(msg, 'note_on')
+        True
+        >>> has_msg_type(msg, 'note_off')
+        False
+    """
+    return get_msg_type(msg) == msg_type
+
+
+def get_channel(msg: FrozenMessage) -> int:
+    """Get the channel from a MIDI message, defaulting to 0.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI channel (0-15), or 0 if the message has no channel field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(5), make_note(60), make_vel(64))
+        >>> get_channel(msg)
+        5
+    """
+    return getattr(msg, "channel", 0)
+
+
+def opt_channel(msg: FrozenMessage) -> Optional[int]:
+    """Get the channel from a MIDI message, returning None if not present.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI channel (0-15), or None if the message has no channel field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(5), make_note(60), make_vel(64))
+        >>> opt_channel(msg)
+        5
+        >>> # For messages without channel
+        >>> opt_channel(some_msg_without_channel)
+        None
+    """
+    return getattr(msg, "channel", None)
+
+
+def has_channel(msg: FrozenMessage) -> bool:
+    """Check if a MIDI message has a channel field.
+
+    Args:
+        msg: The MIDI message to check.
+
+    Returns:
+        True if the message has a channel field, False otherwise.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> has_channel(msg)
+        True
+    """
+    return hasattr(msg, "channel")
+
+
+def get_note(msg: FrozenMessage) -> int:
+    """Get the note from a MIDI message, defaulting to 60 (Middle C).
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI note number (0-127), or 60 if the message has no note field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(72), make_vel(64))
+        >>> get_note(msg)
+        72
+    """
+    return getattr(msg, "note", 60)
+
+
+def opt_note(msg: FrozenMessage) -> Optional[int]:
+    """Get the note from a MIDI message, returning None if not present.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI note number (0-127), or None if the message has no note field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(72), make_vel(64))
+        >>> opt_note(msg)
+        72
+        >>> # For messages without note
+        >>> opt_note(some_pc_msg)
+        None
+    """
+    return getattr(msg, "note", None)
+
+
+def has_note(msg: FrozenMessage) -> bool:
+    """Check if a MIDI message has a note field.
+
+    Args:
+        msg: The MIDI message to check.
+
+    Returns:
+        True if the message has a note field, False otherwise.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> has_note(msg)
+        True
+        >>> pc_msg = msg_pc(make_channel(0), make_program(1))
+        >>> has_note(pc_msg)
+        False
+    """
+    return hasattr(msg, "note")
+
+
+def get_velocity(msg: FrozenMessage) -> int:
+    """Get the velocity from a MIDI message, defaulting to 64.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI velocity (0-127), or 64 if the message has no velocity field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(100))
+        >>> get_velocity(msg)
+        100
+    """
+    return getattr(msg, "velocity", 64)
+
+
+def opt_velocity(msg: FrozenMessage) -> Optional[int]:
+    """Get the velocity from a MIDI message, returning None if not present.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI velocity (0-127), or None if the message has no velocity field.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(100))
+        >>> opt_velocity(msg)
+        100
+        >>> pc_msg = msg_pc(make_channel(0), make_program(1))
+        >>> opt_velocity(pc_msg)
+        None
+    """
+    return getattr(msg, "velocity", None)
+
+
+def has_velocity(msg: FrozenMessage) -> bool:
+    """Check if a MIDI message has a velocity field.
+
+    Args:
+        msg: The MIDI message to check.
+
+    Returns:
+        True if the message has a velocity field, False otherwise.
+
+    Example:
+        >>> msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> has_velocity(msg)
+        True
+        >>> pc_msg = msg_pc(make_channel(0), make_program(1))
+        >>> has_velocity(pc_msg)
+        False
+    """
+    return hasattr(msg, "velocity")
+
+
+def get_program(msg: FrozenMessage) -> int:
+    """Get the program from a MIDI message, defaulting to 0.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI program number (0-127), or 0 if the message has no program field.
+
+    Example:
+        >>> msg = msg_pc(make_channel(0), make_program(42))
+        >>> get_program(msg)
+        42
+    """
+    return getattr(msg, "program", 0)
+
+
+def opt_program(msg: FrozenMessage) -> Optional[int]:
+    """Get the program from a MIDI message, returning None if not present.
+
+    Args:
+        msg: The MIDI message to inspect.
+
+    Returns:
+        The MIDI program number (0-127), or None if the message has no program field.
+
+    Example:
+        >>> msg = msg_pc(make_channel(0), make_program(42))
+        >>> opt_program(msg)
+        42
+        >>> note_msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> opt_program(note_msg)
+        None
+    """
+    return getattr(msg, "program", None)
+
+
+def has_program(msg: FrozenMessage) -> bool:
+    """Check if a MIDI message has a program field.
+
+    Args:
+        msg: The MIDI message to check.
+
+    Returns:
+        True if the message has a program field, False otherwise.
+
+    Example:
+        >>> pc_msg = msg_pc(make_channel(0), make_program(1))
+        >>> has_program(pc_msg)
+        True
+        >>> note_msg = msg_note_on(make_channel(0), make_note(60), make_vel(64))
+        >>> has_program(note_msg)
+        False
+    """
+    return hasattr(msg, "program")
+
+
+# =============================================================================
+# Timed Messages
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class TimedMessage:
+    """A timed message with POSIX timestamp."""
+
+    time: PosixTime
+    """Timestamp when the message should be sent (POSIX time)."""
+
+    message: FrozenMessage
+    """The frozen MIDI message."""
+
+
+# =============================================================================
 # MIDI Message Heap (Low-Level Utilities)
 # =============================================================================
 
-type MsgHeap = PHeapMap[PosixTime, FrozenMessage]
-"""A priority queue of MIDI messages ordered by time."""
+type MsgHeap = PHeapMap[PosixTime, TimedMessage]
+"""A priority queue of timed MIDI messages ordered by time."""
 
 
 def mh_empty() -> MsgHeap:
@@ -127,7 +413,9 @@ def mh_push_note(
         raise ValueError("Note start time must be <= end time")
     m1 = msg_note_on(channel=channel, note=note, velocity=velocity)
     m2 = msg_note_off(channel=channel, note=note)
-    return mh.insert(start, m1).insert(end, m2)
+    tm1 = TimedMessage(start, m1)
+    tm2 = TimedMessage(end, m2)
+    return mh.insert(start, tm1).insert(end, tm2)
 
 
 def mh_push_pc(
@@ -135,26 +423,25 @@ def mh_push_pc(
 ) -> MsgHeap:
     """Add a program change message to the heap."""
     m = msg_pc(channel=channel, program=program)
-    return mh.insert(time, m)
+    tm = TimedMessage(time, m)
+    return mh.insert(time, tm)
 
 
-def mh_pop(mh: MsgHeap) -> Tuple[Optional[Tuple[PosixTime, FrozenMessage]], MsgHeap]:
+def mh_pop(mh: MsgHeap) -> Tuple[Optional[TimedMessage], MsgHeap]:
     """Pop the earliest message from the heap."""
     x = mh.find_min()
     if x is None:
         return (None, mh)
     else:
         k, v, mh2 = x
-        return ((k, v), mh2)
+        return (v, mh2)
 
 
-def mh_seek_pop(
-    mh: MsgHeap, time: PosixTime
-) -> Tuple[Optional[Tuple[PosixTime, FrozenMessage]], MsgHeap]:
+def mh_seek_pop(mh: MsgHeap, time: PosixTime) -> Tuple[Optional[TimedMessage], MsgHeap]:
     """Pop all messages before the given time, returning the first at or after time."""
     while True:
         x = mh_pop(mh)
-        if x[0] is None or x[0][0] >= time:
+        if x[0] is None or x[0].time >= time:
             return x
         else:
             mh = x[1]
@@ -197,19 +484,101 @@ class ParMsgHeap:
                 mh=box.value, time=time, channel=channel, program=program
             )
 
-    def pop(self) -> Optional[Tuple[PosixTime, FrozenMessage]]:
+    def pop(self) -> Optional[TimedMessage]:
         """Pop the earliest message (thread-safe)."""
         with self._mutex as box:
-            kv, mh2 = mh_pop(mh=box.value)
+            msg, mh2 = mh_pop(mh=box.value)
             box.value = mh2
-            return kv
+            return msg
 
-    def seek_pop(self, time: PosixTime) -> Optional[Tuple[PosixTime, FrozenMessage]]:
+    def seek_pop(self, time: PosixTime) -> Optional[TimedMessage]:
         """Pop messages until reaching the given time (thread-safe)."""
         with self._mutex as box:
-            kv, mh2 = mh_seek_pop(mh=box.value, time=time)
+            msg, mh2 = mh_seek_pop(mh=box.value, time=time)
             box.value = mh2
-            return kv
+            return msg
+
+
+class MidiSenderTask:
+    """Background task that sends scheduled MIDI messages at the correct time.
+
+    Runs in a separate thread and continuously pops messages from a shared
+    ParMsgHeap, sending them to a Mutex-protected MIDI output at the
+    appropriate timestamps.
+    """
+
+    def __init__(
+        self, heap: ParMsgHeap, output_mutex: Mutex[Optional[mido.ports.BaseOutput]]
+    ):
+        """Initialize the MIDI sender task.
+
+        Args:
+            heap: Shared message heap for scheduled messages
+            output_mutex: Mutex-protected MIDI output port (can be None if disabled)
+        """
+        self._heap = heap
+        self._output_mutex = output_mutex
+        self._stop_event = Event()
+        self._thread: Optional[Thread] = None
+        self._logger = Logger("midi_sender")
+
+    def start(self) -> None:
+        """Start the background sender thread."""
+        if self._thread is not None:
+            return  # Already started
+
+        self._stop_event.clear()
+        self._thread = Thread(target=self._run, daemon=True)
+        self._thread.start()
+        self._logger.debug("MIDI sender task started")
+
+    def stop(self) -> None:
+        """Stop the background sender thread."""
+        if self._thread is None:
+            return  # Not started
+
+        self._stop_event.set()
+        self._thread.join()
+        self._thread = None
+        self._logger.debug("MIDI sender task stopped")
+
+    def _run(self) -> None:
+        """Main loop that processes scheduled MIDI messages."""
+        while not self._stop_event.is_set():
+            try:
+                current_time = current_posix_time()
+
+                # Get the next message that's ready to send
+                timed_msg = self._heap.seek_pop(current_time)
+
+                if timed_msg is not None:
+                    # Send the message if we have an output
+                    with self._output_mutex as output_box:
+                        if output_box is not None and output_box.value is not None:
+                            try:
+                                output_box.value.send(timed_msg.message)
+                                self._logger.debug(
+                                    "Sent scheduled MIDI message: %s", timed_msg.message
+                                )
+                            except Exception as e:
+                                self._logger.error(
+                                    "Error sending scheduled MIDI message: %s", e
+                                )
+                        else:
+                            self._logger.debug(
+                                "No MIDI output available, dropping message: %s",
+                                timed_msg.message,
+                            )
+
+                    # Continue immediately to check for more messages
+                    continue
+                else:
+                    # No messages ready, sleep briefly
+                    sleep(0.001)  # 1ms sleep to avoid busy waiting
+
+            except Exception as e:
+                self._logger.error("Unexpected error in MIDI sender task: %s", e)
+                sleep(0.01)  # Longer sleep on error
 
 
 # =============================================================================
@@ -558,22 +927,6 @@ def combine(*ss: Stream[MidiAttrs]) -> Stream[MidiAttrs]:
 
 
 # =============================================================================
-# Timed Messages
-# =============================================================================
-
-
-@dataclass(frozen=True)
-class TimedMessage:
-    """A timed message with POSIX timestamp."""
-
-    time: PosixTime
-    """Timestamp when the message should be sent (POSIX time)."""
-
-    message: FrozenMessage
-    """The frozen MIDI message."""
-
-
-# =============================================================================
 # MIDI Processor (Pattern System to MIDI Messages)
 # =============================================================================
 
@@ -646,20 +999,36 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
 
 
 class MidiActor(Actor[BackendMessage[TimedMessage]]):
-    """Actor that sends MIDI messages to outputs."""
+    """Actor that queues MIDI messages for scheduled sending.
 
-    def __init__(self, output: mido.ports.BaseOutput):
+    Instead of sending MIDI messages immediately, this actor queues them
+    in a shared ParMsgHeap where a MidiSenderTask will send them at the
+    appropriate time.
+    """
+
+    def __init__(
+        self, heap: ParMsgHeap, output_mutex: Mutex[Optional[mido.ports.BaseOutput]]
+    ):
         """Initialize the MIDI actor.
 
         Args:
-            output: MIDI output port
+            heap: Shared message heap for scheduling messages
+            output_mutex: Mutex-protected MIDI output port
         """
-        self._output = output
+        self._heap = heap
+        self._output_mutex = output_mutex
         self._playing = False
 
     @override
     def on_stop(self, logger: Logger) -> None:
-        self._output.reset()
+        """Reset the MIDI output when stopping."""
+        with self._output_mutex as output_box:
+            if output_box is not None and output_box.value is not None:
+                try:
+                    output_box.value.reset()
+                    logger.debug("Reset MIDI output port")
+                except Exception as e:
+                    logger.error("Error resetting MIDI output: %s", e)
 
     @override
     def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
@@ -670,24 +1039,83 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                     env.logger.info("MIDI: Playing")
                 else:
                     env.logger.info("MIDI: Pausing")
-                    self._output.reset()
+                    # Reset output when stopping
+                    with self._output_mutex as output_box:
+                        if output_box is not None and output_box.value is not None:
+                            try:
+                                output_box.value.reset()
+                            except Exception as e:
+                                env.logger.error("Error resetting MIDI output: %s", e)
             case BackendEvents(messages):
                 if self._playing:
-                    self._send_messages(env, messages)
+                    self._queue_messages(env, messages)
                 else:
                     env.logger.debug("MIDI: Ignoring events while stopped")
             case _:
                 env.logger.warning("Unknown MIDI message type: %s", type(value))
 
-    def _send_messages(self, env: ActorEnv, messages: PSeq[TimedMessage]) -> None:
+    def _queue_messages(self, env: ActorEnv, messages: PSeq[TimedMessage]) -> None:
+        """Queue messages in the shared heap for scheduled sending."""
         for timed_message in messages:
             try:
-                # For now, send immediately - in a real implementation you'd
-                # want to schedule based on timestamp
-                self._output.send(timed_message.message)
-                env.logger.debug("Sent MIDI message: %s", timed_message.message)
+                # Extract note information to use heap's push_note method
+                msg = timed_message.message
+                if has_msg_type(msg, "note_on"):
+                    # Find corresponding note_off message
+                    note_off_time = None
+
+                    # Look ahead for matching note_off
+                    for other_msg in messages:
+                        other = other_msg.message
+                        if (
+                            has_msg_type(other, "note_off")
+                            and opt_channel(other) == opt_channel(msg)
+                            and opt_note(other) == opt_note(msg)
+                            and other_msg.time > timed_message.time
+                        ):
+                            note_off_time = other_msg.time
+                            break
+
+                    if note_off_time is not None:
+                        # Use heap's push_note method for proper note on/off pairing
+                        try:
+                            channel = make_channel(get_channel(msg))
+                            note = make_note(get_note(msg))
+                            velocity = make_vel(get_velocity(msg))
+
+                            self._heap.push_note(
+                                start=timed_message.time,
+                                end=note_off_time,
+                                channel=channel,
+                                note=note,
+                                velocity=velocity,
+                            )
+                            env.logger.debug(
+                                "Queued MIDI note: %s at %s", note, timed_message.time
+                            )
+                        except Exception as e:
+                            env.logger.error("Error queuing MIDI note: %s", e)
+
+                # Skip note_off messages as they're handled by push_note above
+                elif has_msg_type(msg, "note_off"):
+                    continue
+
+                # Handle other message types (program change, etc.)
+                elif has_msg_type(msg, "program_change"):
+                    try:
+                        channel = make_channel(get_channel(msg))
+                        program = make_program(get_program(msg))
+                        self._heap.push_pc(timed_message.time, channel, program)
+                        env.logger.debug(
+                            "Queued MIDI program change: %s at %s",
+                            program,
+                            timed_message.time,
+                        )
+                    except Exception as e:
+                        env.logger.error("Error queuing MIDI program change: %s", e)
+
             except Exception as e:
-                env.logger.error("Error sending MIDI message: %s", e)
+                env.logger.error("Error processing MIDI message: %s", e)
 
 
 # =============================================================================
@@ -722,9 +1150,11 @@ class RecvCallback(Callback[FrozenMessage]):
     def __init__(self, port: mido.ports.BaseInput):
         self._port = port
 
+    @override
     def register(self, sender: Sender[FrozenMessage]) -> None:
         self._port.callback = partial(_recv_cb, sender)  # pyright: ignore
 
+    @override
     def unregister(self) -> None:
         self._port.callback = None  # pyright: ignore
 
@@ -738,3 +1168,44 @@ def echo_system() -> System:
     recv_actor = RecvCallback(in_port).produce("send", send_actor)
     system.spawn_actor("recv", recv_actor)
     return system
+
+
+def create_midi_system(
+    output: Optional[mido.ports.BaseOutput] = None,
+) -> Tuple[MidiActor, MidiSenderTask]:
+    """Create a complete MIDI system with scheduling support.
+
+    Creates a MidiActor that queues messages and a MidiSenderTask that sends them
+    at the appropriate time. Both components share a ParMsgHeap for message scheduling
+    and a Mutex-protected output port.
+
+    Args:
+        output: MIDI output port, or None to disable output
+
+    Returns:
+        A tuple of (MidiActor, MidiSenderTask). The MidiSenderTask should be
+        started with start() and stopped with stop() as needed.
+
+    Example:
+        # Create system with virtual output
+        output_port = mido.open_output(virtual=True)
+        midi_actor, sender_task = create_midi_system(output_port)
+
+        # Start the sender task
+        sender_task.start()
+
+        # Use midi_actor in your actor system...
+
+        # Clean up
+        sender_task.stop()
+        output_port.close()
+    """
+    # Create shared components
+    heap = ParMsgHeap()
+    output_mutex = Mutex(Box(output))
+
+    # Create actor and sender task
+    midi_actor = MidiActor(heap, output_mutex)
+    sender_task = MidiSenderTask(heap, output_mutex)
+
+    return midi_actor, sender_task
