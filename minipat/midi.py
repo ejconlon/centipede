@@ -64,6 +64,9 @@ ControlNum = NewType("ControlNum", int)
 ControlVal = NewType("ControlVal", int)
 """MIDI control value (0-127)"""
 
+DEFAULT_VELOCITY = Velocity(64)
+"""Default MIDI velocity when not specified"""
+
 
 def _assert_midi_range(value: int, max_value: int, name: str) -> None:
     """Assert that a value is in valid MIDI range."""
@@ -476,15 +479,156 @@ class MidiKey[V](DKey[MidiDom, V]):
 
 
 class NoteKey(MidiKey[Note]):
-    """Key for note values in MIDI attributes."""
+    """Key for note in MIDI attributes."""
 
     pass
 
 
 class VelocityKey(MidiKey[Velocity]):
-    """Key for velocity values in MIDI attributes."""
+    """Key for velocity in MIDI attributes."""
 
     pass
+
+
+class ProgramKey(MidiKey[Program]):
+    """Key for program in MIDI attributes."""
+
+    pass
+
+
+class ControlNumKey(MidiKey[ControlNum]):
+    """Key for control number in MIDI attributes."""
+
+    pass
+
+
+class ControlValKey(MidiKey[ControlVal]):
+    """Key for control value in MIDI attributes."""
+
+    pass
+
+
+def parse_message(orbit: Orbit, attrs: MidiAttrs) -> FrozenMessage:
+    """Parse MIDI attributes into a FrozenMessage.
+
+    Converts a set of MIDI attributes into a specific MIDI message type.
+    The function determines the message type based on which attributes are present
+    and strictly enforces that only one message type's attributes are provided:
+
+    - If note is present: creates a note_on message (note required, velocity optional)
+    - If program is present: creates a program_change message (program required only)
+    - If control attributes are present: creates a control_change message (both control_num and control_val required)
+
+    The function is defensive and will reject conflicting combinations of attributes
+    (e.g., having both note and program attributes).
+
+    Args:
+        orbit: The orbit number, used as MIDI channel (must be 0-15)
+        attrs: MIDI attributes containing the message parameters
+
+    Returns:
+        A FrozenMessage representing the parsed MIDI message
+
+    Raises:
+        ValueError: If the orbit is outside valid MIDI channel range (0-15),
+                   or if conflicting attributes from different message types are present,
+                   or if the attributes don't contain sufficient information to
+                   create any supported message type, or if required attributes
+                   are missing for the determined message type
+
+    Examples:
+        >>> # Create note-on message
+        >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(VelocityKey(), Velocity(100))
+        >>> msg = parse_message(Orbit(0), attrs)
+        >>> msg.type == "note_on"
+        True
+
+        >>> # Create program change message
+        >>> attrs = DMap.empty(MidiDom).put(ProgramKey(), Program(42))
+        >>> msg = parse_message(Orbit(1), attrs)
+        >>> msg.type == "program_change"
+        True
+
+        >>> # This would raise ValueError due to conflicting attributes
+        >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(ProgramKey(), Program(42))
+        >>> parse_message(Orbit(0), attrs)  # Raises ValueError
+    """
+    # Use orbit as MIDI channel (validate range)
+    orbit_value = int(orbit)
+    if not (0 <= orbit_value <= 15):
+        raise ValueError(f"Orbit {orbit_value} out of valid MIDI channel range (0-15)")
+    channel = ChannelField.mk(orbit_value)
+
+    # Extract attributes
+    note = attrs.lookup(NoteKey())
+    velocity = attrs.lookup(VelocityKey())
+    program = attrs.lookup(ProgramKey())
+    control_num = attrs.lookup(ControlNumKey())
+    control_val = attrs.lookup(ControlValKey())
+
+    # Check for conflicting attribute combinations
+    has_note = note is not None
+    has_velocity = velocity is not None
+    has_program = program is not None
+    has_control_num = control_num is not None
+    has_control_val = control_val is not None
+
+    # Count how many different message types are implied
+    message_type_count = 0
+    if has_note or has_velocity:  # velocity implies note message type
+        message_type_count += 1
+    if has_program:
+        message_type_count += 1
+    if has_control_num or has_control_val:
+        message_type_count += 1
+
+    if message_type_count > 1:
+        # Conflicting attributes found
+        present_attrs = []
+        if has_note or has_velocity:
+            present_attrs.append("note/velocity")
+        if has_program:
+            present_attrs.append("program")
+        if has_control_num or has_control_val:
+            present_attrs.append("control")
+        raise ValueError(
+            f"Conflicting MIDI attributes found: {', '.join(present_attrs)}. "
+            "Expected exactly one message type: (note+velocity), (program), or (control_num+control_val)"
+        )
+
+    # Determine message type based on available attributes
+    if has_note:
+        # Create note_on message (velocity is allowed with note)
+        assert note is not None  # Type checker hint
+        vel = velocity if velocity is not None else DEFAULT_VELOCITY
+        return msg_note_on(channel=channel, note=note, velocity=vel)
+    elif has_velocity:
+        # Velocity without note - this is an error case
+        raise ValueError(
+            "Velocity attribute found without note. "
+            "Velocity can only be used with note attributes for note_on messages"
+        )
+    elif has_program:
+        # Create program_change message
+        assert program is not None  # Type checker hint
+        return msg_pc(channel=channel, program=program)
+    elif has_control_num and has_control_val:
+        # Create control_change message (both control_num and control_val required)
+        assert control_num is not None and control_val is not None  # Type checker hint
+        return msg_cc(channel=channel, control=control_num, value=control_val)
+    elif has_control_num or has_control_val:
+        # Incomplete control change attributes
+        missing = "control_val" if has_control_num else "control_num"
+        raise ValueError(
+            f"Incomplete control change attributes: missing {missing}. "
+            "Both control_num and control_val are required for control_change messages"
+        )
+    else:
+        # No valid combination of attributes found
+        raise ValueError(
+            "Insufficient MIDI attributes to create message. "
+            "Expected one of: (note), (program), or (control_num + control_val)"
+        )
 
 
 # =============================================================================

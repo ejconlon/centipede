@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from spiny.dmap import DKey, DMap
 
 
@@ -129,7 +131,7 @@ def test_dkey_instance_and_key() -> None:
 
     age_key = AgeKey()
     assert age_key.key() == "AgeKey"
-    assert age_key != name_key  # type: ignore[comparison-overlap]
+    assert cast(Any, age_key) != cast(Any, name_key)
 
 
 def test_multiple_key_types() -> None:

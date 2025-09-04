@@ -11,8 +11,13 @@ from mido.frozen import FrozenMessage
 from minipat.common import CycleTime, PosixTime
 from minipat.live import Instant, Orbit
 from minipat.midi import (
+    DEFAULT_VELOCITY,
     ChannelField,
     ControlField,
+    ControlNum,
+    ControlNumKey,
+    ControlVal,
+    ControlValKey,
     MidiAttrs,
     MidiDom,
     MidiProcessor,
@@ -20,6 +25,8 @@ from minipat.midi import (
     Note,
     NoteField,
     NoteKey,
+    ProgramField,
+    ProgramKey,
     ValueField,
     Velocity,
     VelocityField,
@@ -27,6 +34,7 @@ from minipat.midi import (
     combine,
     echo_system,
     note,
+    parse_message,
     vel,
 )
 from spiny.dmap import DMap
@@ -391,3 +399,232 @@ def test_echo_system_integration() -> None:
             input_port.close()
         if output_port is not None:
             output_port.close()
+
+
+def test_parse_message_note_on() -> None:
+    """Test parse_message creates note_on message from note attributes."""
+    # Test with note only (should use default velocity)
+    attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
+
+    msg = parse_message(Orbit(0), attrs)
+
+    assert MsgTypeField.get(msg) == "note_on"
+    assert ChannelField.unmk(ChannelField.get(msg)) == 0
+    assert NoteField.unmk(NoteField.get(msg)) == 60
+    assert VelocityField.unmk(VelocityField.get(msg)) == int(
+        DEFAULT_VELOCITY
+    )  # Default velocity
+
+    # Test with note and velocity
+    attrs_with_vel: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(NoteKey(), NoteField.mk(72))
+        .put(VelocityKey(), VelocityField.mk(100))
+    )
+
+    msg2 = parse_message(Orbit(1), attrs_with_vel)
+
+    assert MsgTypeField.get(msg2) == "note_on"
+    assert ChannelField.unmk(ChannelField.get(msg2)) == 1
+    assert NoteField.unmk(NoteField.get(msg2)) == 72
+    assert VelocityField.unmk(VelocityField.get(msg2)) == 100
+
+
+def test_parse_message_program_change() -> None:
+    """Test parse_message creates program_change message from program attributes."""
+    attrs: MidiAttrs = DMap.empty(MidiDom).put(ProgramKey(), ProgramField.mk(42))
+
+    msg = parse_message(Orbit(2), attrs)
+
+    assert MsgTypeField.get(msg) == "program_change"
+    assert ChannelField.unmk(ChannelField.get(msg)) == 2
+    assert ProgramField.unmk(ProgramField.get(msg)) == 42
+
+
+def test_parse_message_control_change() -> None:
+    """Test parse_message creates control_change message from control attributes."""
+    attrs: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(ControlNumKey(), ControlNum(7))  # Volume control
+        .put(ControlValKey(), ControlVal(80))
+    )
+
+    msg = parse_message(Orbit(3), attrs)
+
+    assert MsgTypeField.get(msg) == "control_change"
+    assert ChannelField.unmk(ChannelField.get(msg)) == 3
+    assert ControlField.unmk(ControlField.get(msg)) == 7
+    assert ValueField.unmk(ValueField.get(msg)) == 80
+
+
+def test_parse_message_channel_validation() -> None:
+    """Test parse_message validates orbit is in valid MIDI channel range (0-15)."""
+    attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
+
+    # Test valid orbit values
+    valid_test_cases = [(Orbit(0), 0), (Orbit(15), 15), (Orbit(8), 8)]
+
+    for orbit, expected_channel in valid_test_cases:
+        msg = parse_message(orbit, attrs)
+        assert ChannelField.unmk(ChannelField.get(msg)) == expected_channel
+
+    # Test invalid orbit values should raise ValueError
+    invalid_orbits = [Orbit(16), Orbit(100), Orbit(-1)]
+
+    for invalid_orbit in invalid_orbits:
+        try:
+            parse_message(invalid_orbit, attrs)
+            assert False, f"Should have raised ValueError for orbit {invalid_orbit}"
+        except ValueError as e:
+            assert "out of valid MIDI channel range" in str(e)
+
+
+def test_parse_message_conflicting_attributes() -> None:
+    """Test parse_message rejects conflicting attribute combinations."""
+    # Note + Program should raise ValueError
+    attrs_note_and_program: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(NoteKey(), NoteField.mk(60))
+        .put(ProgramKey(), ProgramField.mk(42))
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_note_and_program)
+        assert False, "Should have raised ValueError for note + program"
+    except ValueError as e:
+        assert "Conflicting MIDI attributes found" in str(e)
+        assert "note/velocity, program" in str(e)
+
+    # Note + Control should raise ValueError
+    attrs_note_and_control: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(NoteKey(), NoteField.mk(60))
+        .put(ControlNumKey(), ControlNum(7))
+        .put(ControlValKey(), ControlVal(80))
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_note_and_control)
+        assert False, "Should have raised ValueError for note + control"
+    except ValueError as e:
+        assert "Conflicting MIDI attributes found" in str(e)
+        assert "note/velocity, control" in str(e)
+
+    # Program + Control should raise ValueError
+    attrs_program_and_control: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(ProgramKey(), ProgramField.mk(42))
+        .put(ControlNumKey(), ControlNum(7))
+        .put(ControlValKey(), ControlVal(80))
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_program_and_control)
+        assert False, "Should have raised ValueError for program + control"
+    except ValueError as e:
+        assert "Conflicting MIDI attributes found" in str(e)
+        assert "program, control" in str(e)
+
+    # All three types should raise ValueError
+    attrs_all_three: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(NoteKey(), NoteField.mk(60))
+        .put(ProgramKey(), ProgramField.mk(42))
+        .put(ControlNumKey(), ControlNum(7))
+        .put(ControlValKey(), ControlVal(80))
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_all_three)
+        assert False, "Should have raised ValueError for all three types"
+    except ValueError as e:
+        assert "Conflicting MIDI attributes found" in str(e)
+        assert "note/velocity, program, control" in str(e)
+
+
+def test_parse_message_velocity_only_conflicting() -> None:
+    """Test parse_message rejects velocity-only attributes when combined with other types."""
+    # Velocity + Program should raise ValueError (velocity implies note message type)
+    attrs_velocity_and_program: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(VelocityKey(), VelocityField.mk(100))
+        .put(ProgramKey(), ProgramField.mk(42))
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_velocity_and_program)
+        assert False, "Should have raised ValueError for velocity + program"
+    except ValueError as e:
+        assert "Conflicting MIDI attributes found" in str(e)
+        assert "note/velocity, program" in str(e)
+
+    # Velocity + Control should raise ValueError
+    attrs_velocity_and_control: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(VelocityKey(), VelocityField.mk(100))
+        .put(ControlNumKey(), ControlNum(7))
+        .put(ControlValKey(), ControlVal(80))
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_velocity_and_control)
+        assert False, "Should have raised ValueError for velocity + control"
+    except ValueError as e:
+        assert "Conflicting MIDI attributes found" in str(e)
+        assert "note/velocity, control" in str(e)
+
+
+def test_parse_message_control_incomplete() -> None:
+    """Test parse_message handles incomplete control change attributes."""
+    # Only control number, no value - should raise ValueError
+    attrs_control_num_only: MidiAttrs = DMap.empty(MidiDom).put(
+        ControlNumKey(), ControlNum(7)
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_control_num_only)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "Incomplete control change attributes" in str(e)
+        assert "missing control_val" in str(e)
+
+    # Only control value, no number - should raise ValueError
+    attrs_control_val_only: MidiAttrs = DMap.empty(MidiDom).put(
+        ControlValKey(), ControlVal(80)
+    )
+
+    try:
+        parse_message(Orbit(0), attrs_control_val_only)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "Incomplete control change attributes" in str(e)
+        assert "missing control_num" in str(e)
+
+
+def test_parse_message_empty_attributes() -> None:
+    """Test parse_message raises ValueError with empty attributes."""
+    empty_attrs: MidiAttrs = DMap.empty(MidiDom)
+
+    try:
+        parse_message(Orbit(0), empty_attrs)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "Insufficient MIDI attributes" in str(e)
+        assert (
+            "Expected one of: (note), (program), or (control_num + control_val)"
+            in str(e)
+        )
+
+
+def test_parse_message_velocity_only() -> None:
+    """Test parse_message raises ValueError with only velocity (no note)."""
+    velocity_only_attrs: MidiAttrs = DMap.empty(MidiDom).put(
+        VelocityKey(), VelocityField.mk(100)
+    )
+
+    try:
+        parse_message(Orbit(0), velocity_only_attrs)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "Velocity attribute found without note" in str(e)
+        assert "Velocity can only be used with note attributes" in str(e)

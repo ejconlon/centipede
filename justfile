@@ -26,6 +26,10 @@ format:
 
 # Typecheck with mypy
 typecheck:
+  {{python}} -m mypy --config-file=pyproject.toml {{mypy_packages}} -p tests
+
+# Typecheck with mypy - strict mode
+typecheck-strict:
   {{python}} -m mypy --strict --config-file=pyproject.toml {{mypy_packages}} -p tests
 
 # Lint with ruff
