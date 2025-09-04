@@ -481,7 +481,7 @@ class NoteKey(MidiKey[Note]):
     pass
 
 
-class VelKey(MidiKey[Velocity]):
+class VelocityKey(MidiKey[Velocity]):
     """Key for velocity values in MIDI attributes."""
 
     pass
@@ -712,7 +712,7 @@ def _convert_note(s: str) -> MidiAttrs:
 def _convert_vel(s: str) -> MidiAttrs:
     """Convert velocity to MIDI attributes."""
     velocity = VelElemParser.parse(s)
-    return DMap.singleton(VelKey(), velocity)
+    return DMap.singleton(VelocityKey(), velocity)
 
 
 def midinote(s: str) -> Stream[MidiAttrs]:
@@ -829,7 +829,7 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
         for span, ev in events:
             # Extract MIDI attributes
             note_num = ev.val.lookup(NoteKey())
-            velocity = ev.val.lookup(VelKey())
+            velocity = ev.val.lookup(VelocityKey())
 
             # Use defaults if attributes are missing
             note_raw = (

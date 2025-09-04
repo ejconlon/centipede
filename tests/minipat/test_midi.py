@@ -21,9 +21,9 @@ from minipat.midi import (
     NoteField,
     NoteKey,
     ValueField,
-    VelKey,
     Velocity,
     VelocityField,
+    VelocityKey,
     combine,
     echo_system,
     note,
@@ -75,7 +75,7 @@ def test_velocity_parsing() -> None:
     # Check velocity values
     values = []
     for _, event in event_list:
-        vel_val = event.val.lookup(VelKey())
+        vel_val = event.val.lookup(VelocityKey())
         if vel_val is not None:
             values.append(int(vel_val))
 
@@ -103,7 +103,7 @@ def test_combine_streams() -> None:
 
     for _, event in event_list:
         note_val = event.val.lookup(NoteKey())
-        vel_val = event.val.lookup(VelKey())
+        vel_val = event.val.lookup(VelocityKey())
 
         # At least one should have both attributes
         if note_val is not None and vel_val is not None:
@@ -122,7 +122,7 @@ def test_midi_processor() -> None:
     midi_attrs: MidiAttrs = (
         DMap.empty(MidiDom)
         .put(NoteKey(), NoteField.mk(60))
-        .put(VelKey(), VelocityField.mk(80))
+        .put(VelocityKey(), VelocityField.mk(80))
     )
 
     # Create test event heap
@@ -234,7 +234,7 @@ def test_midi_processor_clamps_values() -> None:
 
     # Create MIDI attributes with out-of-range values (bypass validation for testing)
     midi_attrs: MidiAttrs = (
-        DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelKey(), Velocity(-10))
+        DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelocityKey(), Velocity(-10))
     )
 
     from minipat.arc import Arc, Span
