@@ -6,13 +6,13 @@ from minipat.pat import (
 )
 
 
-def test_pat_silence():
+def test_pat_silence() -> None:
     """Test silence pattern creation."""
     empty: Pat[str] = Pat.silence()
     assert empty.unwrap is not None
 
 
-def test_pat_pure():
+def test_pat_pure() -> None:
     """Test pure pattern creation."""
     pure = Pat.pure("test")
 
@@ -20,7 +20,7 @@ def test_pat_pure():
     assert pure.unwrap.value == "test"
 
 
-def test_pat_seq():
+def test_pat_seq() -> None:
     """Test sequence pattern creation."""
     pats = [Pat.pure("a"), Pat.pure("b"), Pat.pure("c")]
     seq = Pat.seq(pats)
@@ -28,7 +28,7 @@ def test_pat_seq():
     assert isinstance(seq.unwrap, PatSeq)
 
 
-def test_pat_par():
+def test_pat_par() -> None:
     """Test parallel pattern creation."""
     pats = [Pat.pure("a"), Pat.pure("b"), Pat.pure("c")]
     par = Pat.par(pats)
@@ -36,7 +36,7 @@ def test_pat_par():
     assert isinstance(par.unwrap, PatPar)
 
 
-def test_pat_map():
+def test_pat_map() -> None:
     """Test pattern mapping."""
     pat = Pat.pure(5)
     mapped = pat.map(lambda x: x * 2)

@@ -69,7 +69,7 @@ def format_fraction(frac: Fraction) -> str:
 class TimeOps[T, D](metaclass=ABCMeta):
     """Operations on times (T) and their deltas (D)."""
 
-    def __new__(cls):
+    def __new__(cls) -> None:
         raise Exception("Cannot instantiate namespace")
 
     @classmethod

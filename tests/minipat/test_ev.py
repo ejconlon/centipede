@@ -5,7 +5,7 @@ from minipat.common import CycleDelta, CycleTime
 from minipat.ev import Ev
 
 
-def test_ev_creation():
+def test_ev_creation() -> None:
     """Test basic Ev creation."""
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     span = Span(active=arc, whole=None)
@@ -14,7 +14,7 @@ def test_ev_creation():
     assert ev.val == "test"
 
 
-def test_ev_shift():
+def test_ev_shift() -> None:
     """Test Ev shift operation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     span = Span(active=arc, whole=None)
@@ -25,7 +25,7 @@ def test_ev_shift():
     assert shifted.val == "test"
 
 
-def test_ev_scale():
+def test_ev_scale() -> None:
     """Test Ev scale operation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     span = Span(active=arc, whole=None)
@@ -36,7 +36,7 @@ def test_ev_scale():
     assert scaled.val == "test"
 
 
-def test_ev_clip():
+def test_ev_clip() -> None:
     """Test Ev clip operation."""
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
     span = Span(active=arc, whole=None)

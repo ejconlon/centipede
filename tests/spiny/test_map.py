@@ -2,7 +2,7 @@ from spiny.map import PMap
 from spiny.set import PSet
 
 
-def test_empty_map():
+def test_empty_map() -> None:
     """Test creating an empty PMap and asserting it is empty"""
     map_obj = PMap.empty(int, str)
     assert map_obj.null()
@@ -12,7 +12,7 @@ def test_empty_map():
     assert list(map_obj.values()) == []
 
 
-def test_singleton_put():
+def test_singleton_put() -> None:
     """Test putting a single key-value pair"""
     empty_map = PMap.empty(int, str)
     single_map = empty_map.put(42, "forty-two")
@@ -24,7 +24,7 @@ def test_singleton_put():
     assert list(single_map.items()) == [(42, "forty-two")]
 
 
-def test_singleton_method():
+def test_singleton_method() -> None:
     """Test creating a singleton map directly"""
     single_map = PMap.singleton(42, "forty-two")
 
@@ -34,7 +34,7 @@ def test_singleton_method():
     assert list(single_map.items()) == [(42, "forty-two")]
 
 
-def test_multiple_puts():
+def test_multiple_puts() -> None:
     """Test putting multiple key-value pairs"""
     map_obj = PMap.empty(int, str)
 
@@ -54,7 +54,7 @@ def test_multiple_puts():
     assert result_values == ["one", "two", "three", "four"]
 
 
-def test_duplicate_puts():
+def test_duplicate_puts() -> None:
     """Test that putting the same key multiple times overwrites the value"""
     map_obj = PMap.empty(int, str)
 
@@ -65,7 +65,7 @@ def test_duplicate_puts():
     assert map_obj.get(42) == "third"
 
 
-def test_put_ordering():
+def test_put_ordering() -> None:
     """Test that keys maintain sorted order after puts"""
     map_obj = PMap.empty(int, str)
     pairs = [
@@ -85,7 +85,7 @@ def test_put_ordering():
     assert map_obj.size() == len(pairs)
 
 
-def test_mk_from_iterable():
+def test_mk_from_iterable() -> None:
     """Test creating a map from an iterable"""
     pairs = [(3, "three"), (1, "one"), (4, "four"), (1, "ONE"), (5, "five")]
     map_obj = PMap.mk(pairs)
@@ -96,7 +96,7 @@ def test_mk_from_iterable():
     assert map_obj.size() == 4
 
 
-def test_mk_empty_iterable():
+def test_mk_empty_iterable() -> None:
     """Test creating a map from an empty iterable"""
     map_obj: PMap[int, str] = PMap.mk([])
     assert map_obj.null()
@@ -104,7 +104,7 @@ def test_mk_empty_iterable():
     assert list(map_obj.items()) == []
 
 
-def test_put_operator_right():
+def test_put_operator_right() -> None:
     """Test >> operator for putting"""
     map_obj = PMap.empty(int, str)
     map_obj = map_obj >> (42, "forty-two") >> (24, "twenty-four") >> (13, "thirteen")
@@ -115,7 +115,7 @@ def test_put_operator_right():
     assert map_obj.get(13) == "thirteen"
 
 
-def test_put_operator_left():
+def test_put_operator_left() -> None:
     """Test << operator for putting"""
     map_obj = PMap.empty(int, str)
     map_obj = (42, "forty-two") << (
@@ -128,7 +128,7 @@ def test_put_operator_left():
     assert map_obj.get(13) == "thirteen"
 
 
-def test_string_keys():
+def test_string_keys() -> None:
     """Test map with string keys"""
     map_obj = PMap.empty(str, int)
     map_obj = map_obj.put("hello", 5).put("world", 5).put("abc", 3)
@@ -139,7 +139,7 @@ def test_string_keys():
     assert set(result_keys) == {"hello", "world", "abc"}
 
 
-def test_large_map_insertion():
+def test_large_map_insertion() -> None:
     """Test putting many key-value pairs to verify tree balancing"""
     map_obj = PMap.empty(int, str)
     pairs = [(i, f"value_{i}") for i in range(100)]
@@ -156,7 +156,7 @@ def test_large_map_insertion():
     assert list(map_obj.keys()) == list(range(100))
 
 
-def test_put_with_overwrites_mixed():
+def test_put_with_overwrites_mixed() -> None:
     """Test putting with mixed overwrites"""
     map_obj = PMap.empty(int, str)
 
@@ -180,7 +180,7 @@ def test_put_with_overwrites_mixed():
     assert map_obj.get(4) == "four"
 
 
-def test_put_negative_numbers():
+def test_put_negative_numbers() -> None:
     """Test putting with negative number keys"""
     map_obj = PMap.empty(int, str)
     pairs = [
@@ -200,7 +200,7 @@ def test_put_negative_numbers():
     assert list(map_obj.keys()) == expected_keys
 
 
-def test_persistence():
+def test_persistence() -> None:
     """Test that puts create new maps without modifying originals"""
     original = PMap.empty(int, str).put(1, "one").put(2, "two")
     modified = original.put(3, "three")
@@ -214,7 +214,7 @@ def test_persistence():
     assert modified.size() == 3
 
 
-def test_chained_puts():
+def test_chained_puts() -> None:
     """Test chaining multiple puts"""
     result = (
         PMap.empty(int, str)
@@ -235,7 +235,7 @@ def test_chained_puts():
     ]
 
 
-def test_put_same_key_returns_new_instance():
+def test_put_same_key_returns_new_instance() -> None:
     """Test that putting a new value for existing key returns new map"""
     map_obj = PMap.empty(int, str).put(42, "first")
     new_map = map_obj.put(42, "second")
@@ -246,7 +246,7 @@ def test_put_same_key_returns_new_instance():
     assert new_map.get(42) == "second"
 
 
-def test_get_nonexistent_key():
+def test_get_nonexistent_key() -> None:
     """Test getting a key that doesn't exist"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
 
@@ -256,7 +256,7 @@ def test_get_nonexistent_key():
     assert not map_obj.contains(0)
 
 
-def test_contains():
+def test_contains() -> None:
     """Test contains method"""
     map_obj = PMap.mk([(1, "one"), (3, "three"), (5, "five")])
 
@@ -268,7 +268,7 @@ def test_contains():
     assert not map_obj.contains(0)
 
 
-def test_remove_existing_key():
+def test_remove_existing_key() -> None:
     """Test removing existing keys"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four")])
 
@@ -288,7 +288,7 @@ def test_remove_existing_key():
     assert result2.get(4) == "four"
 
 
-def test_remove_nonexistent_key():
+def test_remove_nonexistent_key() -> None:
     """Test removing a key that doesn't exist"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     result = map_obj.remove(4)
@@ -298,7 +298,7 @@ def test_remove_nonexistent_key():
     assert list(result.items()) == list(map_obj.items())
 
 
-def test_remove_all_keys():
+def test_remove_all_keys() -> None:
     """Test removing all keys one by one"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
 
@@ -307,7 +307,7 @@ def test_remove_all_keys():
     assert result.size() == 0
 
 
-def test_merge_empty_maps():
+def test_merge_empty_maps() -> None:
     """Test merging empty maps"""
     empty1 = PMap.empty(int, str)
     empty2 = PMap.empty(int, str)
@@ -318,7 +318,7 @@ def test_merge_empty_maps():
     assert list(result.items()) == []
 
 
-def test_merge_empty_with_non_empty():
+def test_merge_empty_with_non_empty() -> None:
     """Test merging empty map with non-empty map"""
     empty_map = PMap.empty(int, str)
     non_empty = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
@@ -332,7 +332,7 @@ def test_merge_empty_with_non_empty():
     assert result2.size() == 3
 
 
-def test_merge_disjoint_maps():
+def test_merge_disjoint_maps() -> None:
     """Test merging maps with no common keys"""
     map1 = PMap.mk([(1, "one"), (3, "three"), (5, "five")])
     map2 = PMap.mk([(2, "two"), (4, "four"), (6, "six")])
@@ -350,7 +350,7 @@ def test_merge_disjoint_maps():
     ]
 
 
-def test_merge_overlapping_maps():
+def test_merge_overlapping_maps() -> None:
     """Test merging maps with some common keys"""
     map1 = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four")])
     map2 = PMap.mk([(3, "THREE"), (4, "FOUR"), (5, "five"), (6, "six")])
@@ -370,7 +370,7 @@ def test_merge_overlapping_maps():
     assert list(result.items()) == expected_items
 
 
-def test_split_method():
+def test_split_method() -> None:
     """Test the enhanced split method with key lookup"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")])
 
@@ -412,7 +412,7 @@ def test_split_method():
     assert larger4.null()
 
 
-def test_split_empty_map():
+def test_split_empty_map() -> None:
     """Test split on empty map"""
     empty = PMap.empty(int, str)
     smaller, found_value, larger = empty.split(5)
@@ -422,7 +422,7 @@ def test_split_empty_map():
     assert larger.null()
 
 
-def test_split_single_entry():
+def test_split_single_entry() -> None:
     """Test split on single-entry map"""
     single = PMap.singleton(5, "five")
 
@@ -445,7 +445,7 @@ def test_split_single_entry():
     assert larger3.null()
 
 
-def test_split_with_none_values():
+def test_split_with_none_values() -> None:
     """Test split method with None values"""
     map_obj = PMap.mk([(1, None), (2, "two"), (3, None)])
 
@@ -463,7 +463,7 @@ def test_split_with_none_values():
     assert list(larger2.items()) == [(3, None), (5, "five")]
 
 
-def test_split_string_keys():
+def test_split_string_keys() -> None:
     """Test split method with string keys"""
     map_obj = PMap.mk([("apple", 1), ("banana", 2), ("cherry", 3), ("date", 4)])
 
@@ -473,7 +473,7 @@ def test_split_string_keys():
     assert list(larger.items()) == [("cherry", 3), ("date", 4)]
 
 
-def test_merge_identical_maps():
+def test_merge_identical_maps() -> None:
     """Test merging identical maps"""
     map1 = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     map2 = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
@@ -484,7 +484,7 @@ def test_merge_identical_maps():
     assert list(result.items()) == [(1, "one"), (2, "two"), (3, "three")]
 
 
-def test_merge_subset_maps():
+def test_merge_subset_maps() -> None:
     """Test merging when one map is a subset of another"""
     map1 = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")])
     map2 = PMap.mk([(2, "TWO"), (4, "FOUR")])
@@ -503,7 +503,7 @@ def test_merge_subset_maps():
     assert result2.size() == 5
 
 
-def test_merge_single_entry_maps():
+def test_merge_single_entry_maps() -> None:
     """Test merging single entry maps"""
     map1 = PMap.singleton(1, "one")
     map2 = PMap.singleton(2, "two")
@@ -519,7 +519,7 @@ def test_merge_single_entry_maps():
     assert result2.size() == 1
 
 
-def test_merge_large_maps():
+def test_merge_large_maps() -> None:
     """Test merging large maps"""
     map1 = PMap.mk([(i, f"even_{i}") for i in range(0, 100, 2)])  # Even numbers 0-98
     map2 = PMap.mk([(i, f"odd_{i}") for i in range(1, 100, 2)])  # Odd numbers 1-99
@@ -530,7 +530,7 @@ def test_merge_large_maps():
     assert list(result.keys()) == list(range(100))
 
 
-def test_merge_string_maps():
+def test_merge_string_maps() -> None:
     """Test merging maps with string keys"""
     map1 = PMap.mk([("apple", 1), ("banana", 2), ("cherry", 3)])
     map2 = PMap.mk([("banana", 20), ("date", 4), ("elderberry", 5)])
@@ -548,7 +548,7 @@ def test_merge_string_maps():
     assert result.size() == 5
 
 
-def test_merge_operator_plus():
+def test_merge_operator_plus() -> None:
     """Test merge using + operator"""
     map1 = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     map2 = PMap.mk([(3, "THREE"), (4, "four"), (5, "five")])
@@ -566,7 +566,7 @@ def test_merge_operator_plus():
     assert result.size() == 5
 
 
-def test_merge_chaining():
+def test_merge_chaining() -> None:
     """Test chaining multiple merge operations"""
     map1 = PMap.mk([(1, "one"), (2, "two")])
     map2 = PMap.mk([(3, "three"), (4, "four")])
@@ -586,7 +586,7 @@ def test_merge_chaining():
     assert result.size() == 6
 
 
-def test_merge_persistence():
+def test_merge_persistence() -> None:
     """Test that merge operations don't modify original maps"""
     map1 = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     map2 = PMap.mk([(4, "four"), (5, "five"), (6, "six")])
@@ -615,7 +615,7 @@ def test_merge_persistence():
     assert result.size() == 6
 
 
-def test_merge_negative_numbers():
+def test_merge_negative_numbers() -> None:
     """Test merging maps with negative number keys"""
     map1 = PMap.mk([(-3, "neg_three"), (-1, "neg_one"), (1, "one"), (3, "three")])
     map2 = PMap.mk([(-2, "neg_two"), (0, "zero"), (2, "two")])
@@ -635,14 +635,14 @@ def test_merge_negative_numbers():
     assert result.size() == 7
 
 
-def test_find_min_empty_map():
+def test_find_min_empty_map() -> None:
     """Test find_min on empty map returns None"""
     empty_map = PMap.empty(int, str)
     result = empty_map.find_min()
     assert result is None
 
 
-def test_find_min_singleton():
+def test_find_min_singleton() -> None:
     """Test find_min on singleton map"""
     single_map = PMap.singleton(42, "forty-two")
     result = single_map.find_min()
@@ -655,7 +655,7 @@ def test_find_min_singleton():
     assert remaining.size() == 0
 
 
-def test_find_min_multiple_entries():
+def test_find_min_multiple_entries() -> None:
     """Test find_min on map with multiple entries"""
     map_obj = PMap.mk([(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine")])
     result = map_obj.find_min()
@@ -673,7 +673,7 @@ def test_find_min_multiple_entries():
     ]
 
 
-def test_find_min_negative_numbers():
+def test_find_min_negative_numbers() -> None:
     """Test find_min with negative number keys"""
     map_obj = PMap.mk(
         [
@@ -702,7 +702,7 @@ def test_find_min_negative_numbers():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_min_strings():
+def test_find_min_strings() -> None:
     """Test find_min with string keys"""
     map_obj = PMap.mk([("zebra", 1), ("apple", 2), ("banana", 3), ("cherry", 4)])
     result = map_obj.find_min()
@@ -716,7 +716,7 @@ def test_find_min_strings():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_min_persistence():
+def test_find_min_persistence() -> None:
     """Test that find_min doesn't modify original map"""
     original = PMap.mk([(3, "three"), (1, "one"), (4, "four"), (2, "two")])
     original_items = list(original.items())
@@ -737,7 +737,7 @@ def test_find_min_persistence():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_min_repeated_calls():
+def test_find_min_repeated_calls() -> None:
     """Test repeated calls to find_min to extract all entries"""
     original = PMap.mk(
         [(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine"), (3, "three")]
@@ -765,14 +765,14 @@ def test_find_min_repeated_calls():
     assert current.null()
 
 
-def test_find_max_empty_map():
+def test_find_max_empty_map() -> None:
     """Test find_max on empty map returns None"""
     empty_map = PMap.empty(int, str)
     result = empty_map.find_max()
     assert result is None
 
 
-def test_find_max_singleton():
+def test_find_max_singleton() -> None:
     """Test find_max on singleton map"""
     single_map = PMap.singleton(42, "forty-two")
     result = single_map.find_max()
@@ -785,7 +785,7 @@ def test_find_max_singleton():
     assert remaining.size() == 0
 
 
-def test_find_max_multiple_entries():
+def test_find_max_multiple_entries() -> None:
     """Test find_max on map with multiple entries"""
     map_obj = PMap.mk([(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine")])
     result = map_obj.find_max()
@@ -799,7 +799,7 @@ def test_find_max_multiple_entries():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_max_negative_numbers():
+def test_find_max_negative_numbers() -> None:
     """Test find_max with negative number keys"""
     map_obj = PMap.mk(
         [
@@ -828,7 +828,7 @@ def test_find_max_negative_numbers():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_max_strings():
+def test_find_max_strings() -> None:
     """Test find_max with string keys"""
     map_obj = PMap.mk([("zebra", 1), ("apple", 2), ("banana", 3), ("cherry", 4)])
     result = map_obj.find_max()
@@ -842,7 +842,7 @@ def test_find_max_strings():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_max_persistence():
+def test_find_max_persistence() -> None:
     """Test that find_max doesn't modify original map"""
     original = PMap.mk([(3, "three"), (1, "one"), (4, "four"), (2, "two")])
     original_items = list(original.items())
@@ -863,7 +863,7 @@ def test_find_max_persistence():
     assert list(remaining.items()) == expected_remaining
 
 
-def test_find_max_repeated_calls():
+def test_find_max_repeated_calls() -> None:
     """Test repeated calls to find_max to extract all entries"""
     original = PMap.mk(
         [(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine"), (3, "three")]
@@ -891,14 +891,14 @@ def test_find_max_repeated_calls():
     assert current.null()
 
 
-def test_delete_min_empty_map():
+def test_delete_min_empty_map() -> None:
     """Test delete_min on empty map returns None"""
     empty_map = PMap.empty(int, str)
     result = empty_map.delete_min()
     assert result is None
 
 
-def test_delete_min_singleton():
+def test_delete_min_singleton() -> None:
     """Test delete_min on singleton map"""
     single_map = PMap.singleton(42, "forty-two")
     result = single_map.delete_min()
@@ -908,7 +908,7 @@ def test_delete_min_singleton():
     assert result.size() == 0
 
 
-def test_delete_min_multiple_entries():
+def test_delete_min_multiple_entries() -> None:
     """Test delete_min on map with multiple entries"""
     map_obj = PMap.mk([(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine")])
     result = map_obj.delete_min()
@@ -919,7 +919,7 @@ def test_delete_min_multiple_entries():
     assert list(result.items()) == expected
 
 
-def test_delete_min_consistency_with_find_min():
+def test_delete_min_consistency_with_find_min() -> None:
     """Test that delete_min is consistent with find_min"""
     map_obj = PMap.mk(
         [
@@ -945,14 +945,14 @@ def test_delete_min_consistency_with_find_min():
     assert delete_result.size() == remaining_from_find.size()
 
 
-def test_delete_max_empty_map():
+def test_delete_max_empty_map() -> None:
     """Test delete_max on empty map returns None"""
     empty_map = PMap.empty(int, str)
     result = empty_map.delete_max()
     assert result is None
 
 
-def test_delete_max_singleton():
+def test_delete_max_singleton() -> None:
     """Test delete_max on singleton map"""
     single_map = PMap.singleton(42, "forty-two")
     result = single_map.delete_max()
@@ -962,7 +962,7 @@ def test_delete_max_singleton():
     assert result.size() == 0
 
 
-def test_delete_max_multiple_entries():
+def test_delete_max_multiple_entries() -> None:
     """Test delete_max on map with multiple entries"""
     map_obj = PMap.mk([(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine")])
     result = map_obj.delete_max()
@@ -973,7 +973,7 @@ def test_delete_max_multiple_entries():
     assert list(result.items()) == expected
 
 
-def test_delete_max_consistency_with_find_max():
+def test_delete_max_consistency_with_find_max() -> None:
     """Test that delete_max is consistent with find_max"""
     map_obj = PMap.mk(
         [
@@ -999,7 +999,7 @@ def test_delete_max_consistency_with_find_max():
     assert delete_result.size() == remaining_from_find.size()
 
 
-def test_find_min_max_symmetry():
+def test_find_min_max_symmetry() -> None:
     """Test that find_min and find_max work correctly together"""
     map_obj = PMap.mk(
         [(5, "five"), (2, "two"), (8, "eight"), (1, "one"), (9, "nine"), (3, "three")]
@@ -1033,7 +1033,7 @@ def test_find_min_max_symmetry():
     assert list(min_then_max.items()) == list(max_then_min.items())
 
 
-def test_find_max_single_entry_after_operations():
+def test_find_max_single_entry_after_operations() -> None:
     """Test find_max behavior after various operations"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
 
@@ -1052,7 +1052,7 @@ def test_find_max_single_entry_after_operations():
     assert remaining.null()
 
 
-def test_iteration_methods():
+def test_iteration_methods() -> None:
     """Test keys(), values(), and items() iteration methods"""
     map_obj = PMap.mk([(3, "three"), (1, "one"), (4, "four"), (2, "two")])
 
@@ -1072,7 +1072,7 @@ def test_iteration_methods():
     assert len(keys_list) == len(values_list) == len(items_list) == map_obj.size()
 
 
-def test_edge_cases():
+def test_edge_cases() -> None:
     """Test various edge cases"""
     # Empty map operations
     empty = PMap.empty(int, str)
@@ -1093,7 +1093,7 @@ def test_edge_cases():
     assert not map_with_none.contains(3)  # Should not contain non-existent key
 
 
-def test_merge_favors_left_values_on_collision():
+def test_merge_favors_left_values_on_collision() -> None:
     """Test that merging maps favors values from the left map when keys collide"""
     left_map = PMap.mk([(1, "left_one"), (2, "left_two"), (3, "left_three")])
     right_map = PMap.mk([(2, "right_two"), (3, "right_three"), (4, "right_four")])
@@ -1111,7 +1111,7 @@ def test_merge_favors_left_values_on_collision():
     assert list(result.items()) == expected_items
 
 
-def test_keys_set_empty_map():
+def test_keys_set_empty_map() -> None:
     """Test keys_set on empty map returns empty set"""
     empty_map = PMap.empty(int, str)
     keys_set = empty_map.keys_set()
@@ -1121,7 +1121,7 @@ def test_keys_set_empty_map():
     assert list(keys_set.iter()) == []
 
 
-def test_keys_set_singleton():
+def test_keys_set_singleton() -> None:
     """Test keys_set on singleton map"""
     single_map = PMap.singleton(42, "forty-two")
     keys_set = single_map.keys_set()
@@ -1133,7 +1133,7 @@ def test_keys_set_singleton():
     assert not keys_set.contains(43)
 
 
-def test_keys_set_multiple_entries():
+def test_keys_set_multiple_entries() -> None:
     """Test keys_set on map with multiple entries"""
     map_obj = PMap.mk([(3, "three"), (1, "one"), (4, "four"), (2, "two")])
     keys_set = map_obj.keys_set()
@@ -1154,7 +1154,7 @@ def test_keys_set_multiple_entries():
     assert not keys_set.contains(5)
 
 
-def test_keys_set_preserves_order():
+def test_keys_set_preserves_order() -> None:
     """Test that keys_set preserves the sorted order from the map"""
     pairs = [(7, "seven"), (3, "three"), (11, "eleven"), (1, "one"), (9, "nine")]
     map_obj = PMap.mk(pairs)
@@ -1167,7 +1167,7 @@ def test_keys_set_preserves_order():
     assert set_keys == sorted([key for key, _ in pairs])
 
 
-def test_keys_set_with_string_keys():
+def test_keys_set_with_string_keys() -> None:
     """Test keys_set with string keys"""
     map_obj = PMap.mk([("zebra", 1), ("apple", 2), ("banana", 3), ("cherry", 4)])
     keys_set = map_obj.keys_set()
@@ -1180,7 +1180,7 @@ def test_keys_set_with_string_keys():
         assert keys_set.contains(key)
 
 
-def test_keys_set_large_map():
+def test_keys_set_large_map() -> None:
     """Test keys_set on a large map"""
     pairs = [(i, f"value_{i}") for i in range(100)]
     map_obj = PMap.mk(pairs)
@@ -1196,7 +1196,7 @@ def test_keys_set_large_map():
     assert not keys_set.contains(-1)
 
 
-def test_keys_set_type_consistency():
+def test_keys_set_type_consistency() -> None:
     """Test that keys_set returns proper PSet type"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     keys_set = map_obj.keys_set()
@@ -1211,7 +1211,7 @@ def test_keys_set_type_consistency():
     assert keys_set.size() == 3  # Original unchanged
 
 
-def test_keys_set_equivalence_with_manual_creation():
+def test_keys_set_equivalence_with_manual_creation() -> None:
     """Test that keys_set produces equivalent result to manual PSet creation"""
     map_obj = PMap.mk([(5, "five"), (2, "two"), (8, "eight"), (1, "one")])
 
@@ -1230,7 +1230,7 @@ def test_keys_set_equivalence_with_manual_creation():
         assert keys_set.contains(key) == manual_set.contains(key)
 
 
-def test_keys_set_with_negative_keys():
+def test_keys_set_with_negative_keys() -> None:
     """Test keys_set with negative number keys"""
     map_obj = PMap.mk([(-3, "a"), (-1, "b"), (0, "c"), (2, "d"), (-5, "e")])
     keys_set = map_obj.keys_set()
@@ -1243,7 +1243,7 @@ def test_keys_set_with_negative_keys():
         assert keys_set.contains(key)
 
 
-def test_assoc_empty_set():
+def test_assoc_empty_set() -> None:
     """Test assoc with empty set"""
     empty_set = PSet.empty(int)
     result_map = PMap.assoc(empty_set, "default")
@@ -1253,7 +1253,7 @@ def test_assoc_empty_set():
     assert list(result_map.items()) == []
 
 
-def test_assoc_singleton_set():
+def test_assoc_singleton_set() -> None:
     """Test assoc with singleton set"""
     single_set = PSet.singleton(42)
     result_map = PMap.assoc(single_set, "value")
@@ -1264,7 +1264,7 @@ def test_assoc_singleton_set():
     assert list(result_map.items()) == [(42, "value")]
 
 
-def test_assoc_multiple_elements():
+def test_assoc_multiple_elements() -> None:
     """Test assoc with set containing multiple elements"""
     multi_set = PSet.mk([3, 1, 4, 2])
     result_map = PMap.assoc(multi_set, "constant")
@@ -1287,7 +1287,7 @@ def test_assoc_multiple_elements():
         assert result_map.contains(key)
 
 
-def test_assoc_different_value_types():
+def test_assoc_different_value_types() -> None:
     """Test assoc with different value types"""
     keys_set = PSet.mk(["x", "y", "z"])
 
@@ -1311,7 +1311,7 @@ def test_assoc_different_value_types():
     assert list(none_map.items()) == expected_none
 
 
-def test_assoc_preserves_order():
+def test_assoc_preserves_order() -> None:
     """Test that assoc preserves the order from the original set"""
     original_set = PSet.mk([7, 3, 11, 1, 9])
     result_map = PMap.assoc(original_set, "value")
@@ -1324,7 +1324,7 @@ def test_assoc_preserves_order():
     assert set_keys == [1, 3, 7, 9, 11]  # Should be sorted
 
 
-def test_assoc_large_set():
+def test_assoc_large_set() -> None:
     """Test assoc with a large set"""
     large_keys = [str(i) for i in range(50)]
     large_set = PSet.mk(large_keys)
@@ -1344,7 +1344,7 @@ def test_assoc_large_set():
     assert all(v == "constant" for v in all_values)
 
 
-def test_assoc_with_string_keys():
+def test_assoc_with_string_keys() -> None:
     """Test assoc with string keys"""
     string_set = PSet.mk(["apple", "banana", "cherry"])
     result_map = PMap.assoc(string_set, 42)
@@ -1354,7 +1354,7 @@ def test_assoc_with_string_keys():
     assert result_map.size() == 3
 
 
-def test_assoc_round_trip_with_keys_set():
+def test_assoc_round_trip_with_keys_set() -> None:
     """Test round-trip conversion: PSet -> PMap via assoc -> PSet via keys_set"""
     original_set = PSet.mk(["foo", "bar", "baz", "qux"])
 
@@ -1377,7 +1377,7 @@ def test_assoc_round_trip_with_keys_set():
         assert recovered_set.contains(key)
 
 
-def test_assoc_type_consistency():
+def test_assoc_type_consistency() -> None:
     """Test that assoc returns proper PMap type"""
     test_set = PSet.mk([1, 2, 3])
     result_map = PMap.assoc(test_set, "value")
@@ -1392,7 +1392,7 @@ def test_assoc_type_consistency():
     assert result_map.size() == 3  # Original unchanged
 
 
-def test_assoc_with_negative_keys():
+def test_assoc_with_negative_keys() -> None:
     """Test assoc with negative number keys"""
     negative_set = PSet.mk([-5, -1, 0, 3, -10])
     result_map = PMap.assoc(negative_set, "negative_test")
@@ -1405,7 +1405,7 @@ def test_assoc_with_negative_keys():
         assert result_map.get(key) == "negative_test"
 
 
-def test_assoc_efficiency_structure_preservation():
+def test_assoc_efficiency_structure_preservation() -> None:
     """Test that assoc preserves the tree structure efficiently"""
     # Create a set with known structure
     keys = [i for i in range(1, 16)]  # 1 to 15, should create balanced tree
@@ -1423,7 +1423,7 @@ def test_assoc_efficiency_structure_preservation():
         assert result_map.get(key) == "test"
 
 
-def test_filter_keys_empty():
+def test_filter_keys_empty() -> None:
     """Test filtering keys on an empty map"""
     empty = PMap.empty(int, str)
     filtered = empty.filter_keys(lambda x: x > 0)
@@ -1431,7 +1431,7 @@ def test_filter_keys_empty():
     assert list(filtered.items()) == []
 
 
-def test_filter_keys_single_match():
+def test_filter_keys_single_match() -> None:
     """Test filtering keys on a single entry that matches"""
     single_map = PMap.singleton(5, "five")
     filtered = single_map.filter_keys(lambda x: x > 0)
@@ -1439,7 +1439,7 @@ def test_filter_keys_single_match():
     assert filtered.size() == 1
 
 
-def test_filter_keys_single_no_match():
+def test_filter_keys_single_no_match() -> None:
     """Test filtering keys on a single entry that doesn't match"""
     single_map = PMap.singleton(-5, "negative")
     filtered = single_map.filter_keys(lambda x: x > 0)
@@ -1447,7 +1447,7 @@ def test_filter_keys_single_no_match():
     assert list(filtered.items()) == []
 
 
-def test_filter_keys_multiple():
+def test_filter_keys_multiple() -> None:
     """Test filtering keys on maps with multiple entries"""
     map_obj = PMap.mk(
         [(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five"), (6, "six")]
@@ -1467,7 +1467,7 @@ def test_filter_keys_multiple():
     ]
 
 
-def test_filter_keys_all_match():
+def test_filter_keys_all_match() -> None:
     """Test filtering keys where all keys match"""
     map_obj = PMap.mk([(2, "two"), (4, "four"), (6, "six"), (8, "eight")])
     filtered = map_obj.filter_keys(lambda x: x % 2 == 0)
@@ -1475,7 +1475,7 @@ def test_filter_keys_all_match():
     assert filtered.size() == 4
 
 
-def test_filter_keys_none_match():
+def test_filter_keys_none_match() -> None:
     """Test filtering keys where no keys match"""
     map_obj = PMap.mk([(1, "one"), (3, "three"), (5, "five"), (7, "seven")])
     filtered = map_obj.filter_keys(lambda x: x % 2 == 0)
@@ -1483,7 +1483,7 @@ def test_filter_keys_none_match():
     assert list(filtered.items()) == []
 
 
-def test_filter_keys_string_keys():
+def test_filter_keys_string_keys() -> None:
     """Test filtering string keys"""
     map_obj = PMap.mk(
         [("apple", 1), ("banana", 2), ("cherry", 3), ("apricot", 4), ("blueberry", 5)]
@@ -1493,7 +1493,7 @@ def test_filter_keys_string_keys():
     assert filtered.size() == 2
 
 
-def test_filter_keys_negative_numbers():
+def test_filter_keys_negative_numbers() -> None:
     """Test filtering keys with negative numbers"""
     map_obj = PMap.mk(
         [
@@ -1514,7 +1514,7 @@ def test_filter_keys_negative_numbers():
     assert filtered.size() == 3
 
 
-def test_filter_keys_persistence():
+def test_filter_keys_persistence() -> None:
     """Test that filter_keys creates new maps without modifying originals"""
     original = PMap.mk([(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five")])
     filtered = original.filter_keys(lambda x: x > 3)
@@ -1534,7 +1534,7 @@ def test_filter_keys_persistence():
     assert filtered.size() == 2
 
 
-def test_map_values_empty():
+def test_map_values_empty() -> None:
     """Test mapping values on an empty map"""
     empty = PMap.empty(int, str)
     mapped = empty.map_values(lambda x: x.upper())
@@ -1542,7 +1542,7 @@ def test_map_values_empty():
     assert list(mapped.items()) == []
 
 
-def test_map_values_single():
+def test_map_values_single() -> None:
     """Test mapping values on a single entry"""
     single_map = PMap.singleton(5, "five")
     mapped = single_map.map_values(lambda x: x.upper())
@@ -1550,7 +1550,7 @@ def test_map_values_single():
     assert mapped.size() == 1
 
 
-def test_map_values_multiple():
+def test_map_values_multiple() -> None:
     """Test mapping values on maps with multiple entries"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     mapped = map_obj.map_values(lambda x: x.upper())
@@ -1561,7 +1561,7 @@ def test_map_values_multiple():
     assert list(map_obj.items()) == [(1, "one"), (2, "two"), (3, "three")]
 
 
-def test_map_values_type_change():
+def test_map_values_type_change() -> None:
     """Test mapping values that changes the value type"""
     map_obj = PMap.mk([(1, "one"), (2, "two"), (3, "three")])
     mapped = map_obj.map_values(lambda x: len(x))  # String -> int
@@ -1569,7 +1569,7 @@ def test_map_values_type_change():
     assert mapped.size() == 3
 
 
-def test_map_values_preserves_structure():
+def test_map_values_preserves_structure() -> None:
     """Test that map_values preserves the tree structure"""
     # Create a large map to test structure preservation
     map_obj = PMap.mk([(i, f"value_{i}") for i in range(20)])
@@ -1584,7 +1584,7 @@ def test_map_values_preserves_structure():
         assert mapped.get(i) == f"VALUE_{i}"
 
 
-def test_map_values_numeric_transformation():
+def test_map_values_numeric_transformation() -> None:
     """Test mapping numeric values"""
     map_obj = PMap.mk([("a", 1), ("b", 2), ("c", 3), ("d", 4)])
     mapped = map_obj.map_values(lambda x: x * 10)
@@ -1592,7 +1592,7 @@ def test_map_values_numeric_transformation():
     assert mapped.size() == 4
 
 
-def test_map_values_complex_transformation():
+def test_map_values_complex_transformation() -> None:
     """Test mapping values with complex transformations"""
     map_obj = PMap.mk([(1, ["a", "b"]), (2, ["c", "d", "e"]), (3, ["f"])])
     mapped = map_obj.map_values(lambda x: len(x))  # List -> length
@@ -1600,7 +1600,7 @@ def test_map_values_complex_transformation():
     assert mapped.size() == 3
 
 
-def test_map_values_persistence():
+def test_map_values_persistence() -> None:
     """Test that map_values creates new maps without modifying originals"""
     original = PMap.mk([(1, "hello"), (2, "world"), (3, "test")])
     mapped = original.map_values(lambda x: x.upper())
@@ -1614,7 +1614,7 @@ def test_map_values_persistence():
     assert mapped.size() == 3
 
 
-def test_method_chaining_filter_and_map():
+def test_method_chaining_filter_and_map() -> None:
     """Test chaining filter_keys and map_values operations"""
     map_obj = PMap.mk(
         [(1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five"), (6, "six")]
@@ -1641,7 +1641,7 @@ def test_method_chaining_filter_and_map():
     ]
 
 
-def test_map_values_with_none_values():
+def test_map_values_with_none_values() -> None:
     """Test map_values behavior with None values"""
     map_obj = PMap.mk([(1, None), (2, "hello"), (3, None)])
     mapped = map_obj.map_values(lambda x: "empty" if x is None else x.upper())
@@ -1649,7 +1649,7 @@ def test_map_values_with_none_values():
     assert mapped.size() == 3
 
 
-def test_filter_keys_large_map():
+def test_filter_keys_large_map() -> None:
     """Test filter_keys on large map"""
     map_obj = PMap.mk([(i, f"value_{i}") for i in range(100)])
     filtered = map_obj.filter_keys(lambda x: x % 10 == 0)  # Multiples of 10
@@ -1658,7 +1658,7 @@ def test_filter_keys_large_map():
     assert filtered.size() == len(expected)
 
 
-def test_map_values_large_map():
+def test_map_values_large_map() -> None:
     """Test map_values on large map"""
     map_obj = PMap.mk([(i, i) for i in range(50)])
     mapped = map_obj.map_values(lambda x: x * 2)

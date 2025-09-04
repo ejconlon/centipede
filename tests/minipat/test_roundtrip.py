@@ -37,7 +37,7 @@ def round_trip_test(pattern_str: str, expected_str: str | None = None) -> None:
     assert type(parsed.unwrap) is type(reparsed.unwrap)
 
 
-def test_basic_patterns():
+def test_basic_patterns() -> None:
     """Test basic pattern elements."""
     round_trip_test("x")
     round_trip_test("~")
@@ -45,7 +45,7 @@ def test_basic_patterns():
     round_trip_test("hh")
 
 
-def test_sequence_patterns():
+def test_sequence_patterns() -> None:
     """Test sequence patterns."""
     round_trip_test("x y")
     round_trip_test("bd sd hh")
@@ -53,7 +53,7 @@ def test_sequence_patterns():
     round_trip_test("a b c d")
 
 
-def test_sample_selection():
+def test_sample_selection() -> None:
     """Test sample selection patterns."""
     round_trip_test("bd:0")
     round_trip_test("sd:1")
@@ -62,7 +62,7 @@ def test_sample_selection():
     round_trip_test("foo:bar")
 
 
-def test_repetition_patterns():
+def test_repetition_patterns() -> None:
     """Test repetition and speed patterns."""
     round_trip_test("x*9")
     round_trip_test("bd*3")
@@ -71,42 +71,42 @@ def test_repetition_patterns():
     round_trip_test("hh*2/3")
 
 
-def test_elongation_patterns():
+def test_elongation_patterns() -> None:
     """Test elongation patterns."""
     round_trip_test("x_")
     round_trip_test("bd__")
     round_trip_test("hh___")
 
 
-def test_probability_patterns():
+def test_probability_patterns() -> None:
     """Test probability patterns."""
     round_trip_test("x?")
     round_trip_test("bd?")
     round_trip_test("hh? sd?")
 
 
-def test_choice_patterns():
+def test_choice_patterns() -> None:
     """Test choice patterns."""
     round_trip_test("[x | y]", "[x | y]")
     round_trip_test("[bd | sd | cp]", "[bd | sd | cp]")
     round_trip_test("[bd | sd]", "[bd | sd]")
 
 
-def test_parallel_patterns():
+def test_parallel_patterns() -> None:
     """Test parallel patterns."""
     round_trip_test("[x, y]", "[x, y]")
     round_trip_test("[bd, sd, cp]", "[bd, sd, cp]")
     round_trip_test("[bd, sd]", "[bd, sd]")
 
 
-def test_alternating_patterns():
+def test_alternating_patterns() -> None:
     """Test alternating patterns."""
     round_trip_test("<x y>", "<x y>")
     round_trip_test("<bd sd cp>", "<bd sd cp>")
     round_trip_test("<bd sd>", "<bd sd>")
 
 
-def test_euclidean_patterns():
+def test_euclidean_patterns() -> None:
     """Test Euclidean rhythm patterns."""
     round_trip_test("x(1,2)")
     round_trip_test("bd(3,8)")
@@ -114,7 +114,7 @@ def test_euclidean_patterns():
     round_trip_test("hh(7,16)")
 
 
-def test_polymetric_patterns():
+def test_polymetric_patterns() -> None:
     """Test polymetric patterns."""
     round_trip_test("{x, y}", "{x, y}")
     round_trip_test("{bd, sd}", "{bd, sd}")
@@ -122,7 +122,7 @@ def test_polymetric_patterns():
     round_trip_test("{a, b, c}", "{a, b, c}")
 
 
-def test_complex_patterns():
+def test_complex_patterns() -> None:
     """Test complex nested patterns."""
     round_trip_test("bd*3 sd")
     round_trip_test("bd:0*2 sd:1/2")
@@ -131,7 +131,7 @@ def test_complex_patterns():
     round_trip_test("bd? [sd | cp] hh*4")
 
 
-def test_grouped_sequences():
+def test_grouped_sequences() -> None:
     """Test that grouped sequences are handled correctly."""
     # Simple grouped sequences become regular sequences (brackets removed)
     round_trip_test("[bd sd]", "bd sd")  # Brackets are removed for single sequences
@@ -142,7 +142,7 @@ def test_grouped_sequences():
     )  # Structure preserved - element plus nested sequence plus element
 
 
-def test_whitespace_normalization():
+def test_whitespace_normalization() -> None:
     """Test that whitespace is normalized correctly."""
     # These should normalize to standard spacing
     patterns_with_expected = [
@@ -156,7 +156,7 @@ def test_whitespace_normalization():
         round_trip_test(original, expected)
 
 
-def test_patpar_now_printable():
+def test_patpar_now_printable() -> None:
     """Test that PatPar patterns can now be printed as parallel notation."""
     # Create a PatPar pattern directly (not through parsing)
     from minipat.pat import Pat
@@ -168,7 +168,7 @@ def test_patpar_now_printable():
     assert result == "[bd, sd]"
 
 
-def test_custom_probability_printable():
+def test_custom_probability_printable() -> None:
     """Test that custom probability values are printable."""
     from fractions import Fraction
 
@@ -179,13 +179,13 @@ def test_custom_probability_printable():
     assert result == "bd?(3/4)"
 
 
-def test_empty_pattern_fails():
+def test_empty_pattern_fails() -> None:
     """Test that empty patterns fail to parse."""
     with pytest.raises(Exception):
         parse_pattern("")
 
 
-def test_invalid_syntax_fails():
+def test_invalid_syntax_fails() -> None:
     """Test that invalid syntax fails to parse."""
     invalid_patterns = [
         "bd(",
@@ -209,7 +209,7 @@ def test_invalid_syntax_fails():
             parse_pattern(pattern)
 
 
-def test_single_element_sequences():
+def test_single_element_sequences() -> None:
     """Test that single-element sequences are simplified."""
     # A sequence with one element should print as just that element
     parsed = parse_pattern("bd")
@@ -217,14 +217,14 @@ def test_single_element_sequences():
     assert printed == "bd"
 
 
-def test_nested_sequences_preserve_grouping():
+def test_nested_sequences_preserve_grouping() -> None:
     """Test behavior with nested sequences."""
     # Sequences should preserve explicit grouping
     round_trip_test("bd sd")
     round_trip_test("[bd sd] cp")  # Preserve grouping
 
 
-def test_drum_patterns():
+def test_drum_patterns() -> None:
     """Test typical drum patterns."""
     drum_patterns = [
         ("bd ~ sd ~", None),
@@ -239,7 +239,7 @@ def test_drum_patterns():
         round_trip_test(pattern, expected)
 
 
-def test_melodic_patterns():
+def test_melodic_patterns() -> None:
     """Test patterns that might represent melodies."""
     melodic_patterns = [
         ("c4 e4 g4 c5", None),
@@ -253,7 +253,7 @@ def test_melodic_patterns():
         round_trip_test(pattern, expected)
 
 
-def test_complex_compositions():
+def test_complex_compositions() -> None:
     """Test complex compositional patterns."""
     complex_patterns = [
         ("bd*2 [sd cp] ~ {hh*4, oh}", None),  # Preserve grouping
@@ -269,28 +269,28 @@ def test_complex_compositions():
 # New TidalCycles features round-trip tests
 
 
-def test_replicate_roundtrip():
+def test_replicate_roundtrip() -> None:
     """Test replicate patterns round-trip correctly."""
     round_trip_test("bd!3")
     round_trip_test("sd!2")
     round_trip_test("hh!5")
 
 
-def test_ratio_roundtrip():
+def test_ratio_roundtrip() -> None:
     """Test ratio patterns round-trip correctly."""
     round_trip_test("bd*3%2")
     round_trip_test("sd*4%3")
     round_trip_test("hh*2%1", "hh*2")
 
 
-def test_polymetric_subdivision_roundtrip():
+def test_polymetric_subdivision_roundtrip() -> None:
     """Test polymetric subdivision patterns round-trip correctly."""
     round_trip_test("{bd, sd}%4")
     round_trip_test("{hh, cp, oh}%8")
     round_trip_test("{bd sd, hh*2}%2")
 
 
-def test_dot_grouping_roundtrip():
+def test_dot_grouping_roundtrip() -> None:
     """Test dot grouping patterns round-trip correctly."""
     # Note: dot grouping creates sequences, but the printer simplifies them
     # so "bd . sd" becomes "bd sd" which is semantically equivalent
@@ -299,21 +299,21 @@ def test_dot_grouping_roundtrip():
     round_trip_test("a b c . x y z", "[a b c] [x y z]")
 
 
-def test_new_features_combinations():
+def test_new_features_combinations() -> None:
     """Test combinations of new features round-trip correctly."""
     round_trip_test("bd!3 . sd*2%3", "bd!3 sd*2%3")
     round_trip_test("{bd!2, sd}%4")
     round_trip_test("bd*3%2 sd!4")
 
 
-def test_new_features_nested():
+def test_new_features_nested() -> None:
     """Test new features with nested patterns round-trip correctly."""
     round_trip_test("[bd sd]!2")
     round_trip_test("[bd | sd]*3%2")
     round_trip_test("{[bd sd], [hh cp]}%4", "{bd sd, hh cp}%4")
 
 
-def test_new_features_with_existing():
+def test_new_features_with_existing() -> None:
     """Test new features combined with existing features."""
     round_trip_test("bd?!3")
     round_trip_test("bd?*2%3")
@@ -323,7 +323,7 @@ def test_new_features_with_existing():
     round_trip_test("sd:1*4%2", "sd:1*2")
 
 
-def test_new_features_whitespace():
+def test_new_features_whitespace() -> None:
     """Test that whitespace is handled correctly in new features."""
     patterns_with_expected = [
         ("bd ! 3", "bd!3"),
@@ -336,7 +336,7 @@ def test_new_features_whitespace():
         round_trip_test(original, expected)
 
 
-def test_new_features_chaining():
+def test_new_features_chaining() -> None:
     """Test chaining operations with new features."""
     # Note: Current grammar doesn't support direct chaining like bd!2*3
     # For now, we'll test simpler cases that work
@@ -344,7 +344,7 @@ def test_new_features_chaining():
     round_trip_test("[bd sd]*2")  # Just multiply
 
 
-def test_new_features_edge_cases():
+def test_new_features_edge_cases() -> None:
     """Test edge cases with new features."""
     # Zero and negative counts should work in parser but may have special behavior in stream
     round_trip_test("bd!0")

@@ -4,14 +4,14 @@ from minipat.arc import Arc
 from minipat.common import CycleDelta, CycleTime
 
 
-def test_arc_creation():
+def test_arc_creation() -> None:
     """Test basic Arc creation."""
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     assert arc.start == Fraction(0)
     assert arc.end == Fraction(1)
 
 
-def test_arc_empty():
+def test_arc_empty() -> None:
     """Test empty Arc creation."""
     empty = Arc.empty()
     assert empty.null()
@@ -19,20 +19,20 @@ def test_arc_empty():
     assert empty.end == Fraction(0)
 
 
-def test_arc_cycle():
+def test_arc_cycle() -> None:
     """Test Arc cycle creation."""
     cycle_arc = Arc.cycle(2)
     assert cycle_arc.start == Fraction(2)
     assert cycle_arc.end == Fraction(3)
 
 
-def test_arc_length():
+def test_arc_length() -> None:
     """Test Arc length calculation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(4)))
     assert arc.length() == Fraction(3)
 
 
-def test_arc_null():
+def test_arc_null() -> None:
     """Test Arc null detection."""
     # Normal arc should not be null
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -46,7 +46,7 @@ def test_arc_null():
     assert null_arc2.null()
 
 
-def test_arc_normalize():
+def test_arc_normalize() -> None:
     """Test Arc normalization."""
     # Normal arc should remain unchanged
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -64,7 +64,7 @@ def test_arc_normalize():
     assert normalized == zero_arc
 
 
-def test_arc_union():
+def test_arc_union() -> None:
     """Test Arc union operation."""
     arc1 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     arc2 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
@@ -85,7 +85,7 @@ def test_arc_union():
     assert union_non_overlap.end == Fraction(3)
 
 
-def test_arc_intersect():
+def test_arc_intersect() -> None:
     """Test Arc intersection operation."""
     arc1 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     arc2 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
@@ -105,7 +105,7 @@ def test_arc_intersect():
     assert no_intersection.null()
 
 
-def test_arc_shift():
+def test_arc_shift() -> None:
     """Test Arc shift operation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
     shifted = arc.shift(CycleDelta(Fraction(2)))
@@ -122,7 +122,7 @@ def test_arc_shift():
     assert shifted_empty.null()
 
 
-def test_arc_scale():
+def test_arc_scale() -> None:
     """Test Arc scale operation."""
     arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(3)))
     scaled = arc.scale(Fraction(2))
@@ -141,7 +141,7 @@ def test_arc_scale():
     assert neg_scale.null()
 
 
-def test_arc_clip():
+def test_arc_clip() -> None:
     """Test Arc clip operation."""
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
     clipped = arc.clip(Fraction(1, 2))  # Clip to half
@@ -157,7 +157,7 @@ def test_arc_clip():
     assert zero_clip.null()
 
 
-def test_arc_split_cycles():
+def test_arc_split_cycles() -> None:
     """Test Arc split_cycles operation."""
     arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(5, 2)))  # 0.5 to 2.5
     cycles = list(arc.split_cycles())
@@ -181,7 +181,7 @@ def test_arc_split_cycles():
     assert arc2.end == Fraction(5, 2)
 
 
-def test_arc_split_cycles_with_bounds():
+def test_arc_split_cycles_with_bounds() -> None:
     """Test Arc split_cycles with bounds."""
     arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(5, 2)))
     bounds = Arc(CycleTime(Fraction(3, 4)), CycleTime(Fraction(7, 4)))  # 0.75 to 1.75
@@ -201,7 +201,7 @@ def test_arc_split_cycles_with_bounds():
     assert arc1.end == Fraction(2)  # min(2, 5/2) = 2
 
 
-def test_arc_union_all():
+def test_arc_union_all() -> None:
     """Test Arc.union_all static method."""
     arcs = [
         Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))),
@@ -217,7 +217,7 @@ def test_arc_union_all():
     assert empty_union.null()
 
 
-def test_arc_intersect_all():
+def test_arc_intersect_all() -> None:
     """Test Arc.intersect_all static method."""
     arcs = [
         Arc(CycleTime(Fraction(0)), CycleTime(Fraction(3))),

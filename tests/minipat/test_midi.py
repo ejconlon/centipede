@@ -32,7 +32,7 @@ from minipat.midi import (
 from spiny.dmap import DMap
 
 
-def test_note_parsing():
+def test_note_parsing() -> None:
     """Test parsing note names."""
     # Test basic note parsing
     note_stream = note("c4 d4 e4")
@@ -59,7 +59,7 @@ def test_note_parsing():
     assert 64 in values  # E4
 
 
-def test_velocity_parsing():
+def test_velocity_parsing() -> None:
     """Test parsing velocity values."""
     vel_stream = vel("64 80 100")
 
@@ -84,7 +84,7 @@ def test_velocity_parsing():
     assert 100 in values
 
 
-def test_combine_streams():
+def test_combine_streams() -> None:
     """Test combining note and velocity streams."""
     note_stream = note("c4 d4")
     vel_stream = vel("64 80")
@@ -114,7 +114,7 @@ def test_combine_streams():
         assert False, "No event found with both note and velocity"
 
 
-def test_midi_processor():
+def test_midi_processor() -> None:
     """Test MidiProcessor converts MidiAttrs to MIDI messages."""
     processor = MidiProcessor(default_velocity=VelocityField.mk(64))
 
@@ -179,7 +179,7 @@ def test_midi_processor():
     )  # End of arc (1/4 cycle at 2 cps = 0.125 seconds)
 
 
-def test_midi_processor_defaults():
+def test_midi_processor_defaults() -> None:
     """Test MidiProcessor uses defaults for missing attributes."""
     processor = MidiProcessor(default_velocity=VelocityField.mk(100))
 
@@ -212,7 +212,7 @@ def test_midi_processor_defaults():
     assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 72
 
 
-def test_midi_processor_empty_events():
+def test_midi_processor_empty_events() -> None:
     """Test MidiProcessor handles empty event heap."""
     processor = MidiProcessor()
 
@@ -228,7 +228,7 @@ def test_midi_processor_empty_events():
     assert len(message_list) == 0
 
 
-def test_midi_processor_clamps_values():
+def test_midi_processor_clamps_values() -> None:
     """Test MidiProcessor clamps MIDI values to valid range."""
     processor = MidiProcessor()
 
@@ -260,7 +260,7 @@ def test_midi_processor_clamps_values():
     )  # Clamped from -10
 
 
-def test_midi_processor_orbit_as_channel():
+def test_midi_processor_orbit_as_channel() -> None:
     """Test MidiProcessor uses orbit as MIDI channel."""
     processor = MidiProcessor()
 
@@ -290,7 +290,7 @@ def test_midi_processor_orbit_as_channel():
         )
 
 
-def test_echo_system_integration():
+def test_echo_system_integration() -> None:
     """Integration test for echo_system that sends MIDI and verifies echo."""
 
     received_messages: List[FrozenMessage] = []

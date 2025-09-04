@@ -12,7 +12,7 @@ from spiny.common import (
 )
 
 
-def test_entry_comparison():
+def test_entry_comparison() -> None:
     """Test Entry comparison based on keys only."""
     entry1 = Entry("apple", 10)
     entry2 = Entry("banana", 5)
@@ -30,7 +30,7 @@ def test_entry_comparison():
     assert entry1 != entry2
 
 
-def test_entry_comparison_numeric_keys():
+def test_entry_comparison_numeric_keys() -> None:
     """Test Entry comparison with numeric keys."""
     entry1 = Entry(1, "first")
     entry2 = Entry(2, "second")
@@ -45,7 +45,7 @@ def test_entry_comparison_numeric_keys():
     assert entry1 == entry3
 
 
-def test_flip_comparison():
+def test_flip_comparison() -> None:
     """Test Flip wrapper reverses comparison results."""
     # Normal comparison
     assert compare(1, 2) == Ordering.Lt
@@ -58,7 +58,7 @@ def test_flip_comparison():
     assert compare(Flip(1), Flip(1)) == Ordering.Eq
 
 
-def test_flip_with_strings():
+def test_flip_with_strings() -> None:
     """Test Flip with string values."""
     # Normal string comparison
     assert compare("apple", "banana") == Ordering.Lt
@@ -69,7 +69,7 @@ def test_flip_with_strings():
     assert compare(Flip("zebra"), Flip("apple")) == Ordering.Lt
 
 
-def test_flip_ordering_operators():
+def test_flip_ordering_operators() -> None:
     """Test that Flip works with Python comparison operators."""
     # Normal ordering
     assert 1 < 2
@@ -82,7 +82,7 @@ def test_flip_ordering_operators():
     assert Flip(1) == Flip(1)
 
 
-def test_flip_with_entry():
+def test_flip_with_entry() -> None:
     """Test Flip with Entry objects."""
     entry1 = Entry("apple", 1)
     entry2 = Entry("banana", 2)
@@ -94,7 +94,7 @@ def test_flip_with_entry():
     assert compare(Flip(entry1), Flip(entry2)) == Ordering.Gt
 
 
-def test_compare_function():
+def test_compare_function() -> None:
     """Test the compare function with various types."""
     # Integers
     assert compare(1, 2) == Ordering.Lt
@@ -112,7 +112,7 @@ def test_compare_function():
     assert compare(1.5, 1.5) == Ordering.Eq
 
 
-def test_compare_lex_empty_iterators():
+def test_compare_lex_empty_iterators() -> None:
     """Test compare_lex with empty iterators."""
     empty_list: List[int] = []
     gen1: Iterator[int] = (x for x in empty_list)
@@ -120,7 +120,7 @@ def test_compare_lex_empty_iterators():
     assert compare_lex(gen1, gen2) == Ordering.Eq
 
 
-def test_compare_lex_one_empty():
+def test_compare_lex_one_empty() -> None:
     """Test compare_lex when one iterator is empty."""
     empty_list: List[int] = []
     gen1: Iterator[int] = (x for x in empty_list)
@@ -132,14 +132,14 @@ def test_compare_lex_one_empty():
     assert compare_lex(gen1, gen2) == Ordering.Gt
 
 
-def test_compare_lex_equal_sequences():
+def test_compare_lex_equal_sequences() -> None:
     """Test compare_lex with equal sequences."""
     gen1 = (x for x in [1, 2, 3])
     gen2 = (x for x in [1, 2, 3])
     assert compare_lex(gen1, gen2) == Ordering.Eq
 
 
-def test_compare_lex_different_sequences():
+def test_compare_lex_different_sequences() -> None:
     """Test compare_lex with different sequences."""
     # First element different
     gen1 = (x for x in [1, 2, 3])
@@ -156,7 +156,7 @@ def test_compare_lex_different_sequences():
     assert compare_lex(gen1, gen2) == Ordering.Lt
 
 
-def test_compare_lex_different_lengths():
+def test_compare_lex_different_lengths() -> None:
     """Test compare_lex with sequences of different lengths."""
     # Shorter sequence is a prefix of longer
     gen1 = (x for x in [1, 2])
@@ -168,7 +168,7 @@ def test_compare_lex_different_lengths():
     assert compare_lex(gen1, gen2) == Ordering.Gt
 
 
-def test_compare_lex_strings():
+def test_compare_lex_strings() -> None:
     """Test compare_lex with string sequences."""
     gen1 = (x for x in "abc")
     gen2 = (x for x in "abd")
@@ -183,7 +183,7 @@ def test_compare_lex_strings():
     assert compare_lex(gen1, gen2) == Ordering.Eq
 
 
-def test_group_runs_empty():
+def test_group_runs_empty() -> None:
     """Test group_runs with empty iterator."""
     empty_list: List[Tuple[str, int]] = []
     gen: Iterator[Tuple[str, int]] = (x for x in empty_list)
@@ -191,35 +191,35 @@ def test_group_runs_empty():
     assert result == []
 
 
-def test_group_runs_single_element():
+def test_group_runs_single_element() -> None:
     """Test group_runs with single element."""
     gen = (x for x in [("a", 1)])
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))
     assert result == [("a", [1])]
 
 
-def test_group_runs_same_key():
+def test_group_runs_same_key() -> None:
     """Test group_runs with all same keys."""
     gen = (x for x in [("a", 1), ("a", 2), ("a", 3)])
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))
     assert result == [("a", [1, 2, 3])]
 
 
-def test_group_runs_different_keys():
+def test_group_runs_different_keys() -> None:
     """Test group_runs with all different keys."""
     gen = (x for x in [("a", 1), ("b", 2), ("c", 3)])
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))
     assert result == [("a", [1]), ("b", [2]), ("c", [3])]
 
 
-def test_group_runs_mixed():
+def test_group_runs_mixed() -> None:
     """Test group_runs with mixed key patterns."""
     gen = (x for x in [("a", 1), ("a", 2), ("b", 3), ("b", 4), ("a", 5)])
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))
     assert result == [("a", [1, 2]), ("b", [3, 4]), ("a", [5])]
 
 
-def test_group_runs_complex_values():
+def test_group_runs_complex_values() -> None:
     """Test group_runs with complex values."""
     data: List[Tuple[str, Tuple[int, str]]] = [
         ("group1", (1, "first")),
@@ -237,21 +237,21 @@ def test_group_runs_complex_values():
     assert result == expected
 
 
-def test_group_runs_numeric_keys():
+def test_group_runs_numeric_keys() -> None:
     """Test group_runs with numeric keys."""
     gen = (x for x in [(1, "a"), (1, "b"), (2, "c"), (2, "d"), (3, "e")])
     result: List[Tuple[int, List[str]]] = list(group_runs(gen))
     assert result == [(1, ["a", "b"]), (2, ["c", "d"]), (3, ["e"])]
 
 
-def test_group_runs_preserves_order():
+def test_group_runs_preserves_order() -> None:
     """Test that group_runs preserves value order within groups."""
     gen = (x for x in [("x", 3), ("x", 1), ("x", 4), ("y", 2), ("y", 5)])
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))
     assert result == [("x", [3, 1, 4]), ("y", [2, 5])]
 
 
-def test_group_runs_single_key_multiple_runs():
+def test_group_runs_single_key_multiple_runs() -> None:
     """Test group_runs where same key appears in separate runs."""
     gen = (x for x in [("a", 1), ("b", 2), ("a", 3), ("c", 4), ("a", 5)])
     result: List[Tuple[str, List[int]]] = list(group_runs(gen))

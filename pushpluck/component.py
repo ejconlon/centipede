@@ -5,15 +5,15 @@ respond to configuration changes in a type-safe manner.
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Generic, Optional, Type, TypeVar, override
+from typing import Any, Generic, Optional, Type, TypeVar, override
 
 C = TypeVar("C")
 """Type variable for the root configuration type."""
-X = TypeVar("X", bound="MappedComponentConfig")
+X = TypeVar("X", bound="MappedComponentConfig[Any]")
 """Type variable for mapped component configuration types."""
 R = TypeVar("R")
 """Type variable for component result types."""
-K = TypeVar("K", bound="Component")
+K = TypeVar("K", bound="Component[Any, Any]")
 """Type variable for component types."""
 
 

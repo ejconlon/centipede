@@ -6,7 +6,7 @@ from minipat.pat import Pat, RepetitionOp
 from minipat.stream import pat_stream
 
 
-def test_pure_pattern():
+def test_pure_pattern() -> None:
     """Test pure pattern generates single event spanning arc."""
     pattern = Pat.pure("x")
     stream = pat_stream(pattern)
@@ -22,7 +22,7 @@ def test_pure_pattern():
     assert event.val == "x"
 
 
-def test_silence_pattern():
+def test_silence_pattern() -> None:
     """Test silence pattern generates no events."""
     pattern: Pat[str] = Pat.silence()
     stream = pat_stream(pattern)
@@ -34,7 +34,7 @@ def test_silence_pattern():
     assert len(event_list) == 0
 
 
-def test_sequence_pattern():
+def test_sequence_pattern() -> None:
     """Test sequence pattern divides time proportionally."""
     # Pattern equivalent to "x y"
     pattern = Pat.seq([Pat.pure("x"), Pat.pure("y")])
@@ -61,7 +61,7 @@ def test_sequence_pattern():
     assert second_event.val == "y"
 
 
-def test_parallel_pattern():
+def test_parallel_pattern() -> None:
     """Test parallel pattern plays all children simultaneously."""
     # Pattern equivalent to "[x,y]"
     pattern = Pat.par([Pat.pure("x"), Pat.pure("y")])
@@ -87,7 +87,7 @@ def test_parallel_pattern():
     assert any(v == "y" for v in values)
 
 
-def test_repetition_fast():
+def test_repetition_fast() -> None:
     """Test fast repetition pattern."""
     # Pattern equivalent to "x!" with count 2
     base_pattern = Pat.pure("x")
@@ -119,7 +119,7 @@ def test_repetition_fast():
     assert second_event.val == "x"
 
 
-def test_repetition_slow():
+def test_repetition_slow() -> None:
     """Test slow repetition pattern."""
     # Pattern equivalent to "x" slowed down by factor of 2
     base_pattern = Pat.pure("x")
@@ -141,7 +141,7 @@ def test_repetition_slow():
     assert event.val == "x"
 
 
-def test_elongation_pattern():
+def test_elongation_pattern() -> None:
     """Test elongation pattern."""
     # Pattern equivalent to "x@2"
     base_pattern = Pat.pure("x")
@@ -163,7 +163,7 @@ def test_elongation_pattern():
     assert event.val == "x"
 
 
-def test_choice_pattern():
+def test_choice_pattern() -> None:
     """Test choice pattern selects based on cycle."""
     # Pattern with two choices
     pattern = Pat.choice([Pat.pure("x"), Pat.pure("y")])
@@ -192,7 +192,7 @@ def test_choice_pattern():
     _, event1 = event_list1[0]
 
 
-def test_euclidean_pattern():
+def test_euclidean_pattern() -> None:
     """Test euclidean rhythm pattern."""
     # Pattern equivalent to "x(3,8)" - 3 hits in 8 steps
     atom = Pat.pure("x")
@@ -221,7 +221,7 @@ def test_euclidean_pattern():
         assert event.span.active.length() == step_duration
 
 
-def test_polymetric_pattern():
+def test_polymetric_pattern() -> None:
     """Test polymetric pattern plays all patterns simultaneously."""
     # Pattern with multiple rhythmic patterns
     patterns = [
@@ -251,7 +251,7 @@ def test_polymetric_pattern():
     assert any(v == "z" for v in values)
 
 
-def test_alternating_pattern():
+def test_alternating_pattern() -> None:
     """Test alternating pattern cycles through choices."""
     # Pattern that alternates between x and y
     patterns = [Pat.pure("x"), Pat.pure("y")]
@@ -280,7 +280,7 @@ def test_alternating_pattern():
     _, event1 = event_list1[0]
 
 
-def test_probability_pattern():
+def test_probability_pattern() -> None:
     """Test probability pattern (deterministic based on arc)."""
     base_pattern = Pat.pure("x")
     pattern = Pat.probability(base_pattern, Fraction(1))  # Always include
@@ -305,7 +305,7 @@ def test_probability_pattern():
     assert len(event_list_never) == 0
 
 
-def test_complex_nested_pattern():
+def test_complex_nested_pattern() -> None:
     """Test complex nested pattern combining multiple operations."""
     # Pattern equivalent to "[x y]!2" - sequence replicated twice
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
@@ -354,7 +354,7 @@ def test_complex_nested_pattern():
     assert fourth_event.val == "y"
 
 
-def test_empty_sequence():
+def test_empty_sequence() -> None:
     """Test empty sequence generates no events."""
     pattern: Pat[str] = Pat.seq([])
     stream = pat_stream(pattern)
@@ -366,7 +366,7 @@ def test_empty_sequence():
     assert len(event_list) == 0
 
 
-def test_null_arc():
+def test_null_arc() -> None:
     """Test null arc generates no events."""
     pattern = Pat.pure("x")
     stream = pat_stream(pattern)
@@ -378,7 +378,7 @@ def test_null_arc():
     assert len(event_list) == 0
 
 
-def test_partial_arc_query():
+def test_partial_arc_query() -> None:
     """Test querying a partial arc of a sequence."""
     # Pattern "x y z"
     pattern = Pat.seq(
@@ -415,7 +415,7 @@ def test_partial_arc_query():
 # New TidalCycles features stream tests
 
 
-def test_replicate_stream():
+def test_replicate_stream() -> None:
     """Test replicate patterns work with stream processing."""
     from minipat.parser import parse_pattern
 
@@ -442,7 +442,7 @@ def test_replicate_stream():
         assert event.span.active.end == expected_end
 
 
-def test_ratio_stream():
+def test_ratio_stream() -> None:
     """Test ratio patterns work with stream processing."""
     from minipat.parser import parse_pattern
 
@@ -461,7 +461,7 @@ def test_ratio_stream():
         assert event.val == "bd" and len(event_list) >= 1
 
 
-def test_polymetric_subdivision_stream():
+def test_polymetric_subdivision_stream() -> None:
     """Test polymetric subdivision patterns work with stream processing."""
     from minipat.parser import parse_pattern
 
@@ -481,7 +481,7 @@ def test_polymetric_subdivision_stream():
     assert any(v == "sd" for v in values)
 
 
-def test_dot_grouping_stream():
+def test_dot_grouping_stream() -> None:
     """Test dot grouping patterns work with stream processing."""
     from minipat.parser import parse_pattern
 
@@ -504,7 +504,7 @@ def test_dot_grouping_stream():
     assert values[3] == "cp"
 
 
-def test_new_features_stream_integration():
+def test_new_features_stream_integration() -> None:
     """Test that new patterns integrate properly with stream processing."""
     from minipat.parser import parse_pattern
 
@@ -524,7 +524,7 @@ def test_new_features_stream_integration():
         assert len(event_list) > 0
 
 
-def test_complex_new_features_stream():
+def test_complex_new_features_stream() -> None:
     """Test complex combinations of new features with streams."""
     from minipat.parser import parse_pattern
 
@@ -548,7 +548,7 @@ def test_complex_new_features_stream():
 # Tests for sub-cycle splitting - when patterns span across cycle boundaries
 
 
-def test_sequence_sub_cycle_splitting():
+def test_sequence_sub_cycle_splitting() -> None:
     """Test sequence patterns that split across sub-cycles."""
     # Create a sequence pattern: "x y z"
     pattern = Pat.seq(
@@ -582,7 +582,7 @@ def test_sequence_sub_cycle_splitting():
             assert event.span.active.end <= event.span.whole.end
 
 
-def test_fast_repetition_sub_cycle_splitting():
+def test_fast_repetition_sub_cycle_splitting() -> None:
     """Test fast repetition patterns across sub-cycles."""
     # Fast repetition: "x!4" - 4 repetitions
     base_pattern = Pat.pure("x")
@@ -605,7 +605,7 @@ def test_fast_repetition_sub_cycle_splitting():
         assert not intersection.null()
 
 
-def test_slow_repetition_sub_cycle_splitting():
+def test_slow_repetition_sub_cycle_splitting() -> None:
     """Test slow repetition patterns across sub-cycles."""
     # Slow repetition: "x/2" - half speed
     base_pattern = Pat.pure("x")
@@ -627,7 +627,7 @@ def test_slow_repetition_sub_cycle_splitting():
         assert not intersection.null()
 
 
-def test_euclidean_sub_cycle_splitting():
+def test_euclidean_sub_cycle_splitting() -> None:
     """Test euclidean patterns across sub-cycles."""
     # Euclidean rhythm: "x(3,8)"
     atom = Pat.pure("x")
@@ -649,7 +649,7 @@ def test_euclidean_sub_cycle_splitting():
         assert not intersection.null()
 
 
-def test_choice_sub_cycle_splitting():
+def test_choice_sub_cycle_splitting() -> None:
     """Test choice patterns across different cycles."""
     # Choice pattern with multiple options
     pattern = Pat.choice(
@@ -680,7 +680,7 @@ def test_choice_sub_cycle_splitting():
     assert len(choice_values) >= 1  # At least one choice should be made
 
 
-def test_alternating_sub_cycle_splitting():
+def test_alternating_sub_cycle_splitting() -> None:
     """Test alternating patterns across sub-cycles."""
     # Alternating pattern
     patterns = [Pat.pure("x"), Pat.pure("y")]
@@ -706,7 +706,7 @@ def test_alternating_sub_cycle_splitting():
     assert len(set(values_by_cycle)) > 1
 
 
-def test_probability_sub_cycle_splitting():
+def test_probability_sub_cycle_splitting() -> None:
     """Test probability patterns across sub-cycles."""
     # Probability pattern with 50% chance
     base_pattern = Pat.pure("x")
@@ -734,7 +734,7 @@ def test_probability_sub_cycle_splitting():
     assert 0 <= total_events <= 10
 
 
-def test_elongation_sub_cycle_splitting():
+def test_elongation_sub_cycle_splitting() -> None:
     """Test elongation patterns across sub-cycles."""
     # Elongation pattern: "x@3"
     base_pattern = Pat.pure("x")
@@ -756,7 +756,7 @@ def test_elongation_sub_cycle_splitting():
         assert not intersection.null()
 
 
-def test_polymetric_sub_cycle_splitting():
+def test_polymetric_sub_cycle_splitting() -> None:
     """Test polymetric patterns across sub-cycles."""
     # Polymetric pattern with different length patterns
     patterns = [
@@ -780,7 +780,7 @@ def test_polymetric_sub_cycle_splitting():
     assert "y" in values or "z" in values  # From second pattern
 
 
-def test_parallel_sub_cycle_splitting():
+def test_parallel_sub_cycle_splitting() -> None:
     """Test parallel patterns across sub-cycles."""
     # Parallel pattern: "[x y]"
     pattern = Pat.par([Pat.pure("x"), Pat.pure("y")])

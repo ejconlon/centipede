@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple
 from spiny.seq import PSeq
 
 
-def test_empty_seq():
+def test_empty_seq() -> None:
     """Test creating an empty PSeq and asserting it is empty"""
     seq = PSeq.empty(int)
     assert seq.null()
@@ -13,7 +13,7 @@ def test_empty_seq():
     assert seq.list() == []
 
 
-def test_cons_uncons():
+def test_cons_uncons() -> None:
     """Test that uncons returns what was consed"""
     seq = PSeq.empty(int)
 
@@ -58,7 +58,7 @@ def test_cons_uncons():
     assert empty_result is None
 
 
-def test_snoc_unsnoc():
+def test_snoc_unsnoc() -> None:
     """Test that unsnoc returns what was snoced"""
     seq: PSeq[int] = PSeq.empty(int)
 
@@ -103,7 +103,7 @@ def test_snoc_unsnoc():
     assert empty_result is None
 
 
-def test_concat():
+def test_concat() -> None:
     """Test concatenating sequences"""
     empty: PSeq[int] = PSeq.empty(int)
     single1 = PSeq.singleton(1)
@@ -141,7 +141,7 @@ def test_concat():
     assert result7.list() == [3, 4, 5, 6, 7]
 
 
-def test_lookup_empty():
+def test_lookup_empty() -> None:
     """Test lookup on empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
 
@@ -151,7 +151,7 @@ def test_lookup_empty():
     assert empty.lookup(-1) is None
 
 
-def test_lookup_single():
+def test_lookup_single() -> None:
     """Test lookup on single element sequence"""
     single = PSeq.singleton(42)
 
@@ -164,7 +164,7 @@ def test_lookup_single():
     assert single.lookup(100) is None
 
 
-def test_lookup_multiple():
+def test_lookup_multiple() -> None:
     """Test lookup on sequences with multiple elements"""
     # Test with cons operations
     seq_cons = PSeq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
@@ -183,7 +183,7 @@ def test_lookup_multiple():
     assert seq_snoc.lookup(-1) is None
 
 
-def test_lookup_deep_sequence():
+def test_lookup_deep_sequence() -> None:
     """Test lookup on deep sequences that trigger complex finger tree structure"""
     # Create a larger sequence to test deep structure
     seq: PSeq[int] = PSeq.empty(int)
@@ -206,7 +206,7 @@ def test_lookup_deep_sequence():
     assert seq.lookup(-1) is None
 
 
-def test_lookup_mixed_operations():
+def test_lookup_mixed_operations() -> None:
     """Test lookup on sequences built with mixed cons/snoc operations"""
     seq: PSeq[int] = PSeq.empty(int).snoc(5).snoc(6).cons(4).cons(3)  # [3, 4, 5, 6]
 
@@ -222,7 +222,7 @@ def test_lookup_mixed_operations():
         assert seq.lookup(i) == list_repr[i]
 
 
-def test_lookup_after_concat():
+def test_lookup_after_concat() -> None:
     """Test lookup on sequences after concatenation"""
     seq1: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2)  # [1, 2]
     seq2: PSeq[int] = PSeq.empty(int).snoc(3).snoc(4)  # [3, 4]
@@ -240,12 +240,12 @@ def test_lookup_after_concat():
         assert concat_seq.lookup(i) == list_repr[i]
 
 
-def test_mk():
+def test_mk() -> None:
     """Test creating a sequence from an Iterable"""
     assert PSeq.mk(range(10)).list() == list(range(10))
 
 
-def test_update_empty():
+def test_update_empty() -> None:
     """Test updating an empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
 
@@ -255,7 +255,7 @@ def test_update_empty():
     assert empty.update(-1, 42) == empty
 
 
-def test_update_single():
+def test_update_single() -> None:
     """Test updating a single element sequence"""
     single = PSeq.singleton(42)
 
@@ -271,7 +271,7 @@ def test_update_single():
     assert single.update(10, 999) == single
 
 
-def test_update_multiple():
+def test_update_multiple() -> None:
     """Test updating sequences with multiple elements"""
     # Test with snoc operations: [1, 2, 3]
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
@@ -298,7 +298,7 @@ def test_update_multiple():
     assert seq.list() == [1, 2, 3]
 
 
-def test_update_cons_sequence():
+def test_update_cons_sequence() -> None:
     """Test updating a sequence built with cons operations"""
     # [3, 2, 1] from cons operations
     seq = PSeq.empty(int).cons(1).cons(2).cons(3)
@@ -317,7 +317,7 @@ def test_update_cons_sequence():
     assert seq.list() == [3, 2, 1]
 
 
-def test_update_deep_sequence():
+def test_update_deep_sequence() -> None:
     """Test updating deep sequences that trigger complex finger tree structure"""
     # Create a larger sequence to test deep structure
     seq: PSeq[int] = PSeq.empty(int)
@@ -354,7 +354,7 @@ def test_update_deep_sequence():
     assert seq.list() == original_list
 
 
-def test_update_mixed_operations():
+def test_update_mixed_operations() -> None:
     """Test updating sequences built with mixed cons/snoc operations"""
     # [3, 4, 5, 6] from mixed operations
     seq: PSeq[int] = PSeq.empty(int).snoc(5).snoc(6).cons(4).cons(3)
@@ -376,7 +376,7 @@ def test_update_mixed_operations():
     assert seq.list() == [3, 4, 5, 6]
 
 
-def test_update_after_concat():
+def test_update_after_concat() -> None:
     """Test updating sequences after concatenation"""
     seq1: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2)  # [1, 2]
     seq2: PSeq[int] = PSeq.empty(int).snoc(3).snoc(4)  # [3, 4]
@@ -404,7 +404,7 @@ def test_update_after_concat():
     assert concat_seq.list() == [1, 2, 3, 4]
 
 
-def test_update_persistence():
+def test_update_persistence() -> None:
     """Test that updates create new sequences without modifying originals"""
     original: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
 
@@ -425,7 +425,7 @@ def test_update_persistence():
     assert original.list() == [1, 2, 3]  # Still unchanged
 
 
-def test_map_empty():
+def test_map_empty() -> None:
     """Test mapping over an empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
     mapped = empty.map(lambda x: x * 2)
@@ -433,7 +433,7 @@ def test_map_empty():
     assert mapped.list() == []
 
 
-def test_map_single():
+def test_map_single() -> None:
     """Test mapping over a single element sequence"""
     single = PSeq.singleton(5)
     mapped = single.map(lambda x: x * 2)
@@ -441,7 +441,7 @@ def test_map_single():
     assert mapped.size() == 1
 
 
-def test_map_multiple():
+def test_map_multiple() -> None:
     """Test mapping over sequences with multiple elements"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
     mapped = seq.map(lambda x: x * 2)
@@ -452,7 +452,7 @@ def test_map_multiple():
     assert seq.list() == [1, 2, 3]
 
 
-def test_map_type_change():
+def test_map_type_change() -> None:
     """Test mapping that changes the element type"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
     mapped = seq.map(lambda x: str(x))
@@ -460,7 +460,7 @@ def test_map_type_change():
     assert mapped.size() == 3
 
 
-def test_map_deep_sequence():
+def test_map_deep_sequence() -> None:
     """Test mapping over deep sequences"""
     seq: PSeq[int] = PSeq.empty(int)
     for i in range(20):
@@ -472,14 +472,14 @@ def test_map_deep_sequence():
     assert mapped.size() == 20
 
 
-def test_map_cons_sequence():
+def test_map_cons_sequence() -> None:
     """Test mapping over sequences built with cons"""
     seq = PSeq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
     mapped = seq.map(lambda x: x + 10)
     assert mapped.list() == [13, 12, 11]
 
 
-def test_filter_empty():
+def test_filter_empty() -> None:
     """Test filtering an empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
     filtered = empty.filter(lambda x: x > 0)
@@ -487,7 +487,7 @@ def test_filter_empty():
     assert filtered.list() == []
 
 
-def test_filter_single_match():
+def test_filter_single_match() -> None:
     """Test filtering a single element that matches"""
     single = PSeq.singleton(5)
     filtered = single.filter(lambda x: x > 0)
@@ -495,7 +495,7 @@ def test_filter_single_match():
     assert filtered.size() == 1
 
 
-def test_filter_single_no_match():
+def test_filter_single_no_match() -> None:
     """Test filtering a single element that doesn't match"""
     single = PSeq.singleton(-5)
     filtered = single.filter(lambda x: x > 0)
@@ -503,7 +503,7 @@ def test_filter_single_no_match():
     assert filtered.list() == []
 
 
-def test_filter_multiple():
+def test_filter_multiple() -> None:
     """Test filtering sequences with multiple elements"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4).snoc(5)
     filtered = seq.filter(lambda x: x % 2 == 0)  # Even numbers
@@ -514,7 +514,7 @@ def test_filter_multiple():
     assert seq.list() == [1, 2, 3, 4, 5]
 
 
-def test_filter_all_match():
+def test_filter_all_match() -> None:
     """Test filtering where all elements match"""
     seq: PSeq[int] = PSeq.empty(int).snoc(2).snoc(4).snoc(6)
     filtered = seq.filter(lambda x: x % 2 == 0)
@@ -522,7 +522,7 @@ def test_filter_all_match():
     assert filtered.size() == 3
 
 
-def test_filter_none_match():
+def test_filter_none_match() -> None:
     """Test filtering where no elements match"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(3).snoc(5)
     filtered = seq.filter(lambda x: x % 2 == 0)
@@ -530,7 +530,7 @@ def test_filter_none_match():
     assert filtered.list() == []
 
 
-def test_filter_deep_sequence():
+def test_filter_deep_sequence() -> None:
     """Test filtering deep sequences"""
     seq: PSeq[int] = PSeq.empty(int)
     for i in range(20):
@@ -541,7 +541,7 @@ def test_filter_deep_sequence():
     assert filtered.list() == expected
 
 
-def test_flat_map_empty():
+def test_flat_map_empty() -> None:
     """Test flat_map over an empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
     flat_mapped = empty.flat_map(lambda x: PSeq.singleton(x).snoc(x + 1))
@@ -549,7 +549,7 @@ def test_flat_map_empty():
     assert flat_mapped.list() == []
 
 
-def test_flat_map_single():
+def test_flat_map_single() -> None:
     """Test flat_map over a single element"""
     single = PSeq.singleton(5)
     flat_mapped = single.flat_map(lambda x: PSeq.singleton(x).snoc(x * 2))
@@ -557,7 +557,7 @@ def test_flat_map_single():
     assert flat_mapped.size() == 2
 
 
-def test_flat_map_multiple():
+def test_flat_map_multiple() -> None:
     """Test flat_map over multiple elements"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
     flat_mapped = seq.flat_map(lambda x: PSeq.singleton(x).snoc(x * 2))
@@ -568,7 +568,7 @@ def test_flat_map_multiple():
     assert seq.list() == [1, 2, 3]
 
 
-def test_flat_map_empty_results():
+def test_flat_map_empty_results() -> None:
     """Test flat_map where some results are empty"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4)
     flat_mapped = seq.flat_map(
@@ -578,7 +578,7 @@ def test_flat_map_empty_results():
     assert flat_mapped.size() == 2
 
 
-def test_flat_map_varying_lengths():
+def test_flat_map_varying_lengths() -> None:
     """Test flat_map with varying result lengths"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
     flat_mapped = seq.flat_map(lambda x: PSeq.mk(range(x)))
@@ -587,7 +587,7 @@ def test_flat_map_varying_lengths():
     assert flat_mapped.size() == 6
 
 
-def test_flat_map_type_change():
+def test_flat_map_type_change() -> None:
     """Test flat_map that changes the element type"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2)
     flat_mapped = seq.flat_map(lambda x: PSeq.singleton(str(x)).snoc(str(x * 2)))
@@ -595,7 +595,7 @@ def test_flat_map_type_change():
     assert flat_mapped.size() == 4
 
 
-def test_method_chaining():
+def test_method_chaining() -> None:
     """Test chaining map, filter, and flat_map operations"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4).snoc(5)
 
@@ -613,7 +613,7 @@ def test_method_chaining():
     assert seq.list() == [1, 2, 3, 4, 5]
 
 
-def test_fold_empty():
+def test_fold_empty() -> None:
     """Test folding an empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
     result = empty.fold(lambda acc, x: acc + x, 0)
@@ -624,7 +624,7 @@ def test_fold_empty():
     assert result2 == 1
 
 
-def test_fold_single():
+def test_fold_single() -> None:
     """Test folding a single element sequence"""
     single = PSeq.singleton(5)
 
@@ -642,7 +642,7 @@ def test_fold_single():
     assert result3 == "hello"
 
 
-def test_fold_multiple():
+def test_fold_multiple() -> None:
     """Test folding sequences with multiple elements"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3).snoc(4).snoc(5)
 
@@ -662,7 +662,7 @@ def test_fold_multiple():
     assert seq.list() == [1, 2, 3, 4, 5]
 
 
-def test_fold_cons_sequence():
+def test_fold_cons_sequence() -> None:
     """Test folding sequences built with cons"""
     seq = PSeq.empty(int).cons(1).cons(2).cons(3)  # [3, 2, 1]
 
@@ -675,7 +675,7 @@ def test_fold_cons_sequence():
     assert result2 == [3, 2, 1]
 
 
-def test_fold_type_change():
+def test_fold_type_change() -> None:
     """Test folding that changes the accumulator type"""
     seq: PSeq[int] = PSeq.empty(int).snoc(1).snoc(2).snoc(3)
 
@@ -688,7 +688,7 @@ def test_fold_type_change():
     assert result2 == 3
 
 
-def test_fold_deep_sequence():
+def test_fold_deep_sequence() -> None:
     """Test folding deep sequences"""
     seq: PSeq[int] = PSeq.empty(int)
     for i in range(20):
@@ -704,7 +704,7 @@ def test_fold_deep_sequence():
     assert count == 20
 
 
-def test_fold_with_index_empty():
+def test_fold_with_index_empty() -> None:
     """Test fold_with_index on an empty sequence"""
     empty: PSeq[int] = PSeq.empty(int)
     result = empty.fold_with_index(lambda acc, i, x: acc + x + i, 0)
@@ -715,7 +715,7 @@ def test_fold_with_index_empty():
     assert result2 == []
 
 
-def test_fold_with_index_single():
+def test_fold_with_index_single() -> None:
     """Test fold_with_index on a single element sequence"""
     single = PSeq.singleton(5)
 
@@ -730,7 +730,7 @@ def test_fold_with_index_single():
     assert result2 == ["0:5"]
 
 
-def test_fold_with_index_multiple():
+def test_fold_with_index_multiple() -> None:
     """Test fold_with_index on sequences with multiple elements"""
     seq: PSeq[int] = PSeq.empty(int).snoc(10).snoc(20).snoc(30)
 
@@ -752,7 +752,7 @@ def test_fold_with_index_multiple():
     assert seq.list() == [10, 20, 30]
 
 
-def test_fold_with_index_cons_sequence():
+def test_fold_with_index_cons_sequence() -> None:
     """Test fold_with_index on sequences built with cons"""
     seq = PSeq.empty(int).cons(10).cons(20).cons(30)  # [30, 20, 10]
 
@@ -767,7 +767,7 @@ def test_fold_with_index_cons_sequence():
     assert indexed_pairs == [(0, 30), (1, 20), (2, 10)]
 
 
-def test_fold_with_index_type_change():
+def test_fold_with_index_type_change() -> None:
     """Test fold_with_index that changes accumulator type"""
     seq: PSeq[str] = PSeq.empty(str).snoc("a").snoc("b").snoc("c")
 
@@ -780,7 +780,7 @@ def test_fold_with_index_type_change():
     assert result2 == 6  # (1+0) + (1+1) + (1+2) = 6
 
 
-def test_fold_with_index_deep_sequence():
+def test_fold_with_index_deep_sequence() -> None:
     """Test fold_with_index on deep sequences"""
     seq: PSeq[int] = PSeq.empty(int)
     for i in range(10):
@@ -798,7 +798,7 @@ def test_fold_with_index_deep_sequence():
     assert indices == list(range(10))
 
 
-def test_fold_with_index_mixed_operations():
+def test_fold_with_index_mixed_operations() -> None:
     """Test fold_with_index on sequences built with mixed operations"""
     # [30, 40, 50, 60] from mixed cons/snoc
     seq: PSeq[int] = PSeq.empty(int).snoc(50).snoc(60).cons(40).cons(30)

@@ -9,7 +9,7 @@ from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
 
 
-def test_stream_map():
+def test_stream_map() -> None:
     """Test Stream.map() transforms values correctly."""
     # Create a stream with pure value
     stream = Stream.pure("hello")
@@ -26,7 +26,7 @@ def test_stream_map():
     assert event.val == "HELLO"
 
 
-def test_stream_map_with_sequence():
+def test_stream_map_with_sequence() -> None:
     """Test Stream.map() on a sequence stream."""
     # Create a sequence stream
     stream = Stream.seq(PSeq.mk([Stream.pure(1), Stream.pure(2), Stream.pure(3)]))
@@ -43,7 +43,7 @@ def test_stream_map_with_sequence():
     assert values == [2, 4, 6]
 
 
-def test_stream_filter():
+def test_stream_filter() -> None:
     """Test Stream.filter() removes events based on predicate."""
     # Create a sequence stream with numbers
     stream = Stream.seq(
@@ -71,7 +71,7 @@ def test_stream_filter():
     assert values == [2, 4]
 
 
-def test_stream_filter_with_parallel():
+def test_stream_filter_with_parallel() -> None:
     """Test Stream.filter() on parallel streams."""
     # Create parallel streams
     stream = Stream.par(
@@ -98,7 +98,7 @@ def test_stream_filter_with_parallel():
     assert values == {"apple", "apricot"}
 
 
-def test_stream_bind():
+def test_stream_bind() -> None:
     """Test Stream.bind() for monadic bind operation."""
     # Create a stream with a single value
     stream = Stream.pure(3)
@@ -121,7 +121,7 @@ def test_stream_bind():
     assert values == [2, 3, 4]
 
 
-def test_stream_apply():
+def test_stream_apply() -> None:
     """Test Stream.apply() for combining two streams."""
     # Create two streams
     left_stream = Stream.seq(PSeq.mk([Stream.pure(10), Stream.pure(20)]))
@@ -144,7 +144,7 @@ def test_stream_apply():
     assert values == [11, 22]
 
 
-def test_stream_fast_by():
+def test_stream_fast_by() -> None:
     """Test Stream.fast_by() speeds up events."""
     # Create a sequence stream
     stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
@@ -173,7 +173,7 @@ def test_stream_fast_by():
     assert second_event.span.active.end == Fraction(1)
 
 
-def test_stream_slow_by():
+def test_stream_slow_by() -> None:
     """Test Stream.slow_by() slows down events."""
     # Create a sequence stream
     stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
@@ -202,7 +202,7 @@ def test_stream_slow_by():
     assert second_event.span.active.end == Fraction(1)
 
 
-def test_stream_early_by():
+def test_stream_early_by() -> None:
     """Test Stream.early_by() shifts events earlier."""
     # Create a pure stream
     stream = Stream.pure("x")
@@ -221,7 +221,7 @@ def test_stream_early_by():
     assert event.val == "x"
 
 
-def test_stream_late_by():
+def test_stream_late_by() -> None:
     """Test Stream.late_by() shifts events later."""
     # Create a sequence stream
     stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
@@ -245,7 +245,7 @@ def test_stream_late_by():
     assert "a" in values or "b" in values
 
 
-def test_stream_constructor_silence():
+def test_stream_constructor_silence() -> None:
     """Test Stream.silence() constructor."""
     stream: Stream[str] = Stream.silence()
 
@@ -256,7 +256,7 @@ def test_stream_constructor_silence():
     assert len(event_list) == 0
 
 
-def test_stream_constructor_pure():
+def test_stream_constructor_pure() -> None:
     """Test Stream.pure() constructor."""
     stream = Stream.pure("hello")
 
@@ -270,7 +270,7 @@ def test_stream_constructor_pure():
     assert event.span.active == arc
 
 
-def test_stream_constructor_seq():
+def test_stream_constructor_seq() -> None:
     """Test Stream.seq() constructor."""
     streams = PSeq.mk([Stream.pure(1), Stream.pure(2), Stream.pure(3)])
     stream = Stream.seq(streams)
@@ -284,7 +284,7 @@ def test_stream_constructor_seq():
     assert values == [1, 2, 3]
 
 
-def test_stream_constructor_par():
+def test_stream_constructor_par() -> None:
     """Test Stream.par() constructor."""
     streams = PSeq.mk([Stream.pure("x"), Stream.pure("y"), Stream.pure("z")])
     stream = Stream.par(streams)
@@ -302,7 +302,7 @@ def test_stream_constructor_par():
         assert event.span.active == arc
 
 
-def test_stream_constructor_choice():
+def test_stream_constructor_choice() -> None:
     """Test Stream.choice() constructor."""
     choices = PSeq.mk([Stream.pure("a"), Stream.pure("b"), Stream.pure("c")])
     stream = Stream.choice(choices)
@@ -320,7 +320,7 @@ def test_stream_constructor_choice():
         assert event.val == expected_value
 
 
-def test_stream_constructor_euclidean():
+def test_stream_constructor_euclidean() -> None:
     """Test Stream.euclidean() constructor."""
     atom_stream = Stream.pure("x")
     stream = Stream.euclidean(atom_stream, 3, 8, 0)
@@ -335,7 +335,7 @@ def test_stream_constructor_euclidean():
         assert event.val == "x"
 
 
-def test_stream_constructor_polymetric():
+def test_stream_constructor_polymetric() -> None:
     """Test Stream.polymetric() constructor."""
     patterns = PSeq.mk([Stream.pure("a"), Stream.pure("b")])
 
@@ -359,7 +359,7 @@ def test_stream_constructor_polymetric():
     assert len(event_list_sub) > 0
 
 
-def test_stream_constructor_repetition():
+def test_stream_constructor_repetition() -> None:
     """Test Stream.repetition() constructor."""
     base_stream = Stream.pure("x")
 
@@ -383,7 +383,7 @@ def test_stream_constructor_repetition():
     assert len(event_list_slow) == 1
 
 
-def test_stream_constructor_elongation():
+def test_stream_constructor_elongation() -> None:
     """Test Stream.elongation() constructor."""
     base_stream = Stream.pure("x")
     stream = Stream.elongation(base_stream, 2)
@@ -398,7 +398,7 @@ def test_stream_constructor_elongation():
     assert event.span.active == arc
 
 
-def test_stream_constructor_probability():
+def test_stream_constructor_probability() -> None:
     """Test Stream.probability() constructor."""
     base_stream = Stream.pure("x")
 
@@ -420,7 +420,7 @@ def test_stream_constructor_probability():
     assert len(event_list_never) == 0
 
 
-def test_stream_constructor_alternating():
+def test_stream_constructor_alternating() -> None:
     """Test Stream.alternating() constructor."""
     patterns = PSeq.mk([Stream.pure("a"), Stream.pure("b")])
     stream = Stream.alternating(patterns)
@@ -441,7 +441,7 @@ def test_stream_constructor_alternating():
     assert values == ["a", "b", "a", "b"]
 
 
-def test_stream_constructor_replicate():
+def test_stream_constructor_replicate() -> None:
     """Test Stream.replicate() constructor."""
     base_stream = Stream.pure("x")
     stream = Stream.replicate(base_stream, 4)
@@ -463,7 +463,7 @@ def test_stream_constructor_replicate():
         assert event.span.active.end == expected_end
 
 
-def test_stream_constructor_pat():
+def test_stream_constructor_pat() -> None:
     """Test Stream.pat() constructor."""
     # Create a pattern
     pattern = Pat.seq(
@@ -486,7 +486,7 @@ def test_stream_constructor_pat():
     assert values == ["a", "b", "c"]
 
 
-def test_stream_map_chain():
+def test_stream_map_chain() -> None:
     """Test chaining multiple map operations."""
     stream = Stream.pure(5)
 
@@ -506,7 +506,7 @@ def test_stream_map_chain():
     assert event.val == "13"
 
 
-def test_stream_filter_chain():
+def test_stream_filter_chain() -> None:
     """Test chaining filter with other operations."""
     stream = Stream.seq(PSeq.mk([Stream.pure(i) for i in range(1, 11)]))
 
@@ -522,7 +522,7 @@ def test_stream_filter_chain():
     assert values == [4, 16, 36, 64, 100]
 
 
-def test_stream_complex_transformation():
+def test_stream_complex_transformation() -> None:
     """Test complex transformation combining multiple stream operations."""
     # Start with a parallel stream
     stream = Stream.par(PSeq.mk([Stream.pure(1), Stream.pure(2), Stream.pure(3)]))
@@ -543,7 +543,7 @@ def test_stream_complex_transformation():
     assert 2 not in values  # 1 was filtered out
 
 
-def test_stream_apply_with_different_patterns():
+def test_stream_apply_with_different_patterns() -> None:
     """Test apply with different pattern structures."""
     # Sequence on left, parallel on right
     left = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
@@ -563,7 +563,7 @@ def test_stream_apply_with_different_patterns():
     assert all(v[0] in "ab" and v[1] in "12" for v in values)
 
 
-def test_stream_timing_precision():
+def test_stream_timing_precision() -> None:
     """Test that stream operations maintain timing precision."""
     # Create a complex pattern with precise timing
     stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b"), Stream.pure("c")]))

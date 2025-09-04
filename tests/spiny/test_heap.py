@@ -3,7 +3,7 @@ from typing import List
 from spiny.heap import PHeap
 
 
-def test_empty_heap():
+def test_empty_heap() -> None:
     """Test creating an empty PHeap and asserting it is empty"""
     heap = PHeap.empty(int)
     assert heap.null()
@@ -18,7 +18,7 @@ def test_empty_heap():
     assert del_result is None
 
 
-def test_singleton():
+def test_singleton() -> None:
     """Test creating a singleton heap"""
     heap = PHeap.singleton(5)
     assert not heap.null()
@@ -32,7 +32,7 @@ def test_singleton():
     assert rest.null()
 
 
-def test_insert_single():
+def test_insert_single() -> None:
     """Test inserting a single element into an empty heap"""
     heap = PHeap.empty(int)
     heap_with_one = heap.insert(10)
@@ -47,7 +47,7 @@ def test_insert_single():
     assert rest.null()
 
 
-def test_insert_multiple():
+def test_insert_multiple() -> None:
     """Test inserting multiple elements maintains min-heap property"""
     heap = PHeap.empty(int)
     heap = heap.insert(5)
@@ -65,7 +65,7 @@ def test_insert_multiple():
     assert value == 1
 
 
-def test_delete_min():
+def test_delete_min() -> None:
     """Test delete_min removes minimum element"""
     heap = PHeap.empty(int)
     heap = heap.insert(5)
@@ -85,7 +85,7 @@ def test_delete_min():
     assert value == 2
 
 
-def test_merge():
+def test_merge() -> None:
     """Test merging two heaps"""
     heap1 = PHeap.empty(int)
     heap1 = heap1.insert(1).insert(3).insert(5)
@@ -103,7 +103,7 @@ def test_merge():
     assert value == 1
 
 
-def test_merge_operator():
+def test_merge_operator() -> None:
     """Test merging with + operator"""
     heap1 = PHeap.singleton(3)
     heap2 = PHeap.singleton(1)
@@ -117,7 +117,7 @@ def test_merge_operator():
     assert value == 1
 
 
-def test_mk_from_iterable():
+def test_mk_from_iterable() -> None:
     """Test creating heap from iterable"""
     values = [5, 2, 8, 1, 9, 3]
     heap = PHeap.mk(values)
@@ -131,7 +131,7 @@ def test_mk_from_iterable():
     assert value == 1
 
 
-def test_iteration():
+def test_iteration() -> None:
     """Test iterating through heap in sorted order"""
     values = [5, 2, 8, 1, 9, 3]
     heap = PHeap.mk(values)
@@ -140,7 +140,7 @@ def test_iteration():
     assert sorted_values == sorted(values)
 
 
-def test_persistence():
+def test_persistence() -> None:
     """Test that operations don't modify original heap"""
     original = PHeap.mk([3, 1, 4])
     inserted = original.insert(2)
@@ -157,7 +157,7 @@ def test_persistence():
     assert deleted.size() == 3
 
 
-def test_ordering_with_duplicates():
+def test_ordering_with_duplicates() -> None:
     """Test heap with duplicate elements"""
     heap = PHeap.mk([3, 1, 3, 2, 1])
     assert heap.size() == 5
@@ -167,7 +167,7 @@ def test_ordering_with_duplicates():
     assert sorted_values == [1, 1, 2, 3, 3]
 
 
-def test_large_heap():
+def test_large_heap() -> None:
     """Test with larger number of elements"""
     values = list(range(100, 0, -1))  # 100 down to 1
     heap = PHeap.mk(values)
@@ -185,7 +185,7 @@ def test_large_heap():
     assert sorted_values == list(range(1, 101))
 
 
-def test_string_values():
+def test_string_values() -> None:
     """Test heap with string values"""
     words = ["zebra", "apple", "banana", "cherry"]
     heap = PHeap.mk(words)
@@ -199,7 +199,7 @@ def test_string_values():
     assert sorted_words == sorted(words)
 
 
-def test_filter_empty():
+def test_filter_empty() -> None:
     """Test filtering an empty heap"""
     empty = PHeap.empty(int)
     filtered = empty.filter(lambda x: x > 0)
@@ -207,7 +207,7 @@ def test_filter_empty():
     assert list(filtered.iter()) == []
 
 
-def test_filter_single():
+def test_filter_single() -> None:
     """Test filtering a single element heap"""
     heap = PHeap.singleton(5)
 
@@ -222,7 +222,7 @@ def test_filter_single():
     assert list(filtered_no_match.iter()) == []
 
 
-def test_filter_multiple():
+def test_filter_multiple() -> None:
     """Test filtering heaps with multiple elements"""
     heap = PHeap.mk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
@@ -241,7 +241,7 @@ def test_filter_multiple():
     assert list(heap.iter()) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 
-def test_filter_none_match():
+def test_filter_none_match() -> None:
     """Test filtering where no elements match"""
     heap = PHeap.mk([1, 2, 3])
     filtered = heap.filter(lambda x: x > 10)
@@ -249,7 +249,7 @@ def test_filter_none_match():
     assert list(filtered.iter()) == []
 
 
-def test_filter_all_match():
+def test_filter_all_match() -> None:
     """Test filtering where all elements match"""
     heap = PHeap.mk([2, 4, 6, 8])
     filtered = heap.filter(lambda x: x % 2 == 0)
@@ -257,7 +257,7 @@ def test_filter_all_match():
     assert list(filtered.iter()) == [2, 4, 6, 8]
 
 
-def test_filter_strings():
+def test_filter_strings() -> None:
     """Test filtering string heap"""
     heap = PHeap.mk(["apple", "banana", "apricot", "cherry"])
 

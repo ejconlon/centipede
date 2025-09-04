@@ -3,7 +3,7 @@ from typing import List
 from spiny.set import PSet
 
 
-def test_empty_set():
+def test_empty_set() -> None:
     """Test creating an empty PSet and asserting it is empty"""
     set_obj = PSet.empty(int)
     assert set_obj.null()
@@ -11,7 +11,7 @@ def test_empty_set():
     assert set_obj.list() == []
 
 
-def test_singleton_insert():
+def test_singleton_insert() -> None:
     """Test inserting a single element"""
     empty_set = PSet.empty(int)
     single_set = empty_set.insert(42)
@@ -22,7 +22,7 @@ def test_singleton_insert():
     assert single_set.list() == [42]
 
 
-def test_singleton_method():
+def test_singleton_method() -> None:
     """Test creating a singleton set directly"""
     single_set = PSet.singleton(42)
 
@@ -31,7 +31,7 @@ def test_singleton_method():
     assert single_set.list() == [42]
 
 
-def test_multiple_inserts():
+def test_multiple_inserts() -> None:
     """Test inserting multiple elements"""
     set_obj = PSet.empty(int)
 
@@ -47,7 +47,7 @@ def test_multiple_inserts():
     assert set(result) == {1, 2, 3, 4}
 
 
-def test_duplicate_inserts():
+def test_duplicate_inserts() -> None:
     """Test that inserting duplicate elements doesn't increase size"""
     set_obj = PSet.empty(int)
 
@@ -58,7 +58,7 @@ def test_duplicate_inserts():
     assert set_obj.list() == [42]
 
 
-def test_insert_ordering():
+def test_insert_ordering() -> None:
     """Test that elements maintain sorted order after insertion"""
     set_obj = PSet.empty(int)
     values = [5, 2, 8, 1, 9, 3, 7, 4, 6]
@@ -71,7 +71,7 @@ def test_insert_ordering():
     assert set_obj.size() == len(values)
 
 
-def test_mk_from_iterable():
+def test_mk_from_iterable() -> None:
     """Test creating a set from an iterable"""
     values = [3, 1, 4, 1, 5, 9, 2, 6, 5]
     set_obj = PSet.mk(values)
@@ -82,7 +82,7 @@ def test_mk_from_iterable():
     assert set_obj.size() == len(expected)
 
 
-def test_mk_empty_iterable():
+def test_mk_empty_iterable() -> None:
     """Test creating a set from an empty iterable"""
     set_obj: PSet[int] = PSet.mk([])
     assert set_obj.null()
@@ -90,7 +90,7 @@ def test_mk_empty_iterable():
     assert set_obj.list() == []
 
 
-def test_insert_operator_right():
+def test_insert_operator_right() -> None:
     """Test >> operator for insertion"""
     set_obj = PSet.empty(int)
     set_obj = set_obj >> 42 >> 24 >> 13
@@ -99,7 +99,7 @@ def test_insert_operator_right():
     assert set(set_obj.list()) == {42, 24, 13}
 
 
-def test_insert_operator_left():
+def test_insert_operator_left() -> None:
     """Test << operator for insertion"""
     set_obj = PSet.empty(int)
     set_obj = 42 << (24 << (13 << set_obj))
@@ -108,7 +108,7 @@ def test_insert_operator_left():
     assert set(set_obj.list()) == {42, 24, 13}
 
 
-def test_string_elements():
+def test_string_elements() -> None:
     """Test set with string elements"""
     set_obj = PSet.empty(str)
     set_obj = set_obj.insert("hello").insert("world").insert("abc")
@@ -119,7 +119,7 @@ def test_string_elements():
     assert set(result) == {"hello", "world", "abc"}
 
 
-def test_large_set_insertion():
+def test_large_set_insertion() -> None:
     """Test inserting many elements to verify tree balancing"""
     set_obj = PSet.empty(int)
     values = list(range(100))
@@ -136,7 +136,7 @@ def test_large_set_insertion():
     assert set_obj.list() == list(range(100))
 
 
-def test_insert_with_duplicates_mixed():
+def test_insert_with_duplicates_mixed() -> None:
     """Test inserting with mixed duplicates"""
     set_obj = PSet.empty(int)
 
@@ -149,7 +149,7 @@ def test_insert_with_duplicates_mixed():
     assert set_obj.list() == [1, 2, 3, 4]
 
 
-def test_insert_negative_numbers():
+def test_insert_negative_numbers() -> None:
     """Test inserting negative numbers"""
     set_obj = PSet.empty(int)
     values = [-5, -1, 0, 3, -10, 7]
@@ -161,7 +161,7 @@ def test_insert_negative_numbers():
     assert set_obj.list() == sorted(values)
 
 
-def test_persistence():
+def test_persistence() -> None:
     """Test that insertions create new sets without modifying originals"""
     original = PSet.empty(int).insert(1).insert(2)
     modified = original.insert(3)
@@ -175,7 +175,7 @@ def test_persistence():
     assert modified.size() == 3
 
 
-def test_chained_insertions():
+def test_chained_insertions() -> None:
     """Test chaining multiple insertions"""
     result = PSet.empty(int).insert(5).insert(2).insert(8).insert(1).insert(9)
 
@@ -183,7 +183,7 @@ def test_chained_insertions():
     assert result.list() == [1, 2, 5, 8, 9]
 
 
-def test_insert_same_value_returns_same_instance():
+def test_insert_same_value_returns_same_instance() -> None:
     """Test that inserting an existing value returns the same set"""
     set_obj = PSet.empty(int).insert(42)
     same_set = set_obj.insert(42)
@@ -194,7 +194,7 @@ def test_insert_same_value_returns_same_instance():
     assert same_set.size() == 1
 
 
-def test_balanced_tree_property():
+def test_balanced_tree_property() -> None:
     """Test that tree remains reasonably balanced after many insertions"""
     set_obj = PSet.empty(int)
 
@@ -213,7 +213,7 @@ def test_balanced_tree_property():
     assert set_obj.size() == 51
 
 
-def test_union_empty_sets():
+def test_union_empty_sets() -> None:
     """Test union of empty sets"""
     empty1 = PSet.empty(int)
     empty2 = PSet.empty(int)
@@ -224,7 +224,7 @@ def test_union_empty_sets():
     assert result.list() == []
 
 
-def test_union_empty_with_non_empty():
+def test_union_empty_with_non_empty() -> None:
     """Test union of empty set with non-empty set"""
     empty_set = PSet.empty(int)
     non_empty = PSet.mk([1, 2, 3])
@@ -238,7 +238,7 @@ def test_union_empty_with_non_empty():
     assert result2.size() == 3
 
 
-def test_union_disjoint_sets():
+def test_union_disjoint_sets() -> None:
     """Test union of sets with no common elements"""
     set1 = PSet.mk([1, 3, 5])
     set2 = PSet.mk([2, 4, 6])
@@ -249,7 +249,7 @@ def test_union_disjoint_sets():
     assert result.list() == [1, 2, 3, 4, 5, 6]
 
 
-def test_union_overlapping_sets():
+def test_union_overlapping_sets() -> None:
     """Test union of sets with some common elements"""
     set1 = PSet.mk([1, 2, 3, 4])
     set2 = PSet.mk([3, 4, 5, 6])
@@ -260,7 +260,7 @@ def test_union_overlapping_sets():
     assert result.list() == [1, 2, 3, 4, 5, 6]
 
 
-def test_union_identical_sets():
+def test_union_identical_sets() -> None:
     """Test union of identical sets"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([1, 2, 3])
@@ -271,7 +271,7 @@ def test_union_identical_sets():
     assert result.list() == [1, 2, 3]
 
 
-def test_union_subset_sets():
+def test_union_subset_sets() -> None:
     """Test union of when one set is a subset of another"""
     set1 = PSet.mk([1, 2, 3, 4, 5])
     set2 = PSet.mk([2, 4])
@@ -285,7 +285,7 @@ def test_union_subset_sets():
     assert result2.size() == 5
 
 
-def test_union_single_element_sets():
+def test_union_single_element_sets() -> None:
     """Test union of single element sets"""
     set1 = PSet.singleton(1)
     set2 = PSet.singleton(2)
@@ -301,7 +301,7 @@ def test_union_single_element_sets():
     assert result2.size() == 1
 
 
-def test_union_large_sets():
+def test_union_large_sets() -> None:
     """Test union of large sets"""
     set1 = PSet.mk(range(0, 100, 2))  # Even numbers 0-98
     set2 = PSet.mk(range(1, 100, 2))  # Odd numbers 1-99
@@ -312,7 +312,7 @@ def test_union_large_sets():
     assert result.list() == list(range(100))
 
 
-def test_union_string_sets():
+def test_union_string_sets() -> None:
     """Test union of sets of strings"""
     set1 = PSet.mk(["apple", "banana", "cherry"])
     set2 = PSet.mk(["banana", "date", "elderberry"])
@@ -324,7 +324,7 @@ def test_union_string_sets():
     assert result.size() == 5
 
 
-def test_union_operator_or():
+def test_union_operator_or() -> None:
     """Test union using | operator"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([3, 4, 5])
@@ -335,7 +335,7 @@ def test_union_operator_or():
     assert result.size() == 5
 
 
-def test_union_chaining():
+def test_union_chaining() -> None:
     """Test chaining multiple union operations"""
     set1 = PSet.mk([1, 2])
     set2 = PSet.mk([3, 4])
@@ -347,7 +347,7 @@ def test_union_chaining():
     assert result.size() == 6
 
 
-def test_union_persistence():
+def test_union_persistence() -> None:
     """Test that union operations don't modify original sets"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([4, 5, 6])
@@ -368,7 +368,7 @@ def test_union_persistence():
     assert result.size() == 6
 
 
-def test_union_negative_numbers():
+def test_union_negative_numbers() -> None:
     """Test union of sets with negative numbers"""
     set1 = PSet.mk([-3, -1, 1, 3])
     set2 = PSet.mk([-2, 0, 2])
@@ -379,14 +379,14 @@ def test_union_negative_numbers():
     assert result.size() == 7
 
 
-def test_find_min_empty_set():
+def test_find_min_empty_set() -> None:
     """Test find_min on empty set returns None"""
     empty_set = PSet.empty(int)
     result = empty_set.find_min()
     assert result is None
 
 
-def test_find_min_singleton():
+def test_find_min_singleton() -> None:
     """Test find_min on singleton set"""
     single_set = PSet.singleton(42)
     result = single_set.find_min()
@@ -398,7 +398,7 @@ def test_find_min_singleton():
     assert remaining.size() == 0
 
 
-def test_find_min_multiple_elements():
+def test_find_min_multiple_elements() -> None:
     """Test find_min on set with multiple elements"""
     set_obj = PSet.mk([5, 2, 8, 1, 9])
     result = set_obj.find_min()
@@ -410,7 +410,7 @@ def test_find_min_multiple_elements():
     assert remaining.list() == [2, 5, 8, 9]
 
 
-def test_find_min_negative_numbers():
+def test_find_min_negative_numbers() -> None:
     """Test find_min with negative numbers"""
     set_obj = PSet.mk([-5, -1, 0, 3, -10, 7])
     result = set_obj.find_min()
@@ -422,7 +422,7 @@ def test_find_min_negative_numbers():
     assert remaining.list() == [-5, -1, 0, 3, 7]
 
 
-def test_find_min_strings():
+def test_find_min_strings() -> None:
     """Test find_min with string elements"""
     set_obj = PSet.mk(["zebra", "apple", "banana", "cherry"])
     result = set_obj.find_min()
@@ -434,7 +434,7 @@ def test_find_min_strings():
     assert remaining.list() == ["banana", "cherry", "zebra"]
 
 
-def test_find_min_persistence():
+def test_find_min_persistence() -> None:
     """Test that find_min doesn't modify original set"""
     original = PSet.mk([3, 1, 4, 2])
     original_list = original.list()
@@ -453,7 +453,7 @@ def test_find_min_persistence():
     assert remaining.list() == [2, 3, 4]
 
 
-def test_find_min_repeated_calls():
+def test_find_min_repeated_calls() -> None:
     """Test repeated calls to find_min to extract all elements"""
     original = PSet.mk([5, 2, 8, 1, 9, 3])
     extracted = []
@@ -471,7 +471,7 @@ def test_find_min_repeated_calls():
     assert current.null()
 
 
-def test_find_min_large_set():
+def test_find_min_large_set() -> None:
     """Test find_min on large set to verify performance"""
     values = list(range(100, 0, -1))  # [100, 99, 98, ..., 1]
     set_obj = PSet.mk(values)
@@ -486,14 +486,14 @@ def test_find_min_large_set():
     assert 1 not in remaining.list()
 
 
-def test_delete_min_empty_set():
+def test_delete_min_empty_set() -> None:
     """Test delete_min on empty set returns None"""
     empty_set = PSet.empty(int)
     result = empty_set.delete_min()
     assert result is None
 
 
-def test_delete_min_singleton():
+def test_delete_min_singleton() -> None:
     """Test delete_min on singleton set"""
     single_set = PSet.singleton(42)
     result = single_set.delete_min()
@@ -503,7 +503,7 @@ def test_delete_min_singleton():
     assert result.size() == 0
 
 
-def test_delete_min_multiple_elements():
+def test_delete_min_multiple_elements() -> None:
     """Test delete_min on set with multiple elements"""
     set_obj = PSet.mk([5, 2, 8, 1, 9])
     result = set_obj.delete_min()
@@ -513,7 +513,7 @@ def test_delete_min_multiple_elements():
     assert result.list() == [2, 5, 8, 9]
 
 
-def test_delete_min_consistency_with_find_min():
+def test_delete_min_consistency_with_find_min() -> None:
     """Test that delete_min is consistent with find_min"""
     set_obj = PSet.mk([7, 3, 11, 1, 9, 5])
 
@@ -530,14 +530,14 @@ def test_delete_min_consistency_with_find_min():
     assert delete_result.size() == remaining_from_find.size()
 
 
-def test_find_max_empty_set():
+def test_find_max_empty_set() -> None:
     """Test find_max on empty set returns None"""
     empty_set = PSet.empty(int)
     result = empty_set.find_max()
     assert result is None
 
 
-def test_find_max_singleton():
+def test_find_max_singleton() -> None:
     """Test find_max on singleton set"""
     single_set = PSet.singleton(42)
     result = single_set.find_max()
@@ -549,7 +549,7 @@ def test_find_max_singleton():
     assert remaining.size() == 0
 
 
-def test_find_max_multiple_elements():
+def test_find_max_multiple_elements() -> None:
     """Test find_max on set with multiple elements"""
     set_obj = PSet.mk([5, 2, 8, 1, 9])
     result = set_obj.find_max()
@@ -561,7 +561,7 @@ def test_find_max_multiple_elements():
     assert remaining.list() == [1, 2, 5, 8]
 
 
-def test_find_max_negative_numbers():
+def test_find_max_negative_numbers() -> None:
     """Test find_max with negative numbers"""
     set_obj = PSet.mk([-5, -1, 0, 3, -10, 7])
     result = set_obj.find_max()
@@ -573,7 +573,7 @@ def test_find_max_negative_numbers():
     assert remaining.list() == [-10, -5, -1, 0, 3]
 
 
-def test_find_max_strings():
+def test_find_max_strings() -> None:
     """Test find_max with string elements"""
     set_obj = PSet.mk(["zebra", "apple", "banana", "cherry"])
     result = set_obj.find_max()
@@ -585,7 +585,7 @@ def test_find_max_strings():
     assert remaining.list() == ["apple", "banana", "cherry"]
 
 
-def test_find_max_persistence():
+def test_find_max_persistence() -> None:
     """Test that find_max doesn't modify original set"""
     original = PSet.mk([3, 1, 4, 2])
     original_list = original.list()
@@ -604,7 +604,7 @@ def test_find_max_persistence():
     assert remaining.list() == [1, 2, 3]
 
 
-def test_find_max_repeated_calls():
+def test_find_max_repeated_calls() -> None:
     """Test repeated calls to find_max to extract all elements"""
     original = PSet.mk([5, 2, 8, 1, 9, 3])
     extracted = []
@@ -622,7 +622,7 @@ def test_find_max_repeated_calls():
     assert current.null()
 
 
-def test_find_max_large_set():
+def test_find_max_large_set() -> None:
     """Test find_max on large set to verify performance"""
     values = list(range(1, 101))  # [1, 2, 3, ..., 100]
     set_obj = PSet.mk(values)
@@ -637,14 +637,14 @@ def test_find_max_large_set():
     assert 100 not in remaining.list()
 
 
-def test_delete_max_empty_set():
+def test_delete_max_empty_set() -> None:
     """Test delete_max on empty set returns None"""
     empty_set = PSet.empty(int)
     result = empty_set.delete_max()
     assert result is None
 
 
-def test_delete_max_singleton():
+def test_delete_max_singleton() -> None:
     """Test delete_max on singleton set"""
     single_set = PSet.singleton(42)
     result = single_set.delete_max()
@@ -654,7 +654,7 @@ def test_delete_max_singleton():
     assert result.size() == 0
 
 
-def test_delete_max_multiple_elements():
+def test_delete_max_multiple_elements() -> None:
     """Test delete_max on set with multiple elements"""
     set_obj = PSet.mk([5, 2, 8, 1, 9])
     result = set_obj.delete_max()
@@ -664,7 +664,7 @@ def test_delete_max_multiple_elements():
     assert result.list() == [1, 2, 5, 8]
 
 
-def test_delete_max_consistency_with_find_max():
+def test_delete_max_consistency_with_find_max() -> None:
     """Test that delete_max is consistent with find_max"""
     set_obj = PSet.mk([7, 3, 11, 1, 9, 5])
 
@@ -681,7 +681,7 @@ def test_delete_max_consistency_with_find_max():
     assert delete_result.size() == remaining_from_find.size()
 
 
-def test_find_min_max_symmetry():
+def test_find_min_max_symmetry() -> None:
     """Test that find_min and find_max work correctly together"""
     set_obj = PSet.mk([5, 2, 8, 1, 9, 3])
 
@@ -713,7 +713,7 @@ def test_find_min_max_symmetry():
     assert min_then_max.list() == max_then_min.list()
 
 
-def test_find_max_single_element_after_operations():
+def test_find_max_single_element_after_operations() -> None:
     """Test find_max behavior after various operations"""
     set_obj = PSet.mk([1, 2, 3])
 
@@ -731,7 +731,7 @@ def test_find_max_single_element_after_operations():
     assert remaining.null()
 
 
-def test_contains_method():
+def test_contains_method() -> None:
     """Test the new contains() method"""
     set_obj = PSet.mk([1, 3, 5, 7, 9])
 
@@ -750,7 +750,7 @@ def test_contains_method():
     assert not empty_set.contains(1)
 
 
-def test_contains_operator():
+def test_contains_operator() -> None:
     """Test the new __contains__() method (in operator)"""
     set_obj = PSet.mk([1, 3, 5, 7, 9])
 
@@ -769,7 +769,7 @@ def test_contains_operator():
     assert 1 not in empty_set
 
 
-def test_contains_strings():
+def test_contains_strings() -> None:
     """Test contains method with string elements"""
     set_obj = PSet.mk(["apple", "banana", "cherry"])
 
@@ -779,7 +779,7 @@ def test_contains_strings():
     assert not set_obj.contains("elderberry")
 
 
-def test_union_method():
+def test_union_method() -> None:
     """Test the new union() method"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([3, 4, 5])
@@ -794,7 +794,7 @@ def test_union_method():
     assert set2.list() == [3, 4, 5]
 
 
-def test_intersection_method():
+def test_intersection_method() -> None:
     """Test the new intersection() method"""
     set1 = PSet.mk([1, 2, 3, 4])
     set2 = PSet.mk([3, 4, 5, 6])
@@ -811,7 +811,7 @@ def test_intersection_method():
     assert no_overlap.null()
 
 
-def test_difference_method():
+def test_difference_method() -> None:
     """Test the new difference() method"""
     set1 = PSet.mk([1, 2, 3, 4, 5])
     set2 = PSet.mk([3, 4, 5, 6, 7])
@@ -827,7 +827,7 @@ def test_difference_method():
     assert all_elements.list() == set1.list()
 
 
-def test_set_operations_empty_sets():
+def test_set_operations_empty_sets() -> None:
     """Test set operations with empty sets"""
     set1 = PSet.mk([1, 2, 3])
     empty = PSet.empty(int)
@@ -845,7 +845,7 @@ def test_set_operations_empty_sets():
     assert empty.difference(set1).null()
 
 
-def test_set_operations_same_set():
+def test_set_operations_same_set() -> None:
     """Test set operations on identical sets"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([1, 2, 3])
@@ -860,7 +860,7 @@ def test_set_operations_same_set():
     assert set1.difference(set2).null()
 
 
-def test_set_operations_chaining():
+def test_set_operations_chaining() -> None:
     """Test chaining multiple set operations"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([3, 4, 5])
@@ -874,7 +874,7 @@ def test_set_operations_chaining():
     assert 5 in result
 
 
-def test_split_method():
+def test_split_method() -> None:
     """Test the enhanced split method with pivot membership"""
     set_obj = PSet.mk([1, 2, 3, 4, 5, 6, 7])
 
@@ -910,7 +910,7 @@ def test_split_method():
     assert larger4.list() == []
 
 
-def test_split_empty_set():
+def test_split_empty_set() -> None:
     """Test split on empty set"""
     empty = PSet.empty(int)
     smaller, found, larger = empty.split(5)
@@ -920,7 +920,7 @@ def test_split_empty_set():
     assert larger.null()
 
 
-def test_or_operator_union():
+def test_or_operator_union() -> None:
     """Test | operator for union (Python set-like behavior)"""
     set1 = PSet.mk([1, 2, 3])
     set2 = PSet.mk([3, 4, 5])
@@ -931,7 +931,7 @@ def test_or_operator_union():
     assert result.list() == [1, 2, 3, 4, 5]
 
 
-def test_and_operator_intersection():
+def test_and_operator_intersection() -> None:
     """Test & operator for intersection (Python set-like behavior)"""
     set1 = PSet.mk([1, 2, 3, 4])
     set2 = PSet.mk([3, 4, 5, 6])
@@ -942,7 +942,7 @@ def test_and_operator_intersection():
     assert result.list() == [3, 4]
 
 
-def test_sub_operator_difference():
+def test_sub_operator_difference() -> None:
     """Test - operator for difference (Python set-like behavior)"""
     set1 = PSet.mk([1, 2, 3, 4, 5])
     set2 = PSet.mk([3, 4, 5, 6, 7])
@@ -953,7 +953,7 @@ def test_sub_operator_difference():
     assert result.list() == [1, 2]
 
 
-def test_xor_operator_symmetric_difference():
+def test_xor_operator_symmetric_difference() -> None:
     """Test ^ operator for symmetric difference (Python set-like behavior)"""
     set1 = PSet.mk([1, 2, 3, 4])
     set2 = PSet.mk([3, 4, 5, 6])
@@ -964,7 +964,7 @@ def test_xor_operator_symmetric_difference():
     assert result.list() == [1, 2, 5, 6]
 
 
-def test_python_set_operators_consistency():
+def test_python_set_operators_consistency() -> None:
     """Test that Python set-like operators produce consistent results with their methods"""
     set1 = PSet.mk([1, 2, 3, 4])
     set2 = PSet.mk([3, 4, 5, 6])
@@ -983,7 +983,7 @@ def test_python_set_operators_consistency():
     assert (set1 ^ set2).list() == expected_sym_diff.list()
 
 
-def test_python_set_operators_empty_sets():
+def test_python_set_operators_empty_sets() -> None:
     """Test Python set-like operators with empty sets"""
     set1 = PSet.mk([1, 2, 3])
     empty = PSet.empty(int)
@@ -1005,7 +1005,7 @@ def test_python_set_operators_empty_sets():
     assert (empty ^ set1).list() == set1.list()
 
 
-def test_filter_empty():
+def test_filter_empty() -> None:
     """Test filtering an empty set"""
     empty = PSet.empty(int)
     filtered = empty.filter(lambda x: x > 0)
@@ -1013,7 +1013,7 @@ def test_filter_empty():
     assert filtered.list() == []
 
 
-def test_filter_single_match():
+def test_filter_single_match() -> None:
     """Test filtering a single element that matches"""
     single_set = PSet.singleton(5)
     filtered = single_set.filter(lambda x: x > 0)
@@ -1021,7 +1021,7 @@ def test_filter_single_match():
     assert filtered.size() == 1
 
 
-def test_filter_single_no_match():
+def test_filter_single_no_match() -> None:
     """Test filtering a single element that doesn't match"""
     single_set = PSet.singleton(-5)
     filtered = single_set.filter(lambda x: x > 0)
@@ -1029,7 +1029,7 @@ def test_filter_single_no_match():
     assert filtered.list() == []
 
 
-def test_filter_multiple():
+def test_filter_multiple() -> None:
     """Test filtering sets with multiple elements"""
     set_obj = PSet.mk([1, 2, 3, 4, 5, 6])
     filtered = set_obj.filter(lambda x: x % 2 == 0)  # Even numbers
@@ -1040,7 +1040,7 @@ def test_filter_multiple():
     assert set_obj.list() == [1, 2, 3, 4, 5, 6]
 
 
-def test_filter_all_match():
+def test_filter_all_match() -> None:
     """Test filtering where all elements match"""
     set_obj = PSet.mk([2, 4, 6, 8])
     filtered = set_obj.filter(lambda x: x % 2 == 0)
@@ -1048,7 +1048,7 @@ def test_filter_all_match():
     assert filtered.size() == 4
 
 
-def test_filter_none_match():
+def test_filter_none_match() -> None:
     """Test filtering where no elements match"""
     set_obj = PSet.mk([1, 3, 5, 7])
     filtered = set_obj.filter(lambda x: x % 2 == 0)
@@ -1056,7 +1056,7 @@ def test_filter_none_match():
     assert filtered.list() == []
 
 
-def test_filter_string_elements():
+def test_filter_string_elements() -> None:
     """Test filtering string elements"""
     set_obj = PSet.mk(["apple", "banana", "cherry", "apricot", "blueberry"])
     filtered = set_obj.filter(lambda s: s.startswith("a"))
@@ -1064,7 +1064,7 @@ def test_filter_string_elements():
     assert filtered.size() == 2
 
 
-def test_filter_negative_numbers():
+def test_filter_negative_numbers() -> None:
     """Test filtering with negative numbers"""
     set_obj = PSet.mk([-5, -2, 0, 3, -1, 7])
     filtered = set_obj.filter(lambda x: x < 0)
@@ -1072,7 +1072,7 @@ def test_filter_negative_numbers():
     assert filtered.size() == 3
 
 
-def test_filter_large_set():
+def test_filter_large_set() -> None:
     """Test filtering on large set"""
     set_obj = PSet.mk(range(100))
     filtered = set_obj.filter(lambda x: x % 10 == 0)  # Multiples of 10
@@ -1081,7 +1081,7 @@ def test_filter_large_set():
     assert filtered.size() == len(expected)
 
 
-def test_filter_persistence():
+def test_filter_persistence() -> None:
     """Test that filter creates new sets without modifying originals"""
     original = PSet.mk([1, 2, 3, 4, 5])
     filtered = original.filter(lambda x: x > 3)
@@ -1095,7 +1095,7 @@ def test_filter_persistence():
     assert filtered.size() == 2
 
 
-def test_filter_chaining():
+def test_filter_chaining() -> None:
     """Test chaining filter operations"""
     set_obj = PSet.mk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
@@ -1111,14 +1111,14 @@ def test_filter_chaining():
     assert set_obj.list() == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 
-def test_fold_empty():
+def test_fold_empty() -> None:
     """Test folding an empty set"""
     empty = PSet.empty(int)
     result = empty.fold(lambda acc, x: acc + x, 0)
     assert result == 0
 
 
-def test_fold_single():
+def test_fold_single() -> None:
     """Test folding a single element set"""
     single = PSet.singleton(5)
 
@@ -1131,7 +1131,7 @@ def test_fold_single():
     assert result2 == 5
 
 
-def test_fold_multiple():
+def test_fold_multiple() -> None:
     """Test folding sets with multiple elements"""
     set_obj = PSet.mk([1, 2, 3, 4, 5])
 
@@ -1151,7 +1151,7 @@ def test_fold_multiple():
     assert set_obj.list() == [1, 2, 3, 4, 5]
 
 
-def test_fold_type_change():
+def test_fold_type_change() -> None:
     """Test folding that changes the accumulator type"""
     set_obj = PSet.mk([1, 2, 3])
 
@@ -1164,7 +1164,7 @@ def test_fold_type_change():
     assert result2 == 3
 
 
-def test_fold_string_set():
+def test_fold_string_set() -> None:
     """Test folding sets of strings"""
     set_obj = PSet.mk(["a", "b", "c"])
 
