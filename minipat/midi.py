@@ -1158,7 +1158,7 @@ class RecvCallback(Callback[FrozenMessage]):
         self._port.callback = partial(_recv_cb, sender)  # pyright: ignore
 
     @override
-    def unregister(self) -> None:
+    def deregister(self) -> None:
         self._port.callback = None  # pyright: ignore
 
 
@@ -1168,47 +1168,6 @@ def echo_system() -> System:
     out_port = mido.open_output(name="virt_out", virtual=True)  # pyright: ignore
     in_port = mido.open_input(name="virt_in", virtual=True)  # pyright: ignore
     send_actor = SendActor(out_port)
-    recv_actor = RecvCallback(in_port).produce("send", send_actor)
-    system.spawn_actor("recv", recv_actor)
+    recv_callback = RecvCallback(in_port)
+    system.spawn_callback("recv", send_actor, recv_callback)
     return system
-
-
-def create_midi_system(
-    output: mido.ports.BaseOutput,
-) -> Tuple[MidiActor, MidiSenderTask]:
-    """Create a complete MIDI system with scheduling support.
-
-    Creates a MidiActor that queues messages and a MidiSenderTask that sends them
-    at the appropriate time. Both components share a ParMsgHeap for message scheduling
-    and a Mutex-protected output port.
-
-    Args:
-        output: MIDI output port, or None to disable output
-
-    Returns:
-        A tuple of (MidiActor, MidiSenderTask). The MidiSenderTask should be
-        started with start() and stopped with stop() as needed.
-
-    Example:
-        # Create system with virtual output
-        output_port = mido.open_output(virtual=True)
-        midi_actor, sender_task = create_midi_system(output_port)
-
-        # Start the sender task
-        sender_task.start()
-
-        # Use midi_actor in your actor system...
-
-        # Clean up
-        sender_task.stop()
-        output_port.close()
-    """
-    # Create shared components
-    heap = ParMsgHeap()
-    output_mutex = Mutex(output)
-
-    # Create actor and sender task
-    midi_actor = MidiActor(heap, output_mutex)
-    sender_task = MidiSenderTask(heap, output_mutex)
-
-    return midi_actor, sender_task
