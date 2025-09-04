@@ -13,6 +13,8 @@ from minipat.midi import (
     Vel,
     VelKey,
     combine,
+    make_note,
+    make_vel,
     note,
     vel,
 )
@@ -103,11 +105,11 @@ def test_combine_streams():
 
 def test_midi_processor():
     """Test MidiProcessor converts MidiAttrs to MIDI messages."""
-    processor = MidiProcessor(default_velocity=64)
+    processor = MidiProcessor(default_velocity=make_vel(64))
 
     # Create test MIDI attributes
     midi_attrs: MidiAttrs = (
-        DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(VelKey(), Vel(80))
+        DMap.empty(MidiDom).put(NoteKey(), make_note(60)).put(VelKey(), make_vel(80))
     )
 
     # Create test event heap
@@ -158,10 +160,10 @@ def test_midi_processor():
 
 def test_midi_processor_defaults():
     """Test MidiProcessor uses defaults for missing attributes."""
-    processor = MidiProcessor(default_velocity=100)
+    processor = MidiProcessor(default_velocity=make_vel(100))
 
     # Create MIDI attributes with only note (no velocity)
-    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), Note(72))
+    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), make_note(72))
 
     from minipat.arc import Arc, Span
     from minipat.ev import Ev, ev_heap_singleton
@@ -207,7 +209,7 @@ def test_midi_processor_clamps_values():
     """Test MidiProcessor clamps MIDI values to valid range."""
     processor = MidiProcessor()
 
-    # Create MIDI attributes with out-of-range values
+    # Create MIDI attributes with out-of-range values (bypass validation for testing)
     midi_attrs: MidiAttrs = (
         DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelKey(), Vel(-10))
     )
@@ -238,7 +240,7 @@ def test_midi_processor_orbit_as_channel():
     processor = MidiProcessor()
 
     # Create test MIDI attributes
-    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), Note(60))
+    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), make_note(60))
 
     from minipat.arc import Arc, Span
     from minipat.ev import Ev, ev_heap_singleton
