@@ -1,24 +1,31 @@
 """Tests for MIDI functionality."""
 
+import time
 from fractions import Fraction
+from threading import Event
+from typing import List
+
+import mido
+from mido.frozen import FrozenMessage
 
 from minipat.common import CycleTime, PosixTime
 from minipat.live import Instant, Orbit
 from minipat.midi import (
+    ChannelField,
+    ControlField,
     MidiAttrs,
     MidiDom,
     MidiProcessor,
+    MsgTypeField,
     Note,
+    NoteField,
     NoteKey,
-    Vel,
+    ValueField,
     VelKey,
+    Velocity,
+    VelocityField,
     combine,
-    get_channel,
-    get_note,
-    get_velocity,
-    has_msg_type,
-    make_note,
-    make_vel,
+    echo_system,
     note,
     vel,
 )
@@ -109,11 +116,13 @@ def test_combine_streams():
 
 def test_midi_processor():
     """Test MidiProcessor converts MidiAttrs to MIDI messages."""
-    processor = MidiProcessor(default_velocity=make_vel(64))
+    processor = MidiProcessor(default_velocity=VelocityField.mk(64))
 
     # Create test MIDI attributes
     midi_attrs: MidiAttrs = (
-        DMap.empty(MidiDom).put(NoteKey(), make_note(60)).put(VelKey(), make_vel(80))
+        DMap.empty(MidiDom)
+        .put(NoteKey(), NoteField.mk(60))
+        .put(VelKey(), VelocityField.mk(80))
     )
 
     # Create test event heap
@@ -144,16 +153,24 @@ def test_midi_processor():
     note_off_msg = message_list[1]
 
     # Check note on message
-    assert has_msg_type(note_on_msg.message, "note_on")
-    assert get_note(note_on_msg.message) == 60
-    assert get_velocity(note_on_msg.message) == 80
-    assert get_channel(note_on_msg.message) == 0  # Orbit 0 -> Channel 0
+    assert (
+        MsgTypeField.exists(note_on_msg.message)
+        and MsgTypeField.get(note_on_msg.message) == "note_on"
+    )
+    assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 60
+    assert VelocityField.unmk(VelocityField.get(note_on_msg.message)) == 80
+    assert (
+        ChannelField.unmk(ChannelField.get(note_on_msg.message)) == 0
+    )  # Orbit 0 -> Channel 0
 
     # Check note off message
-    assert has_msg_type(note_off_msg.message, "note_off")
-    assert get_note(note_off_msg.message) == 60
-    assert get_velocity(note_off_msg.message) == 0
-    assert get_channel(note_off_msg.message) == 0
+    assert (
+        MsgTypeField.exists(note_off_msg.message)
+        and MsgTypeField.get(note_off_msg.message) == "note_off"
+    )
+    assert NoteField.unmk(NoteField.get(note_off_msg.message)) == 60
+    assert VelocityField.unmk(VelocityField.get(note_off_msg.message)) == 0
+    assert ChannelField.unmk(ChannelField.get(note_off_msg.message)) == 0
 
     # Check timing
     assert note_on_msg.time == PosixTime(0.0)  # Start of arc
@@ -164,10 +181,10 @@ def test_midi_processor():
 
 def test_midi_processor_defaults():
     """Test MidiProcessor uses defaults for missing attributes."""
-    processor = MidiProcessor(default_velocity=make_vel(100))
+    processor = MidiProcessor(default_velocity=VelocityField.mk(100))
 
     # Create MIDI attributes with only note (no velocity)
-    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), make_note(72))
+    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(72))
 
     from minipat.arc import Arc, Span
     from minipat.ev import Ev, ev_heap_singleton
@@ -188,9 +205,11 @@ def test_midi_processor_defaults():
     note_on_msg = message_list[0]
 
     # Should use default velocity and orbit as channel
-    assert get_velocity(note_on_msg.message) == 100
-    assert get_channel(note_on_msg.message) == 1  # Orbit 1 -> Channel 1
-    assert get_note(note_on_msg.message) == 72
+    assert VelocityField.unmk(VelocityField.get(note_on_msg.message)) == 100
+    assert (
+        ChannelField.unmk(ChannelField.get(note_on_msg.message)) == 1
+    )  # Orbit 1 -> Channel 1
+    assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 72
 
 
 def test_midi_processor_empty_events():
@@ -215,7 +234,7 @@ def test_midi_processor_clamps_values():
 
     # Create MIDI attributes with out-of-range values (bypass validation for testing)
     midi_attrs: MidiAttrs = (
-        DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelKey(), Vel(-10))
+        DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelKey(), Velocity(-10))
     )
 
     from minipat.arc import Arc, Span
@@ -235,8 +254,10 @@ def test_midi_processor_clamps_values():
     note_on_msg = message_list[0]
 
     # Should clamp to valid MIDI range
-    assert get_note(note_on_msg.message) == 127  # Clamped from 200
-    assert get_velocity(note_on_msg.message) == 0  # Clamped from -10
+    assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 127  # Clamped from 200
+    assert (
+        VelocityField.unmk(VelocityField.get(note_on_msg.message)) == 0
+    )  # Clamped from -10
 
 
 def test_midi_processor_orbit_as_channel():
@@ -244,7 +265,7 @@ def test_midi_processor_orbit_as_channel():
     processor = MidiProcessor()
 
     # Create test MIDI attributes
-    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), make_note(60))
+    midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
 
     from minipat.arc import Arc, Span
     from minipat.ev import Ev, ev_heap_singleton
@@ -263,4 +284,110 @@ def test_midi_processor_orbit_as_channel():
         message_list = list(timed_messages)
 
         expected_channel = min(15, orbit_num)  # Should clamp to 0-15 range
-        assert get_channel(message_list[0].message) == expected_channel
+        assert (
+            ChannelField.unmk(ChannelField.get(message_list[0].message))
+            == expected_channel
+        )
+
+
+def test_echo_system_integration():
+    """Integration test for echo_system that sends MIDI and verifies echo."""
+
+    received_messages: List[FrozenMessage] = []
+    message_received = Event()
+
+    def message_callback(msg):
+        """Callback to capture received messages."""
+        received_messages.append(msg)
+        message_received.set()
+
+    system = None
+    input_port = None
+    output_port = None
+    try:
+        # Create the echo system first
+        system = echo_system(in_port_name="virt_in", out_port_name="virt_out")
+
+        # Give system time to create virtual ports
+        time.sleep(0.1)
+
+        # Open connections to the virtual ports
+        input_port = mido.open_output("virt_in")  # pyright: ignore
+        output_port = mido.open_input("virt_out", callback=message_callback)  # pyright: ignore
+
+        # Give ports time to connect
+        time.sleep(0.1)
+
+        # Create test MIDI messages
+        test_messages = [
+            FrozenMessage("note_on", channel=0, note=60, velocity=64),
+            FrozenMessage("note_off", channel=0, note=60, velocity=0),
+            FrozenMessage("note_on", channel=1, note=72, velocity=100),
+            FrozenMessage("control_change", channel=0, control=1, value=50),
+        ]
+
+        # Send each test message and verify it's echoed
+        for i, test_msg in enumerate(test_messages):
+            # Clear previous state
+            received_messages.clear()
+            message_received.clear()
+
+            # Send the message
+            input_port.send(test_msg)
+
+            # Wait for the echoed message (with timeout)
+            message_arrived = message_received.wait(timeout=1.0)
+            assert message_arrived, f"Message {i} was not echoed within timeout"
+
+            # Verify the message was echoed correctly
+            assert len(received_messages) >= 1, (
+                f"No messages received for test message {i}"
+            )
+            received_msg = received_messages[0]
+
+            # Compare message content (excluding timing-related fields)
+            assert received_msg.type == test_msg.type, (
+                f"Message type mismatch for message {i}"
+            )
+
+            if ChannelField.exists(test_msg):
+                assert ChannelField.get(received_msg) == ChannelField.get(test_msg), (
+                    f"Channel mismatch for message {i}"
+                )
+            if NoteField.exists(test_msg):
+                assert NoteField.get(received_msg) == NoteField.get(test_msg), (
+                    f"Note mismatch for message {i}"
+                )
+            if VelocityField.exists(test_msg):
+                assert VelocityField.get(received_msg) == VelocityField.get(test_msg), (
+                    f"Velocity mismatch for message {i}"
+                )
+            if ControlField.exists(test_msg):
+                assert ControlField.get(received_msg) == ControlField.get(test_msg), (
+                    f"Control mismatch for message {i}"
+                )
+            if ValueField.exists(test_msg):
+                assert ValueField.get(received_msg) == ValueField.get(test_msg), (
+                    f"Value mismatch for message {i}"
+                )
+
+    finally:
+        # Clean up: close ports and stop system
+        if system is not None:
+            # Stop the actor system
+            system.stop()
+
+            # Wait for system to shut down cleanly
+            exceptions = system.wait(timeout=2.0)
+
+            # Verify no fatal exceptions occurred
+            fatal_exceptions = [exc for exc in exceptions if exc.fatal]
+            assert len(fatal_exceptions) == 0, (
+                f"Fatal exceptions occurred: {fatal_exceptions}"
+            )
+
+        # Close ports
+        if input_port is not None:
+            input_port.close()
+        if output_port is not None:
+            output_port.close()

@@ -431,7 +431,7 @@ class Control(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def null[T](self) -> Sender[T]:
+    def null[T](self) -> Sender[T]:  # pyright: ignore
         """Create a null sender that discards all messages.
 
         Returns:
@@ -1160,7 +1160,7 @@ class ControlImpl(Control):
         )
 
     @override
-    def null[T](self) -> Sender[T]:
+    def null[T](self) -> Sender[T]:  # pyright: ignore
         """Create a null sender that discards all messages.
 
         Returns:
@@ -1354,7 +1354,7 @@ class System(Control):
         return self._control.spawn_callback(name, actor, callback)
 
     @override
-    def null[T](self) -> Sender[T]:
+    def null[T](self) -> Sender[T]:  # pyright: ignore
         """Create a null sender that discards all messages.
 
         Returns:
@@ -1546,7 +1546,7 @@ will be used as the target for forwarding messages to the nursery.
 """
 
 
-def null_initializer[S, T](state: Optional[S], env: ActorEnv) -> Sender[T]:
+def null_initializer[S, T](state: Optional[S], env: ActorEnv) -> Sender[T]:  # pyright: ignore
     """Default initializer that returns a null sender.
 
     This initializer does not spawn any child actors or tasks and simply

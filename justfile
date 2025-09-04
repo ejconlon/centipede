@@ -1,4 +1,4 @@
-python := ".venv/bin/python3 -Xgil=0"
+python := "env PYTHON_GIL=0 .venv/bin/python3"
 packages := "spiny bad_actor minipat pushpluck"
 mypy_packages := "-p spiny -p bad_actor -p minipat -p pushpluck"
 
