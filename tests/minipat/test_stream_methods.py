@@ -104,7 +104,7 @@ def test_stream_bind() -> None:
     stream = Stream.pure(3)
 
     # Bind to create multiple events
-    def expand_to_seq(x):
+    def expand_to_seq(x: int) -> Stream[int]:
         return Stream.seq(
             PSeq.mk([Stream.pure(x - 1), Stream.pure(x), Stream.pure(x + 1)])
         )

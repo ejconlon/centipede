@@ -296,7 +296,7 @@ def test_echo_system_integration() -> None:
     received_messages: List[FrozenMessage] = []
     message_received = Event()
 
-    def message_callback(msg):
+    def message_callback(msg: FrozenMessage) -> None:
         """Callback to capture received messages."""
         received_messages.append(msg)
         message_received.set()

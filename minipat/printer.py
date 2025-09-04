@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from typing import cast
 
 from minipat.common import format_fraction
 from minipat.pat import (
@@ -36,7 +37,7 @@ def print_pattern(pat: Pat[str]) -> str:
             return "~"
 
         case PatPure(value):
-            return value
+            return cast(str, value)
 
         case PatSeq(children):
             if len(children) == 1:

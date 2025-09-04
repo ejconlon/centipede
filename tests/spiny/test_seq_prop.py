@@ -12,7 +12,9 @@ configure_hypo()
 
 
 @st.composite
-def seq_strategy(draw, element_strategy=st.integers()) -> PSeq[int]:
+def seq_strategy(
+    draw: st.DrawFn, element_strategy: st.SearchStrategy[int] = st.integers()
+) -> PSeq[int]:
     return PSeq.mk(draw(st.lists(element_strategy, min_size=0, max_size=20)))
 
 
@@ -26,7 +28,7 @@ def test_seq_mk_equals_list(elements: List[int]) -> None:
 
 
 @given(seq_strategy())
-def test_cons_uncons_inverse(seq) -> None:
+def test_cons_uncons_inverse(seq: PSeq[int]) -> None:
     """cons and uncons should be inverse operations."""
     element = 42
 
@@ -43,7 +45,7 @@ def test_cons_uncons_inverse(seq) -> None:
 
 
 @given(seq_strategy())
-def test_snoc_unsnoc_inverse(seq) -> None:
+def test_snoc_unsnoc_inverse(seq: PSeq[int]) -> None:
     """snoc and unsnoc should be inverse operations."""
     element = 42
 
@@ -60,7 +62,7 @@ def test_snoc_unsnoc_inverse(seq) -> None:
 
 
 @given(seq_strategy(), seq_strategy())
-def test_concat_associative(seq1, seq2) -> None:
+def test_concat_associative(seq1: PSeq[int], seq2: PSeq[int]) -> None:
     """Concatenation should be associative: (a + b) + c == a + (b + c)."""
     seq3 = PSeq.mk([100, 200])
 
@@ -71,7 +73,7 @@ def test_concat_associative(seq1, seq2) -> None:
 
 
 @given(seq_strategy())
-def test_concat_empty_identity(seq) -> None:
+def test_concat_empty_identity(seq: PSeq[int]) -> None:
     """Concatenating with empty should be identity."""
     empty = PSeq.empty(int)
 
@@ -80,7 +82,7 @@ def test_concat_empty_identity(seq) -> None:
 
 
 @given(seq_strategy(), st.integers(min_value=0, max_value=10))
-def test_lookup_get_consistency(seq, index) -> None:
+def test_lookup_get_consistency(seq: PSeq[int], index: int) -> None:
     """lookup and get should be consistent for valid indices."""
     elements = seq.list()
 
@@ -93,7 +95,9 @@ def test_lookup_get_consistency(seq, index) -> None:
 
 
 @given(seq_strategy(), st.integers(min_value=0, max_value=10), st.integers())
-def test_update_preserves_other_elements(seq, index, new_value) -> None:
+def test_update_preserves_other_elements(
+    seq: PSeq[int], index: int, new_value: int
+) -> None:
     """Update should only change the specified index."""
     elements = seq.list()
 
@@ -111,7 +115,7 @@ def test_update_preserves_other_elements(seq, index, new_value) -> None:
 
 
 @given(seq_strategy(), st.integers())
-def test_update_out_of_bounds_unchanged(seq, new_value) -> None:
+def test_update_out_of_bounds_unchanged(seq: PSeq[int], new_value: int) -> None:
     """Update with out-of-bounds index should return unchanged sequence."""
     elements = seq.list()
     size = len(elements)
@@ -123,7 +127,7 @@ def test_update_out_of_bounds_unchanged(seq, new_value) -> None:
 
 
 @given(seq_strategy())
-def test_list_iter_consistency(seq) -> None:
+def test_list_iter_consistency(seq: PSeq[int]) -> None:
     """list() and iter() should produce the same elements in the same order."""
 
     list_result = seq.list()
@@ -133,7 +137,7 @@ def test_list_iter_consistency(seq) -> None:
 
 
 @given(seq_strategy())
-def test_reversed_iter_consistency(seq) -> None:
+def test_reversed_iter_consistency(seq: PSeq[int]) -> None:
     """reversed() should produce elements in reverse order of list()."""
 
     normal_list = seq.list()
@@ -163,7 +167,7 @@ def test_size_matches_operations(elements: List[int]) -> None:
 
 
 @given(seq_strategy(), seq_strategy())
-def test_concat_size_additive(seq1, seq2) -> None:
+def test_concat_size_additive(seq1: PSeq[int], seq2: PSeq[int]) -> None:
     """Concatenated sequence size should equal sum of individual sizes."""
 
     concat_seq = seq1.concat(seq2)
@@ -191,7 +195,7 @@ def test_cons_snoc_operations_preserve_elements(elements: List[int]) -> None:
 
 
 @given(seq_strategy())
-def test_multiple_uncons_exhaustion(seq) -> None:
+def test_multiple_uncons_exhaustion(seq: PSeq[int]) -> None:
     """Repeated uncons should eventually reach empty sequence."""
     elements = seq.list()
     remaining_elements = elements.copy()
@@ -207,7 +211,7 @@ def test_multiple_uncons_exhaustion(seq) -> None:
 
 
 @given(seq_strategy())
-def test_multiple_unsnoc_exhaustion(seq) -> None:
+def test_multiple_unsnoc_exhaustion(seq: PSeq[int]) -> None:
     """Repeated unsnoc should eventually reach empty sequence."""
     elements = seq.list()
     remaining_elements = elements.copy()
@@ -242,7 +246,7 @@ def test_operators_consistency(elements: List[int]) -> None:
 
 
 @given(seq_strategy(), seq_strategy())
-def test_addition_operator_concat(seq1, seq2) -> None:
+def test_addition_operator_concat(seq1: PSeq[int], seq2: PSeq[int]) -> None:
     """+ operator should match concat method."""
 
     concat_method = seq1.concat(seq2)
@@ -276,7 +280,7 @@ def test_singleton_properties(value: int) -> None:
 
 
 @given(seq_strategy(), st.integers(min_value=0, max_value=20))
-def test_chained_updates_independent(seq, new_value) -> None:
+def test_chained_updates_independent(seq: PSeq[int], new_value: int) -> None:
     """Multiple updates should be independent and preserve immutability."""
     elements = seq.list()
 

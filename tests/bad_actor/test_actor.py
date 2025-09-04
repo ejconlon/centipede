@@ -2,6 +2,8 @@
 
 import threading
 import time
+from logging import Logger
+from threading import Event
 from typing import List
 
 from bad_actor import (
@@ -29,7 +31,7 @@ class SimpleActor(Actor[str]):
         self.messages.append(value)
         env.logger.info("Received message: %s", value)
 
-    def on_stop(self, logger) -> None:
+    def on_stop(self, logger: Logger) -> None:
         self.stopped = True
         logger.info("SimpleActor stopped")
 
@@ -54,7 +56,7 @@ class SimpleTask(Task):
         self.completed = False
         self.was_halted = False
 
-    def run(self, logger, halt) -> None:
+    def run(self, logger: Logger, halt: Event) -> None:
         logger.info("SimpleTask starting")
 
         # Wait for either duration or halt event
@@ -75,7 +77,7 @@ class ProducerTask(Task):
         self.delay = delay
         self.sent_count = 0
 
-    def run(self, logger, halt) -> None:
+    def run(self, logger: Logger, halt: Event) -> None:
         logger.info("ProducerTask starting")
 
         for msg in self.messages:
@@ -309,7 +311,7 @@ def test_concurrent_message_sending() -> None:
     sender = sys.spawn_actor("counting-actor", actor)
 
     # Send messages from multiple threads
-    def send_numbers(start: int, count: int):
+    def send_numbers(start: int, count: int) -> None:
         for i in range(start, start + count):
             sender.send(i)
 

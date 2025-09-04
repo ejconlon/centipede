@@ -20,7 +20,7 @@ from minipat.pat import (
 )
 
 
-def assert_string_value(value, expected_value) -> None:
+def assert_string_value(value: str, expected_value: str) -> None:
     """Helper function to assert string values."""
     assert value == expected_value
 

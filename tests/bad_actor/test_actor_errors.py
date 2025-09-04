@@ -1,7 +1,9 @@
 """Tests for actor system error handling and edge cases."""
 
 import time
-from typing import List, Optional
+from logging import Logger
+from threading import Event
+from typing import List, Optional, Tuple
 
 from bad_actor import (
     ActionException,
@@ -35,7 +37,7 @@ class ReportingActor(Actor[str]):
     """Actor that spawns children and collects error reports."""
 
     def __init__(self) -> None:
-        self.reports: List[str] = []
+        self.reports: List[Tuple[UniqId, Optional[ActionException]]] = []
 
     def on_start(self, env: ActorEnv) -> None:
         # Spawn a child that will fail
@@ -112,7 +114,8 @@ def test_child_error_reporting() -> None:
 
     # Parent should have received error report
     assert len(parent.reports) == 1
-    child_id, exc = parent.reports[0]
+    report = parent.reports[0]
+    child_id, exc = report
     assert exc is not None
     assert "Test error" in str(exc.exc)
 
@@ -204,7 +207,7 @@ def test_sender_wait_timeout() -> None:
         def __init__(self, duration: float = 0.1):
             self.duration = duration
 
-        def run(self, logger, halt) -> None:
+        def run(self, logger: Logger, halt: Event) -> None:
             halt.wait(timeout=self.duration)
 
     sys = new_system()

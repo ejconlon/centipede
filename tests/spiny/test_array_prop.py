@@ -10,7 +10,11 @@ configure_hypo()
 
 
 @st.composite
-def array_strategy(draw, element_strategy=st.integers(), max_size=20):
+def array_strategy(
+    draw: st.DrawFn,
+    element_strategy: st.SearchStrategy[int] = st.integers(),
+    max_size: int = 20,
+) -> PArray[int]:
     """Generate an PArray with random size and fill element."""
     size = draw(st.integers(min_value=0, max_value=max_size))
     fill = draw(element_strategy)
@@ -28,7 +32,7 @@ def array_strategy(draw, element_strategy=st.integers(), max_size=20):
 
 
 @given(st.integers(min_value=0, max_value=100), st.integers())
-def test_array_creation_properties(size, fill):
+def test_array_creation_properties(size: int, fill: int) -> None:
     """Test basic properties of PArray creation."""
     arr = PArray.new(size, fill)
 
@@ -43,7 +47,7 @@ def test_array_creation_properties(size, fill):
 
 
 @given(array_strategy())
-def test_array_size_invariants(arr):
+def test_array_size_invariants(arr: PArray[int]) -> None:
     """Test that PArray size is consistent across operations."""
     size = arr.size()
 
@@ -57,7 +61,7 @@ def test_array_size_invariants(arr):
 
 
 @given(array_strategy(), st.integers())
-def test_get_bounds_checking(arr, index):
+def test_get_bounds_checking(arr: PArray[int], index: int) -> None:
     """Test that get method properly checks bounds."""
     size = arr.size()
 
@@ -75,7 +79,7 @@ def test_get_bounds_checking(arr, index):
 
 
 @given(array_strategy(), st.integers())
-def test_lookup_bounds_checking(arr, index):
+def test_lookup_bounds_checking(arr: PArray[int], index: int) -> None:
     """Test that lookup method properly checks bounds."""
     size = arr.size()
 
@@ -93,7 +97,7 @@ def test_lookup_bounds_checking(arr, index):
 
 
 @given(array_strategy(), st.integers())
-def test_set_immutability(arr, value):
+def test_set_immutability(arr: PArray[int], value: int) -> None:
     """Test that set operations don't modify the original array."""
     size = arr.size()
 
@@ -120,7 +124,7 @@ def test_set_immutability(arr, value):
 
 
 @given(array_strategy(), st.integers(min_value=0, max_value=100))
-def test_resize_properties(arr, new_size):
+def test_resize_properties(arr: PArray[int], new_size: int) -> None:
     """Test properties of resize operation."""
     original_size = arr.size()
     resized = arr.resize(new_size)
@@ -135,7 +139,7 @@ def test_resize_properties(arr, new_size):
 
 
 @given(array_strategy())
-def test_iteration_consistency(arr):
+def test_iteration_consistency(arr: PArray[int]) -> None:
     """Test that different iteration methods are consistent."""
     size = arr.size()
 
@@ -149,7 +153,7 @@ def test_iteration_consistency(arr):
 
 
 @given(array_strategy(), array_strategy())
-def test_comparison_properties(arr1, arr2):
+def test_comparison_properties(arr1: PArray[int], arr2: PArray[int]) -> None:
     """Test lexicographic comparison properties."""
     # Reflexivity
     assert arr1 == arr1
@@ -170,7 +174,7 @@ def test_comparison_properties(arr1, arr2):
 
 
 @given(st.integers(min_value=0, max_value=20), st.integers())
-def test_empty_vs_filled_array(size, fill):
+def test_empty_vs_filled_array(size: int, fill: int) -> None:
     """Test comparing empty vs filled arrays."""
     empty_arr = PArray.new(size, fill)
 
@@ -187,7 +191,7 @@ def test_empty_vs_filled_array(size, fill):
 
 
 @given(array_strategy())
-def test_roundtrip_properties(arr):
+def test_roundtrip_properties(arr: PArray[int]) -> None:
     """Test roundtrip properties like resize(size()) is identity-like."""
     size = arr.size()
 
@@ -200,7 +204,7 @@ def test_roundtrip_properties(arr):
 
 
 @given(st.integers(min_value=1, max_value=20), st.integers())
-def test_set_get_consistency(size, fill):
+def test_set_get_consistency(size: int, fill: int) -> None:
     """Test that set and get operations are consistent."""
     arr = PArray.new(size, fill)
 
@@ -219,7 +223,7 @@ def test_set_get_consistency(size, fill):
 
 
 @given(st.integers(min_value=0, max_value=20), st.integers())
-def test_magic_method_consistency(size, fill):
+def test_magic_method_consistency(size: int, fill: int) -> None:
     """Test that magic methods are consistent with regular methods."""
     arr = PArray.new(size, fill)
 

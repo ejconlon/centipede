@@ -13,7 +13,9 @@ configure_hypo()
 
 @st.composite
 def heapmap_strategy(
-    draw, key_strategy=st.integers(), value_strategy=st.integers()
+    draw: st.DrawFn,
+    key_strategy: st.SearchStrategy[int] = st.integers(),
+    value_strategy: st.SearchStrategy[int] = st.integers(),
 ) -> PHeapMap[int, int]:
     pairs = draw(
         st.lists(st.tuples(key_strategy, value_strategy), min_size=0, max_size=20)
@@ -37,7 +39,9 @@ def test_heapmap_mk_maintains_heap_order(pairs: List[Tuple[int, int]]) -> None:
 
 
 @given(heapmap_strategy(), st.integers(), st.integers())
-def test_insert_maintains_heap_order(hm, key, value) -> None:
+def test_insert_maintains_heap_order(
+    hm: PHeapMap[int, int], key: int, value: int
+) -> None:
     """Inserting a key-value pair should maintain heap order."""
     new_hm = hm.insert(key, value)
     keys = list(new_hm.keys())
@@ -46,7 +50,9 @@ def test_insert_maintains_heap_order(hm, key, value) -> None:
 
 
 @given(heapmap_strategy(), st.integers(), st.integers())
-def test_insert_increases_size_by_one(hm, key, value) -> None:
+def test_insert_increases_size_by_one(
+    hm: PHeapMap[int, int], key: int, value: int
+) -> None:
     """Inserting always increases size by 1 (duplicates allowed)."""
     original_size = hm.size()
     new_hm = hm.insert(key, value)
@@ -56,7 +62,7 @@ def test_insert_increases_size_by_one(hm, key, value) -> None:
 
 
 @given(heapmap_strategy())
-def test_find_min_returns_minimum_key(hm) -> None:
+def test_find_min_returns_minimum_key(hm: PHeapMap[int, int]) -> None:
     """find_min should return the entry with minimum key if heap map is non-empty."""
     result = hm.find_min()
 
@@ -75,7 +81,7 @@ def test_find_min_returns_minimum_key(hm) -> None:
 
 
 @given(heapmap_strategy())
-def test_delete_min_removes_minimum(hm) -> None:
+def test_delete_min_removes_minimum(hm: PHeapMap[int, int]) -> None:
     """delete_min should remove one instance of the minimum key."""
     if hm.null():
         result = hm.delete_min()
@@ -98,7 +104,7 @@ def test_delete_min_removes_minimum(hm) -> None:
 
 
 @given(heapmap_strategy())
-def test_find_min_delete_min_consistency(hm) -> None:
+def test_find_min_delete_min_consistency(hm: PHeapMap[int, int]) -> None:
     """find_min and delete_min should be consistent."""
     find_result = hm.find_min()
     delete_result = hm.delete_min()
@@ -113,7 +119,7 @@ def test_find_min_delete_min_consistency(hm) -> None:
 
 
 @given(heapmap_strategy())
-def test_repeated_find_min_extracts_sorted(hm) -> None:
+def test_repeated_find_min_extracts_sorted(hm: PHeapMap[int, int]) -> None:
     """Repeatedly calling find_min should extract entries in key order."""
     extracted_pairs = []
     current = hm
@@ -135,7 +141,9 @@ def test_repeated_find_min_extracts_sorted(hm) -> None:
 
 
 @given(heapmap_strategy(), heapmap_strategy())
-def test_merge_contains_all_entries(hm1, hm2) -> None:
+def test_merge_contains_all_entries(
+    hm1: PHeapMap[int, int], hm2: PHeapMap[int, int]
+) -> None:
     """Merged heap map should contain all entries from both heap maps."""
     merged = hm1.merge(hm2)
 
@@ -151,7 +159,7 @@ def test_merge_contains_all_entries(hm1, hm2) -> None:
 
 
 @given(heapmap_strategy())
-def test_merge_empty_identity(hm) -> None:
+def test_merge_empty_identity(hm: PHeapMap[int, int]) -> None:
     """Merging with empty should be identity."""
     empty = PHeapMap.empty(int, int)
 
@@ -163,7 +171,9 @@ def test_merge_empty_identity(hm) -> None:
 
 
 @given(heapmap_strategy(), heapmap_strategy())
-def test_merge_commutative_size(hm1, hm2) -> None:
+def test_merge_commutative_size(
+    hm1: PHeapMap[int, int], hm2: PHeapMap[int, int]
+) -> None:
     """Merge should be commutative in terms of size and content."""
     merged1 = hm1.merge(hm2)
     merged2 = hm2.merge(hm1)
@@ -174,7 +184,7 @@ def test_merge_commutative_size(hm1, hm2) -> None:
 
 
 @given(heapmap_strategy())
-def test_persistence_under_operations(hm) -> None:
+def test_persistence_under_operations(hm: PHeapMap[int, int]) -> None:
     """Original heap map should remain unchanged after operations."""
     original_items = list(hm.iter())
     original_size = hm.size()
@@ -210,7 +220,9 @@ def test_operators_consistency(pairs: List[Tuple[int, int]]) -> None:
 
 
 @given(heapmap_strategy(), heapmap_strategy())
-def test_addition_operator_merge(hm1, hm2) -> None:
+def test_addition_operator_merge(
+    hm1: PHeapMap[int, int], hm2: PHeapMap[int, int]
+) -> None:
     """+ operator should match merge method."""
     merge_method = hm1.merge(hm2)
     merge_op = hm1 + hm2
@@ -297,7 +309,9 @@ def test_string_keys(pairs: List[Tuple[str, int]]) -> None:
 
 
 @given(heapmap_strategy(), st.integers(), st.integers())
-def test_chained_operations_consistency(hm, key, value) -> None:
+def test_chained_operations_consistency(
+    hm: PHeapMap[int, int], key: int, value: int
+) -> None:
     """Chained operations should maintain consistency."""
     # Chain multiple operations
     result = hm.insert(key, value).insert(key + 1, value + 1).insert(key - 1, value - 1)
@@ -308,7 +322,9 @@ def test_chained_operations_consistency(hm, key, value) -> None:
 
 
 @given(heapmap_strategy(), heapmap_strategy(), heapmap_strategy())
-def test_merge_associative(hm1, hm2, hm3) -> None:
+def test_merge_associative(
+    hm1: PHeapMap[int, int], hm2: PHeapMap[int, int], hm3: PHeapMap[int, int]
+) -> None:
     """Merge should be associative: (A + B) + C == A + (B + C)."""
     left_assoc = hm1.merge(hm2).merge(hm3)
     right_assoc = hm1.merge(hm2.merge(hm3))
@@ -318,7 +334,7 @@ def test_merge_associative(hm1, hm2, hm3) -> None:
 
 
 @given(heapmap_strategy())
-def test_empty_heapmap_properties(hm) -> None:
+def test_empty_heapmap_properties(hm: PHeapMap[int, int]) -> None:
     """Empty heap map should have consistent behavior."""
     if hm.null():
         assert hm.size() == 0

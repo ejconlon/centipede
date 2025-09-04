@@ -13,7 +13,9 @@ configure_hypo()
 
 @st.composite
 def map_strategy(
-    draw, key_strategy=st.integers(), value_strategy=st.integers()
+    draw: st.DrawFn,
+    key_strategy: st.SearchStrategy[int] = st.integers(),
+    value_strategy: st.SearchStrategy[int] = st.integers(),
 ) -> PMap[int, int]:
     pairs = draw(
         st.lists(st.tuples(key_strategy, value_strategy), min_size=0, max_size=20)
@@ -40,7 +42,9 @@ def test_map_mk_maintains_order_and_deduplicates(pairs: List[Tuple[int, int]]) -
 
 
 @given(map_strategy(), st.integers(), st.integers())
-def test_put_idempotent_with_same_value(pmap, key, value) -> None:
+def test_put_idempotent_with_same_value(
+    pmap: PMap[int, int], key: int, value: int
+) -> None:
     """Putting the same key-value pair multiple times should be idempotent."""
     # Put key-value once
     pmap1 = pmap.put(key, value)
@@ -58,7 +62,7 @@ def test_put_idempotent_with_same_value(pmap, key, value) -> None:
 
 
 @given(map_strategy(), st.integers(), st.integers())
-def test_put_maintains_sorted_order(pmap, key, value) -> None:
+def test_put_maintains_sorted_order(pmap: PMap[int, int], key: int, value: int) -> None:
     """Putting a key-value pair should maintain sorted order by key."""
     new_pmap = pmap.put(key, value)
     keys = list(new_pmap.keys())
@@ -69,7 +73,9 @@ def test_put_maintains_sorted_order(pmap, key, value) -> None:
 
 
 @given(map_strategy(), st.integers(), st.integers())
-def test_put_increases_size_at_most_one(pmap, key, value) -> None:
+def test_put_increases_size_at_most_one(
+    pmap: PMap[int, int], key: int, value: int
+) -> None:
     """Putting a key-value pair should increase size by at most 1."""
     original_size = pmap.size()
     new_pmap = pmap.put(key, value)
@@ -83,7 +89,9 @@ def test_put_increases_size_at_most_one(pmap, key, value) -> None:
 
 
 @given(map_strategy(), st.integers(), st.integers(), st.integers())
-def test_put_overwrites_existing_key(pmap, key, value1, value2) -> None:
+def test_put_overwrites_existing_key(
+    pmap: PMap[int, int], key: int, value1: int, value2: int
+) -> None:
     """Putting a key that already exists should overwrite the value."""
     pmap1 = pmap.put(key, value1)
     pmap2 = pmap1.put(key, value2)
@@ -93,14 +101,14 @@ def test_put_overwrites_existing_key(pmap, key, value1, value2) -> None:
 
 
 @given(map_strategy(), st.integers())
-def test_get_nonexistent_key_returns_none(pmap, key) -> None:
+def test_get_nonexistent_key_returns_none(pmap: PMap[int, int], key: int) -> None:
     """Getting a nonexistent key should return None."""
     assume(not pmap.contains(key))
     assert pmap.lookup(key) is None
 
 
 @given(map_strategy(), st.integers())
-def test_contains_consistency_with_get(pmap, key) -> None:
+def test_contains_consistency_with_get(pmap: PMap[int, int], key: int) -> None:
     """contains() should be consistent with lookup() returning non-None."""
     has_key = pmap.contains(key)
     value = pmap.lookup(key)
@@ -109,7 +117,7 @@ def test_contains_consistency_with_get(pmap, key) -> None:
 
 
 @given(map_strategy(), st.integers())
-def test_remove_existing_key(pmap, key) -> None:
+def test_remove_existing_key(pmap: PMap[int, int], key: int) -> None:
     """Removing an existing key should remove it from the map."""
     if pmap.contains(key):
         original_size = pmap.size()
@@ -121,7 +129,7 @@ def test_remove_existing_key(pmap, key) -> None:
 
 
 @given(map_strategy(), st.integers())
-def test_remove_nonexistent_key_unchanged(pmap, key) -> None:
+def test_remove_nonexistent_key_unchanged(pmap: PMap[int, int], key: int) -> None:
     """Removing a nonexistent key should leave the map unchanged."""
     assume(not pmap.contains(key))
 
@@ -132,7 +140,9 @@ def test_remove_nonexistent_key_unchanged(pmap, key) -> None:
 
 
 @given(map_strategy(), map_strategy())
-def test_merge_contains_all_entries(pmap1, pmap2) -> None:
+def test_merge_contains_all_entries(
+    pmap1: PMap[int, int], pmap2: PMap[int, int]
+) -> None:
     """Merged map should contain all entries from both maps."""
     merged = pmap1.merge(pmap2)
 
@@ -148,7 +158,7 @@ def test_merge_contains_all_entries(pmap1, pmap2) -> None:
 
 
 @given(map_strategy())
-def test_merge_empty_identity(pmap) -> None:
+def test_merge_empty_identity(pmap: PMap[int, int]) -> None:
     """Merging with empty should be identity."""
     empty = PMap.empty(int, int)
 
@@ -160,7 +170,7 @@ def test_merge_empty_identity(pmap) -> None:
 
 
 @given(map_strategy(), map_strategy())
-def test_merge_size_bounds(pmap1, pmap2) -> None:
+def test_merge_size_bounds(pmap1: PMap[int, int], pmap2: PMap[int, int]) -> None:
     """Merged map size should be bounded correctly."""
     merged = pmap1.merge(pmap2)
 
@@ -172,7 +182,7 @@ def test_merge_size_bounds(pmap1, pmap2) -> None:
 
 
 @given(map_strategy())
-def test_find_min_returns_minimum_key(pmap) -> None:
+def test_find_min_returns_minimum_key(pmap: PMap[int, int]) -> None:
     """find_min should return the entry with minimum key if map is non-empty."""
     result = pmap.find_min()
 
@@ -193,7 +203,7 @@ def test_find_min_returns_minimum_key(pmap) -> None:
 
 
 @given(map_strategy())
-def test_find_max_returns_maximum_key(pmap) -> None:
+def test_find_max_returns_maximum_key(pmap: PMap[int, int]) -> None:
     """find_max should return the entry with maximum key if map is non-empty."""
     result = pmap.find_max()
 
@@ -214,7 +224,7 @@ def test_find_max_returns_maximum_key(pmap) -> None:
 
 
 @given(map_strategy())
-def test_find_min_max_consistency_single_entry(pmap) -> None:
+def test_find_min_max_consistency_single_entry(pmap: PMap[int, int]) -> None:
     """find_min and find_max should be consistent on single-entry maps."""
     if pmap.size() == 1:
         min_result = pmap.find_min()
@@ -233,7 +243,7 @@ def test_find_min_max_consistency_single_entry(pmap) -> None:
 
 
 @given(map_strategy())
-def test_delete_min_consistency(pmap) -> None:
+def test_delete_min_consistency(pmap: PMap[int, int]) -> None:
     """delete_min should be consistent with find_min."""
     find_result = pmap.find_min()
     delete_result = pmap.delete_min()
@@ -247,7 +257,7 @@ def test_delete_min_consistency(pmap) -> None:
 
 
 @given(map_strategy())
-def test_delete_max_consistency(pmap) -> None:
+def test_delete_max_consistency(pmap: PMap[int, int]) -> None:
     """delete_max should be consistent with find_max."""
     find_result = pmap.find_max()
     delete_result = pmap.delete_max()
@@ -261,7 +271,7 @@ def test_delete_max_consistency(pmap) -> None:
 
 
 @given(map_strategy())
-def test_repeated_find_min_extracts_sorted(pmap) -> None:
+def test_repeated_find_min_extracts_sorted(pmap: PMap[int, int]) -> None:
     """Repeatedly calling find_min should extract entries in key order."""
     extracted_pairs = []
     current = pmap
@@ -279,7 +289,7 @@ def test_repeated_find_min_extracts_sorted(pmap) -> None:
 
 
 @given(map_strategy())
-def test_repeated_find_max_extracts_reverse_sorted(pmap) -> None:
+def test_repeated_find_max_extracts_reverse_sorted(pmap: PMap[int, int]) -> None:
     """Repeatedly calling find_max should extract entries in reverse key order."""
     extracted_pairs = []
     current = pmap
@@ -297,7 +307,7 @@ def test_repeated_find_max_extracts_reverse_sorted(pmap) -> None:
 
 
 @given(map_strategy())
-def test_persistence_under_operations(pmap) -> None:
+def test_persistence_under_operations(pmap: PMap[int, int]) -> None:
     """Original map should remain unchanged after operations."""
     original_items = list(pmap.items())
     original_size = pmap.size()
@@ -336,7 +346,7 @@ def test_operators_consistency(pairs: List[Tuple[int, int]]) -> None:
 
 
 @given(map_strategy(), map_strategy())
-def test_addition_operator_merge(pmap1, pmap2) -> None:
+def test_addition_operator_merge(pmap1: PMap[int, int], pmap2: PMap[int, int]) -> None:
     """+ operator should match merge method."""
     merge_method = pmap1.merge(pmap2)
     merge_op = pmap1 + pmap2
@@ -450,7 +460,7 @@ def test_iteration_methods_consistency(pairs: List[Tuple[int, int]]) -> None:
 
 
 @given(map_strategy())
-def test_empty_map_properties(pmap) -> None:
+def test_empty_map_properties(pmap: PMap[int, int]) -> None:
     """Empty map should have consistent behavior."""
     if pmap.null():
         assert pmap.size() == 0
@@ -537,7 +547,9 @@ def test_string_keys(pairs: List[Tuple[str, int]]) -> None:
 
 
 @given(map_strategy(), st.integers(), st.integers())
-def test_chained_operations_consistency(pmap, key, value) -> None:
+def test_chained_operations_consistency(
+    pmap: PMap[int, int], key: int, value: int
+) -> None:
     """Chained operations should maintain consistency."""
     # Chain multiple operations
     result = pmap.put(key, value).put(key + 1, value + 1).put(key - 1, value - 1)
@@ -558,7 +570,9 @@ def test_chained_operations_consistency(pmap, key, value) -> None:
 
 
 @given(map_strategy(), map_strategy(), map_strategy())
-def test_merge_associative(pmap1, pmap2, pmap3) -> None:
+def test_merge_associative(
+    pmap1: PMap[int, int], pmap2: PMap[int, int], pmap3: PMap[int, int]
+) -> None:
     """Merge should be associative: (A + B) + C == A + (B + C)."""
     left_assoc = pmap1.merge(pmap2).merge(pmap3)
     right_assoc = pmap1.merge(pmap2.merge(pmap3))
