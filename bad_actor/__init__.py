@@ -17,7 +17,9 @@ from typing import (
     NewType,
     Optional,
     Set,
+    Tuple,
     TypeVar,
+    Union,
     override,
 )
 
@@ -1414,3 +1416,170 @@ class CallbackActor[T](Actor[Never]):
     @override
     def on_stop(self, logger: Logger):
         self._cb.unregister()
+
+
+type Ctor = Tuple[str, Callable[[], Union[Task, Actor[Any]]]]
+
+
+class SupervisorActor(Actor[Never]):
+    """Supervisor actor that manages multiple child actors and tasks.
+
+    The SupervisorActor is responsible for spawning and managing a collection of child
+    actors and tasks. It follows a one-for-all supervision strategy: if any child
+    reports an error or completes, the supervisor will stop all children and terminate.
+
+    Spawns all children on start and terminates them all when any child
+    reports an error or when the supervisor is stopped.
+
+    This is a good candidate for direct integration with the framework;
+    it would save us a mostly-blocked thread.
+    """
+
+    def __init__(self, child_ctors: Iterable[Ctor]):
+        """Initialize the supervisor with child factories.
+
+        Args:
+            child_ctors: Iterable of (name, constructor) tuples where constructors
+                        return Task or Actor instances when called.
+        """
+        self._child_ctors: List[Ctor] = list(child_ctors)
+        # Log initialization
+        logging.debug(
+            "SupervisorActor initialized with %d child constructors",
+            len(self._child_ctors),
+        )
+
+    @override
+    def on_start(self, env: ActorEnv) -> None:
+        """Spawn all children when the supervisor starts.
+
+        Iterates through all child constructors and spawns each as either
+        a task or actor depending on the instance type returned by the constructor.
+
+        Args:
+            env: The actor environment providing logger and control interface.
+        """
+        env.logger.debug(
+            "SupervisorActor starting, spawning %d children", len(self._child_ctors)
+        )
+
+        for name, ctor in self._child_ctors:
+            env.logger.debug("SupervisorActor spawning child: %s", name)
+            try:
+                child = ctor()
+                if isinstance(child, Task):
+                    env.logger.debug("SupervisorActor spawning task: %s", name)
+                    env.control.spawn_task(name=name, task=child)
+                else:
+                    assert isinstance(child, Actor)
+                    env.logger.debug("SupervisorActor spawning actor: %s", name)
+                    env.control.spawn_actor(name=name, actor=child)
+                env.logger.debug("SupervisorActor successfully spawned child: %s", name)
+            except Exception as e:
+                env.logger.error(
+                    "SupervisorActor failed to spawn child %s: %s", name, e
+                )
+                raise
+
+        env.logger.debug("SupervisorActor finished spawning all children")
+
+    @override
+    def on_report(
+        self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
+    ) -> None:
+        """Handle child completion reports.
+
+        When any child reports completion (with or without error), the supervisor
+        stops all children and itself. This implements a one-for-all strategy.
+
+        Args:
+            env: The actor environment.
+            child_id: The unique ID of the reporting child.
+            exc: Optional exception from the child.
+        """
+        if exc:
+            env.logger.warning(
+                "SupervisorActor received error report from child %d: %s", child_id, exc
+            )
+        else:
+            env.logger.info(
+                "SupervisorActor received completion report from child %d", child_id
+            )
+
+        env.logger.debug("SupervisorActor stopping all children due to child report")
+        on_report_stop_always(env, exc)
+
+
+type Initializer = Callable[[Control], None]
+
+
+class NurseryActor(Actor[Never]):
+    """Nursery actor that provides a structured concurrency context.
+
+    The NurseryActor allows dynamic spawning of children through an initializer
+    function. It provides a Control interface to the initializer, enabling it
+    to spawn actors and tasks as needed. Like the SupervisorActor, it follows
+    a one-for-all strategy: if any child reports an error or completes, all
+    children are stopped.
+
+    This pattern is useful for creating structured concurrency blocks where
+    the lifetime of all children is tied to the nursery's lifetime.
+
+    This is a good candidate for direct integration with the framework;
+    it would save us a mostly-blocked thread.
+    """
+
+    def __init__(self, initializer: Initializer):
+        """Initialize the nursery with an initializer function.
+
+        Args:
+            initializer: Function that takes a Control interface and uses it
+                        to spawn child actors and tasks.
+        """
+        self._initializer = initializer
+        logging.debug("NurseryActor initialized with initializer function")
+
+    @override
+    def on_start(self, env: ActorEnv) -> None:
+        """Execute the initializer to spawn children.
+
+        Calls the initializer function with the Control interface, allowing
+        it to dynamically spawn any number of child actors and tasks.
+
+        Args:
+            env: The actor environment providing logger and control interface.
+        """
+        env.logger.debug("NurseryActor starting, executing initializer")
+        try:
+            self._initializer(env.control)
+            env.logger.debug("NurseryActor initializer completed successfully")
+        except Exception as e:
+            env.logger.error("NurseryActor initializer failed: %s", e)
+            raise
+
+    @override
+    def on_report(
+        self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
+    ) -> None:
+        """Handle child completion reports.
+
+        When any child reports completion (with or without error), the nursery
+        stops all children and itself. This implements a one-for-all strategy
+        for structured concurrency.
+
+        Args:
+            env: The actor environment.
+            child_id: The unique ID of the reporting child.
+            exc: Optional exception from the child.
+        """
+        if exc:
+            env.logger.warning(
+                "NurseryActor received error report from child %d: %s", child_id, exc
+            )
+        else:
+            env.logger.info(
+                "NurseryActor received completion report from child %d", child_id
+            )
+
+        env.logger.debug("NurseryActor stopping all children due to child report")
+        on_report_stop_always(env, exc)
