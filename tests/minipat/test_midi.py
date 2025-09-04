@@ -236,8 +236,8 @@ def test_midi_processor_empty_events() -> None:
     assert len(message_list) == 0
 
 
-def test_midi_processor_clamps_values() -> None:
-    """Test MidiProcessor clamps MIDI values to valid range."""
+def test_midi_processor_validates_values() -> None:
+    """Test MidiProcessor validates MIDI values and raises ValueError for invalid events."""
     processor = MidiProcessor()
 
     # Create MIDI attributes with out-of-range values (bypass validation for testing)
@@ -256,20 +256,16 @@ def test_midi_processor_clamps_values() -> None:
         cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
     )
 
-    timed_messages = processor.process(instant, Orbit(0), event_heap)
-    message_list = list(timed_messages)
-
-    note_on_msg = message_list[0]
-
-    # Should clamp to valid MIDI range
-    assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 127  # Clamped from 200
-    assert (
-        VelocityField.unmk(VelocityField.get(note_on_msg.message)) == 0
-    )  # Clamped from -10
+    # Should raise ValueError for invalid MIDI values
+    try:
+        processor.process(instant, Orbit(0), event_heap)
+        assert False, "Should have raised ValueError for out-of-range values"
+    except ValueError as e:
+        assert "in range 0" in str(e)  # mido's error message format
 
 
 def test_midi_processor_orbit_as_channel() -> None:
-    """Test MidiProcessor uses orbit as MIDI channel."""
+    """Test MidiProcessor uses orbit as MIDI channel and validates range."""
     processor = MidiProcessor()
 
     # Create test MIDI attributes
@@ -286,16 +282,20 @@ def test_midi_processor_orbit_as_channel() -> None:
         cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
     )
 
-    # Test different orbits map to different channels
-    for orbit_num in [0, 1, 5, 15, 20]:  # Last one should clamp to 15
+    # Test valid orbits map to correct channels
+    for orbit_num in [0, 1, 5, 15]:
         timed_messages = processor.process(instant, Orbit(orbit_num), event_heap)
         message_list = list(timed_messages)
 
-        expected_channel = min(15, orbit_num)  # Should clamp to 0-15 range
-        assert (
-            ChannelField.unmk(ChannelField.get(message_list[0].message))
-            == expected_channel
-        )
+        assert len(message_list) == 2  # note_on and note_off
+        assert ChannelField.unmk(ChannelField.get(message_list[0].message)) == orbit_num
+
+    # Test invalid orbit (out of range) - should raise ValueError
+    try:
+        processor.process(instant, Orbit(20), event_heap)
+        assert False, "Should have raised ValueError for out-of-range orbit"
+    except ValueError as e:
+        assert "out of valid MIDI channel range" in str(e)
 
 
 def test_echo_system_integration() -> None:
@@ -628,3 +628,57 @@ def test_parse_message_velocity_only() -> None:
     except ValueError as e:
         assert "Velocity attribute found without note" in str(e)
         assert "Velocity can only be used with note attributes" in str(e)
+
+
+def test_midi_processor_with_parse_message() -> None:
+    """Test MidiProcessor can handle different message types via parse_message."""
+    processor = MidiProcessor()
+
+    # Test program change message
+    program_attrs: MidiAttrs = DMap.empty(MidiDom).put(
+        ProgramKey(), ProgramField.mk(42)
+    )
+
+    from minipat.arc import Arc, Span
+    from minipat.ev import Ev, ev_heap_singleton
+
+    span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
+    event = Ev(span, program_attrs)
+    event_heap = ev_heap_singleton(event)
+
+    instant = Instant(
+        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+    )
+
+    timed_messages = processor.process(instant, Orbit(1), event_heap)
+    message_list = list(timed_messages)
+
+    # Should have one program change message
+    assert len(message_list) == 1
+    msg = message_list[0].message
+
+    assert MsgTypeField.get(msg) == "program_change"
+    assert ChannelField.unmk(ChannelField.get(msg)) == 1
+    assert ProgramField.unmk(ProgramField.get(msg)) == 42
+
+    # Test control change message
+    control_attrs: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(ControlNumKey(), ControlNum(7))  # Volume
+        .put(ControlValKey(), ControlVal(100))
+    )
+
+    control_event = Ev(span, control_attrs)
+    control_heap = ev_heap_singleton(control_event)
+
+    control_messages = processor.process(instant, Orbit(2), control_heap)
+    control_list = list(control_messages)
+
+    # Should have one control change message
+    assert len(control_list) == 1
+    control_msg = control_list[0].message
+
+    assert MsgTypeField.get(control_msg) == "control_change"
+    assert ChannelField.unmk(ChannelField.get(control_msg)) == 2
+    assert ControlField.unmk(ControlField.get(control_msg)) == 7
+    assert ValueField.unmk(ValueField.get(control_msg)) == 100

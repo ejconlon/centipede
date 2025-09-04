@@ -508,7 +508,9 @@ class ControlValKey(MidiKey[ControlVal]):
     pass
 
 
-def parse_message(orbit: Orbit, attrs: MidiAttrs) -> FrozenMessage:
+def parse_message(
+    orbit: Orbit, attrs: MidiAttrs, default_velocity: Optional[Velocity] = None
+) -> FrozenMessage:
     """Parse MIDI attributes into a FrozenMessage.
 
     Converts a set of MIDI attributes into a specific MIDI message type.
@@ -525,6 +527,7 @@ def parse_message(orbit: Orbit, attrs: MidiAttrs) -> FrozenMessage:
     Args:
         orbit: The orbit number, used as MIDI channel (must be 0-15)
         attrs: MIDI attributes containing the message parameters
+        default_velocity: Default velocity to use when not specified (defaults to DEFAULT_VELOCITY)
 
     Returns:
         A FrozenMessage representing the parsed MIDI message
@@ -600,7 +603,13 @@ def parse_message(orbit: Orbit, attrs: MidiAttrs) -> FrozenMessage:
     if has_note:
         # Create note_on message (velocity is allowed with note)
         assert note is not None  # Type checker hint
-        vel = velocity if velocity is not None else DEFAULT_VELOCITY
+        vel = (
+            velocity
+            if velocity is not None
+            else (
+                default_velocity if default_velocity is not None else DEFAULT_VELOCITY
+            )
+        )
         return msg_note_on(channel=channel, note=note, velocity=vel)
     elif has_velocity:
         # Velocity without note - this is an error case
@@ -956,8 +965,8 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
         Args:
             default_velocity: Default velocity to use when not specified
         """
-        self.default_velocity = (
-            default_velocity if default_velocity is not None else VelocityField.mk(64)
+        self._default_velocity = (
+            default_velocity if default_velocity is not None else DEFAULT_VELOCITY
         )
 
     @override
@@ -967,46 +976,47 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
         """Process MIDI events into timed MIDI messages."""
         timed_messages = []
 
-        # Use orbit as MIDI channel (clamp to 0-15 range)
-        channel = ChannelField.mk(max(0, min(15, int(orbit))))
-
         for span, ev in events:
-            # Extract MIDI attributes
-            note_num = ev.val.lookup(NoteKey())
-            velocity = ev.val.lookup(VelocityKey())
+            # Parse message using parse_message (no orbit clamping)
+            msg = parse_message(orbit, ev.val, default_velocity=self._default_velocity)
 
-            # Use defaults if attributes are missing
-            note_raw = (
-                note_num if note_num is not None else NoteField.mk(60)
-            )  # Middle C
-            vel_raw = velocity if velocity is not None else self.default_velocity
+            # Determine event timing
+            event_start = span.whole is None or span.active.start == span.whole.start
+            event_end = span.whole is None or span.active.end == span.whole.end
 
-            # Clamp values to valid MIDI range
-            note = NoteField.mk(max(0, min(127, int(note_raw))))
-            vel = VelocityField.mk(max(0, min(127, int(vel_raw))))
+            # Handle different message types
+            if MsgTypeField.get(msg) == "note_on":
+                # For note messages, we need to handle timing for note_on/note_off pairs
+                note = NoteField.get(msg)
+                channel = ChannelField.get(msg)
 
-            # Only send note_on if active start is whole start (or whole is empty)
-            send_note_on = span.whole is None or span.active.start == span.whole.start
-            if send_note_on:
-                # Calculate timestamp for the start of the event
-                timestamp = PosixTime(
-                    instant.posix_start
-                    + (float(span.active.start) / float(instant.cps))
-                )
+                if event_start:
+                    # Calculate timestamp for the start of the event
+                    timestamp = PosixTime(
+                        instant.posix_start
+                        + (float(span.active.start) / float(instant.cps))
+                    )
+                    timed_messages.append(TimedMessage(timestamp, msg))
 
-                # Create note on message using helper
-                note_on_msg = msg_note_on(channel=channel, note=note, velocity=vel)
-                timed_messages.append(TimedMessage(timestamp, note_on_msg))
+                if event_end:
+                    # Create note off message (at end of span)
+                    note_off_timestamp = PosixTime(
+                        instant.posix_start
+                        + (float(span.active.end) / float(instant.cps))
+                    )
+                    note_off_msg = msg_note_off(channel=channel, note=note)
+                    timed_messages.append(
+                        TimedMessage(note_off_timestamp, note_off_msg)
+                    )
 
-            # Only send note_off if active end is whole end (or whole is empty)
-            send_note_off = span.whole is None or span.active.end == span.whole.end
-            if send_note_off:
-                # Create note off message (at end of span)
-                note_off_timestamp = PosixTime(
-                    instant.posix_start + (float(span.active.end) / float(instant.cps))
-                )
-                note_off_msg = msg_note_off(channel=channel, note=note)
-                timed_messages.append(TimedMessage(note_off_timestamp, note_off_msg))
+            else:
+                # For non-note messages (program_change, control_change), send only at event start
+                if event_start:
+                    timestamp = PosixTime(
+                        instant.posix_start
+                        + (float(span.active.start) / float(instant.cps))
+                    )
+                    timed_messages.append(TimedMessage(timestamp, msg))
 
         return PSeq.mk(timed_messages)
 
