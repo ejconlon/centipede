@@ -4,7 +4,7 @@ import threading
 import time
 from typing import List
 
-from centipede.actor import (
+from bad_actor import (
     Actor,
     ActorEnv,
     Sender,

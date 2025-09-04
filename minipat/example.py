@@ -4,7 +4,7 @@ import logging
 import time
 from fractions import Fraction
 
-from centipede.actor import Actor, ActorEnv, new_system
+from bad_actor import Actor, ActorEnv, new_system
 from minipat.live import (
     BackendEvents,
     BackendMessage,

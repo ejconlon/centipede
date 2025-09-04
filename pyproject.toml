@@ -26,7 +26,7 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["centipede", "spiny", "minipat"]
+py-modules = ["spiny", "bad_actor", "minipat", "pushpluck"]
 
 [tool.isort]
 profile = "black"
@@ -48,7 +48,7 @@ ignore = []
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["centipede", "spiny", "minipat", "tests"]
+include = ["spiny", "bad_actor", "minipat", "pushpluck", "tests"]
 
 [tool.pytest.ini_options]
 filterwarnings = [

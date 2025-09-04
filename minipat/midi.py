@@ -15,7 +15,7 @@ from typing import Any, NewType, Optional, Tuple, cast, override
 import mido
 from mido.frozen import FrozenMessage, freeze_message
 
-from centipede.actor import (
+from bad_actor import (
     Actor,
     ActorEnv,
     Callback,
@@ -1122,74 +1122,6 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
 
 
 # =============================================================================
-# MIDI Supervisor Actor
-# =============================================================================
-
-
-class MidiSupervisor(Actor[BackendMessage[TimedMessage]]):
-    """Supervisory actor that manages MidiActor and MidiSenderTask lifetimes together.
-
-    This actor coordinates the startup and shutdown of both the MIDI message processing
-    actor and the background sender task, ensuring they work together as a cohesive unit.
-    When the supervisor starts, it starts the sender task. When it stops, it properly
-    shuts down both components in the correct order.
-    """
-
-    def __init__(self, output: mido.ports.BaseOutput):
-        """Initialize the MIDI supervisor.
-
-        Args:
-            output: MIDI output port, or None to disable actual output
-        """
-        # Create shared components
-        self._heap = ParMsgHeap()
-        self._output_mutex = Mutex(output)
-
-        # Create the MIDI actor (handles message processing)
-        self._midi_actor = MidiActor(self._heap, self._output_mutex)
-
-        # Create the sender task (handles scheduled message sending)
-        self._sender_task = MidiSenderTask(self._heap, self._output_mutex)
-
-    @override
-    def on_start(self, env: ActorEnv) -> None:
-        """Start the MIDI sender task when the supervisor starts."""
-        # Task is now managed by the actor system if spawned properly
-        env.logger.debug("MIDI supervisor started")
-
-    @override
-    def on_stop(self, logger: Logger) -> None:
-        """Clean up when the supervisor stops."""
-        try:
-            # Let the MIDI actor clean up (reset output port)
-            self._midi_actor.on_stop(logger)
-            logger.debug("MIDI supervisor completed cleanup")
-        except Exception as e:
-            logger.error("Error during MIDI supervisor shutdown: %s", e)
-
-    @override
-    def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
-        """Forward all messages to the managed MIDI actor."""
-        self._midi_actor.on_message(env, value)
-
-    def get_midi_actor(self) -> MidiActor:
-        """Get the managed MIDI actor for direct access if needed.
-
-        Returns:
-            The MidiActor instance managed by this supervisor.
-        """
-        return self._midi_actor
-
-    def get_sender_task(self) -> MidiSenderTask:
-        """Get the managed sender task for direct access if needed.
-
-        Returns:
-            The MidiSenderTask instance managed by this supervisor.
-        """
-        return self._sender_task
-
-
-# =============================================================================
 # Low-Level Actor Utilities
 # =============================================================================
 
@@ -1242,7 +1174,7 @@ def echo_system() -> System:
 
 
 def create_midi_system(
-    output: Optional[mido.ports.BaseOutput] = None,
+    output: mido.ports.BaseOutput,
 ) -> Tuple[MidiActor, MidiSenderTask]:
     """Create a complete MIDI system with scheduling support.
 

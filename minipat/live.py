@@ -15,7 +15,7 @@ from logging import Logger
 from threading import Event
 from typing import NewType, Optional, override
 
-from centipede.actor import Actor, ActorEnv, Mutex, Sender, System, Task
+from bad_actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
 from minipat.common import ONE_HALF, ZERO, CycleTime, PosixTime
 from minipat.ev import EvHeap

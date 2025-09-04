@@ -3,12 +3,14 @@
 import time
 from typing import Optional
 
-from centipede.actor import (
+from bad_actor import (
     ActionException,
     Actor,
     ActorEnv,
+    Queue,
     Task,
     UniqId,
+    is_fatal_exception,
     new_system,
 )
 
@@ -59,7 +61,6 @@ class FatalErrorActor(Actor[str]):
 def test_fatal_error_detection():
     """Test that fatal errors are properly identified and classified."""
     # Test that KeyboardInterrupt is fatal
-    from centipede.actor import is_fatal_exception
 
     # KeyboardInterrupt should be fatal
     assert is_fatal_exception(KeyboardInterrupt("test"))
@@ -172,8 +173,6 @@ def test_system_resilience():
 
 def test_queue_timeout():
     """Test that Queue methods properly handle timeouts."""
-    from centipede.actor import Queue
-
     # Create an empty queue
     queue: Queue[str] = Queue()
 

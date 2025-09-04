@@ -1,6 +1,6 @@
 python := ".venv/bin/python3 -Xgil=0"
-packages := "spiny centipede minipat pushpluck"
-mypy_packages := "-p spiny -p centipede -p minipat -p pushpluck"
+packages := "spiny bad_actor minipat pushpluck"
+mypy_packages := "-p spiny -p bad_actor -p minipat -p pushpluck"
 
 # No default tasks
 default:

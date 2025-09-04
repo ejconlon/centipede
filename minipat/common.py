@@ -1,9 +1,24 @@
 """Common types and constants for minipat pattern system."""
 
+from __future__ import annotations
+
 import time
 from abc import ABCMeta, abstractmethod
 from fractions import Fraction
-from typing import NewType
+from typing import Any, Callable, NewType
+
+
+class PartialMatchException(Exception):
+    def __init__(self, val: Any):
+        super().__init__(f"Unmatched type: {type(val)}")
+
+
+def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
+    def wrapper(_: None, arg: A) -> B:
+        return fn(arg)
+
+    return wrapper
+
 
 CycleTime = NewType("CycleTime", Fraction)
 """Time measured in elapsed cycles as fractions."""

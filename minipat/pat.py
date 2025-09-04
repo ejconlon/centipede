@@ -9,8 +9,7 @@ from fractions import Fraction
 from functools import partial
 from typing import Any, Callable, Optional, Tuple
 
-from centipede.common import PartialMatchException, ignore_arg
-from minipat.common import ONE_HALF
+from minipat.common import ONE_HALF, PartialMatchException, ignore_arg
 from spiny import Box, PSeq
 
 
