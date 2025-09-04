@@ -555,7 +555,7 @@ class MidiSenderTask:
                     # Send the message if we have an output
                     output_port = None
                     send_error = None
-                    
+
                     with self._output_mutex as output_box:
                         if output_box is not None and output_box.value is not None:
                             output_port = output_box.value
@@ -563,7 +563,7 @@ class MidiSenderTask:
                                 output_port.send(timed_msg.message)
                             except Exception as e:
                                 send_error = e
-                    
+
                     # Log outside of mutex
                     if output_port is not None:
                         if send_error is None:
@@ -1034,7 +1034,7 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
         """Reset the MIDI output when stopping."""
         output_port = None
         reset_error = None
-        
+
         with self._output_mutex as output_box:
             if output_box is not None and output_box.value is not None:
                 output_port = output_box.value
@@ -1042,7 +1042,7 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                     output_port.reset()
                 except Exception as e:
                     reset_error = e
-        
+
         # Log outside of mutex
         if output_port is not None:
             if reset_error is None:
@@ -1062,7 +1062,7 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                     # Reset output when stopping
                     output_port = None
                     reset_error = None
-                    
+
                     with self._output_mutex as output_box:
                         if output_box is not None and output_box.value is not None:
                             output_port = output_box.value
@@ -1070,7 +1070,7 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                                 output_port.reset()
                             except Exception as e:
                                 reset_error = e
-                    
+
                     # Log outside of mutex
                     if reset_error is not None:
                         env.logger.error("Error resetting MIDI output: %s", reset_error)
