@@ -1,7 +1,7 @@
 """Tests for actor system error handling and edge cases."""
 
 import time
-from typing import Optional
+from typing import List, Optional
 
 from bad_actor import (
     ActionException,
@@ -20,7 +20,7 @@ class ErrorActor(Actor[str]):
 
     def __init__(self) -> None:
         self.started = False
-        self.messages = []
+        self.messages: List[str] = []
 
     def on_start(self, env: ActorEnv) -> None:
         self.started = True
@@ -35,7 +35,7 @@ class ReportingActor(Actor[str]):
     """Actor that spawns children and collects error reports."""
 
     def __init__(self) -> None:
-        self.reports = []
+        self.reports: List[str] = []
 
     def on_start(self, env: ActorEnv) -> None:
         # Spawn a child that will fail

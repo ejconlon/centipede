@@ -5,6 +5,8 @@ tracking the current state and only sending updates when changes occur.
 This prevents unnecessary MIDI traffic and improves performance.
 """
 
+from __future__ import annotations
+
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Dict, Generator, Optional
@@ -99,7 +101,7 @@ class PushState:
     """Dictionary mapping buttons to their illumination states (None = off)."""
 
     @classmethod
-    def reset(cls) -> "PushState":
+    def reset(cls) -> PushState:
         """Create a reset state with all elements cleared.
 
         Returns:
@@ -112,7 +114,7 @@ class PushState:
         )
 
     @classmethod
-    def diff(cls) -> "PushState":
+    def diff(cls) -> PushState:
         """Create an empty diff state for tracking changes.
 
         Returns:
@@ -144,7 +146,7 @@ class PushShadow(Resettable):
         self._state = PushState.reset()
 
     @contextmanager
-    def context(self) -> Generator["PushInterface", None, None]:
+    def context(self) -> Generator[PushInterface, None, None]:
         """Create a managed context for batched Push updates.
 
         Returns:

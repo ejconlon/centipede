@@ -6,6 +6,8 @@ controller's knobs, buttons, and display. It supports different pages
 (Device, Scales, Browse) and provides real-time parameter adjustment.
 """
 
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, replace
 from enum import Enum, auto, unique
@@ -112,7 +114,7 @@ class IntValRange(ValRange[int]):
 @dataclass(frozen=True, eq=False)
 class ChoiceValRange(ValRange[N]):
     @classmethod
-    def new(cls, options: List[N], renderer: Callable[[N], str]) -> "ChoiceValRange[N]":
+    def new(cls, options: List[N], renderer: Callable[[N], str]) -> ChoiceValRange[N]:
         options_dict = {i: n for i, n in enumerate(options)}
         rev_options_dict = {renderer(n): i for i, n in enumerate(options)}
         return cls(len(options), options_dict, rev_options_dict, renderer)
@@ -193,7 +195,7 @@ class KnobState(Generic[Y, N]):
     val: N
 
     @classmethod
-    def initial(cls, control: KnobControl[Y, N], config: Y) -> "KnobState[Y, N]":
+    def initial(cls, control: KnobControl[Y, N], config: Y) -> KnobState[Y, N]:
         val = control.lens.get_value(config)
         index = control.val_range.set_value(val)
         if index is None:
@@ -251,7 +253,7 @@ class DeviceState(Generic[Y, N]):
     @classmethod
     def initial(
         cls, knob_controls: List[KnobControl[Y, N]], config: Y
-    ) -> "DeviceState[Y, N]":
+    ) -> DeviceState[Y, N]:
         return DeviceState(
             knob_states=[KnobState.initial(kc, config) for kc in knob_controls]
         )
@@ -379,7 +381,7 @@ class MenuState:
         return False
 
     @classmethod
-    def initial(cls, layout: MenuLayout, config: Config) -> "MenuState":
+    def initial(cls, layout: MenuLayout, config: Config) -> MenuState:
         return cls(
             config,
             Page.Device,

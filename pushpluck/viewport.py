@@ -5,6 +5,8 @@ This module handles the coordinate transformations between the Push controller's
 It supports different layout orientations and scrolling offsets.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -34,7 +36,7 @@ class ViewportConfig(MappedComponentConfig[Config]):
     """Offset for scrolling through frets (negative values scroll left)."""
 
     @classmethod
-    def extract(cls, root_config: Config) -> "ViewportConfig":
+    def extract(cls, root_config: Config) -> ViewportConfig:
         """Extract viewport configuration from the main config.
 
         Args:
@@ -60,7 +62,7 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
     """
 
     @classmethod
-    def construct(cls, root_config: Config) -> "Viewport":
+    def construct(cls, root_config: Config) -> Viewport:
         """Construct a Viewport from the main configuration.
 
         Args:

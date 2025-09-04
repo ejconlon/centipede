@@ -5,6 +5,8 @@ including color mapping based on musical scales, note triggering,
 and coordination with the fretboard and viewport systems.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -32,7 +34,7 @@ class PadsConfig:
     """The root note of the current scale."""
 
     @classmethod
-    def extract(cls, root_config: Config) -> "PadsConfig":
+    def extract(cls, root_config: Config) -> PadsConfig:
         """Extract pad-relevant configuration from the main config.
 
         Args:
@@ -81,7 +83,7 @@ class PadsState:
     """Dictionary mapping pad positions to their individual states."""
 
     @classmethod
-    def default(cls) -> "PadsState":
+    def default(cls) -> PadsState:
         """Create a default pad state with all pads off.
 
         Returns:
@@ -106,7 +108,7 @@ class Pads:
     """
 
     @classmethod
-    def construct(cls, scheme: ColorScheme, root_config: Config) -> "Pads":
+    def construct(cls, scheme: ColorScheme, root_config: Config) -> Pads:
         """Construct a Pads instance from configuration.
 
         Args:
@@ -149,7 +151,7 @@ class Pads:
         pad = self._state.lookup[pos]
         return pad.color(self._scheme)
 
-    def _redraw_pos(self, push: PushInterface, pos: Pos):
+    def _redraw_pos(self, push: PushInterface, pos: Pos) -> None:
         color = self._get_pad_color(pos)
         if color is None:
             push.pad_led_off(pos)

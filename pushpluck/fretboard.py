@@ -128,7 +128,7 @@ class FretboardMessage:
         """
         return is_note_msg(self.msg)
 
-    def make_note_msg(self, velocity: int) -> "FretboardMessage":
+    def make_note_msg(self, velocity: int) -> FretboardMessage:
         """Create a new FretboardMessage with the specified velocity.
 
         Args:
@@ -145,7 +145,7 @@ class FretboardMessage:
             ),
         )
 
-    def make_note_off_msg(self) -> "FretboardMessage":
+    def make_note_off_msg(self) -> FretboardMessage:
         """Create a note-off message with the same positions.
 
         Returns:
@@ -211,7 +211,7 @@ class NoteEffects:
     """List of MIDI messages that should be sent to the output."""
 
     @classmethod
-    def empty(cls) -> "NoteEffects":
+    def empty(cls) -> NoteEffects:
         """Create an empty NoteEffects instance with no changes.
 
         Returns:
@@ -676,7 +676,7 @@ class ChokeGroup:
     """Mapping from MIDI note numbers to their FretboardMessage instances."""
 
     @classmethod
-    def empty(cls) -> "ChokeGroup":
+    def empty(cls) -> ChokeGroup:
         """Create an empty choke group with no active notes.
 
         Returns:
@@ -807,7 +807,7 @@ class FretboardConfig(MappedComponentConfig[BoundedConfig]):
     """The bounded region of the fretboard, or None if unbounded."""
 
     @classmethod
-    def extract(cls, root_config: BoundedConfig) -> "FretboardConfig":
+    def extract(cls, root_config: BoundedConfig) -> FretboardConfig:
         """Extract fretboard-relevant configuration from a BoundedConfig.
 
         Args:
@@ -891,7 +891,7 @@ class Fretboard(MappedComponent[BoundedConfig, FretboardConfig, NoteEffects]):
     """
 
     @classmethod
-    def construct(cls, root_config: BoundedConfig) -> "Fretboard":
+    def construct(cls, root_config: BoundedConfig) -> Fretboard:
         """Construct a Fretboard from a BoundedConfig.
 
         Args:

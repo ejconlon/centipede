@@ -145,7 +145,7 @@ class MsgTypeField(MessageField[str, str]):
     @override
     @classmethod
     def get(cls, msg: FrozenMessage) -> str:
-        return getattr(msg, "type")
+        return cast(str, getattr(msg, "type"))
 
     @override
     @classmethod

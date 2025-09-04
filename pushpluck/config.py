@@ -6,6 +6,8 @@ It handles color schemes, layout configurations, play modes, and pad color mappi
 for different types of interface elements.
 """
 
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto, unique
@@ -111,7 +113,7 @@ class PadColorMapper(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @staticmethod
-    def note(note_type: NoteType) -> "NotePadColorMapper":
+    def note(note_type: NoteType) -> NotePadColorMapper:
         """Create a color mapper for note pads.
 
         Args:
@@ -123,7 +125,7 @@ class PadColorMapper(metaclass=ABCMeta):
         return NotePadColorMapper(note_type)
 
     @staticmethod
-    def misc(pressable: bool) -> "MiscPadColorMapper":
+    def misc(pressable: bool) -> MiscPadColorMapper:
         """Create a color mapper for miscellaneous pads.
 
         Args:
@@ -135,7 +137,7 @@ class PadColorMapper(metaclass=ABCMeta):
         return MiscPadColorMapper(pressable)
 
     @staticmethod
-    def control() -> "ControlPadColorMapper":
+    def control() -> ControlPadColorMapper:
         """Create a color mapper for control pads.
 
         Returns:

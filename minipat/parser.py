@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import Any, List
+from typing import Any, List, cast
 
 from lark import Lark, Transformer
 
@@ -77,23 +77,23 @@ probability_value: numeric_value
 """
 
 
-class PatternTransformer(Transformer):
+class PatternTransformer(Transformer[Any, Pat[Any]]):
     """Transform parsed pattern into Pat objects."""
 
     def start(self, items: List[Any]) -> Pat[Any]:
         """Transform the root pattern."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     def pattern(self, items: List[Any]) -> Pat[Any]:
         """Transform a pattern into a sequence of events."""
         if len(items) == 1:
-            return items[0]
+            return cast(Pat[Any], items[0])
         return Pat.seq(items)
 
     def element_sequence(self, items: List[Any]) -> Pat[Any]:
         """Transform element sequence, handling trailing underscores."""
         if len(items) == 1:
-            return items[0]
+            return cast(Pat[Any], items[0])
 
         result = []
         current_element = items[0]
@@ -118,25 +118,25 @@ class PatternTransformer(Transformer):
         result.append(current_element)
 
         if len(result) == 1:
-            return result[0]
+            return cast(Pat[Any], result[0])
         return Pat.seq(result)
 
     def element(self, items: List[Any]) -> Pat[Any]:
         """Transform an element into a pattern."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     def base_element(self, items: List[Any]) -> Pat[Any]:
         """Transform a base element into a pattern."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     # Basic atoms
     def atom(self, items: List[Any]) -> Pat[Any]:
         """Transform an atom element."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     def symbol(self, items: List[Any]) -> Pat[str]:
         """Transform a symbol."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     def symbol_with_selector(self, items: List[Any]) -> Pat[str]:
         """Transform a symbol with selector (e.g., 'bd:kick')."""
@@ -162,7 +162,7 @@ class PatternTransformer(Transformer):
         # If the pattern is already a sequence, return it as-is
         # Otherwise, create a sequence with the single pattern
         if isinstance(pattern.unwrap, PatSeq):
-            return pattern
+            return cast(Pat[Any], pattern)
         else:
             return Pat.seq([pattern])
 
@@ -298,11 +298,11 @@ class PatternTransformer(Transformer):
 
     def probability_value(self, items: List[Any]) -> Any:
         """Transform probability value - numeric value."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     def numeric_value(self, items: List[Any]) -> Any:
         """Transform numeric value - integer, decimal, or fraction."""
-        return items[0]
+        return cast(Pat[Any], items[0])
 
     def fraction(self, items: List[Any]) -> Fraction:
         """Transform fraction like 1%2 into Fraction."""

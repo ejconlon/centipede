@@ -5,6 +5,8 @@ note names, and scale classification. It includes a comprehensive set of
 scales from various musical traditions and utilities for note manipulation.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Dict, List, Set, Tuple
@@ -31,7 +33,7 @@ class NoteName(Enum):
     Bb = 10  # B flat
     B = 11  # B natural
 
-    def add_steps(self, steps: int) -> "NoteName":
+    def add_steps(self, steps: int) -> NoteName:
         """Add semitone steps to this note name.
 
         Args:

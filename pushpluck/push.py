@@ -5,6 +5,8 @@ Ableton Push controller, including MIDI message creation, event parsing,
 port management, and the abstract PushInterface for display updates.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from abc import ABCMeta, abstractmethod
@@ -27,6 +29,19 @@ from pushpluck.constants import (
 )
 from pushpluck.midi import MidiInput, MidiOutput, is_note_msg
 from pushpluck.pos import ChanSelPos, GridSelPos, Pos
+
+__all__ = [
+    "ButtonCC",
+    "ButtonColor",
+    "ButtonIllum",
+    "TimeDivCC",
+    "frame_sysex",
+    "ButtonEvent",
+    "KnobEvent",
+    "PushEvent",
+    "PushInterface",
+    "PushOutput",
+]
 
 
 def frame_sysex(raw_data: List[int]) -> FrozenMessage:
@@ -131,7 +146,7 @@ class KnobEvent(PushEvent):
     """True if turned clockwise, False if counterclockwise."""
 
     @classmethod
-    def match(cls, msg: FrozenMessage) -> Optional["KnobEvent"]:
+    def match(cls, msg: FrozenMessage) -> Optional[KnobEvent]:
         if msg.type == "control_change":
             knob = constants.KNOB_CC_VALUE_LOOKUP.get(msg.control)
             if knob is not None:
@@ -150,7 +165,7 @@ class ButtonEvent(PushEvent):
     """True if the button was pressed, False if released."""
 
     @classmethod
-    def match(cls, msg: FrozenMessage) -> Optional["ButtonEvent"]:
+    def match(cls, msg: FrozenMessage) -> Optional[ButtonEvent]:
         if msg.type == "control_change":
             button = constants.BUTTON_CC_VALUE_LOOKUP.get(msg.control)
             if button is not None:
@@ -168,7 +183,7 @@ class PadEvent(PushEvent):
     """The MIDI velocity (0 for release, >0 for press with dynamics)."""
 
     @classmethod
-    def match(cls, msg: FrozenMessage) -> Optional["PadEvent"]:
+    def match(cls, msg: FrozenMessage) -> Optional[PadEvent]:
         if is_note_msg(msg):
             pos = Pos.from_input_note(msg.note)
             if pos is not None:
@@ -182,7 +197,7 @@ class TimeDivEvent(PushEvent):
     pressed: bool
 
     @classmethod
-    def match(cls, msg: FrozenMessage) -> Optional["TimeDivEvent"]:
+    def match(cls, msg: FrozenMessage) -> Optional[TimeDivEvent]:
         if msg.type == "control_change":
             time_div = constants.TIME_DIV_CC_VALUE_LOOKUP.get(msg.control)
             if time_div is not None:
@@ -196,7 +211,7 @@ class GridSelEvent(PushEvent):
     pressed: bool
 
     @classmethod
-    def match(cls, msg: FrozenMessage) -> Optional["GridSelEvent"]:
+    def match(cls, msg: FrozenMessage) -> Optional[GridSelEvent]:
         if msg.type == "control_change":
             gs_pos = GridSelPos.from_input_control(msg.control)
             if gs_pos is not None:
@@ -210,7 +225,7 @@ class ChanSelEvent(PushEvent):
     pressed: bool
 
     @classmethod
-    def match(cls, msg: FrozenMessage) -> Optional["ChanSelEvent"]:
+    def match(cls, msg: FrozenMessage) -> Optional[ChanSelEvent]:
         if msg.type == "control_change":
             cs_pos = ChanSelPos.from_input_control(msg.control)
             if cs_pos is not None:
@@ -271,7 +286,7 @@ class PushPorts(Closeable):
     @classmethod
     def open(
         cls, push_port_name: str, processed_port_name: str, delay: Optional[float]
-    ) -> "PushPorts":
+    ) -> PushPorts:
         """Open all required MIDI ports for PushPluck.
 
         Args:

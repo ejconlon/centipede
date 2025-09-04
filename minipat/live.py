@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from logging import Logger
 from threading import Event
-from typing import NewType, Optional, override
+from typing import List, NewType, Optional, override
 
 from bad_actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
@@ -133,7 +133,7 @@ class Processor[T, U](metaclass=ABCMeta):
 class LogProcessor[T](Processor[T, str]):
     """Debug processor that converts events to log strings."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._logger = logging.getLogger("log_processor")
 
     @override
@@ -401,7 +401,7 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
         )
 
         # Collect and process events from all active orbits
-        all_processed_events: list[U] = []
+        all_processed_events: List[U] = []
 
         for orbit, orbit_state in self._pattern_state.orbits:
             if orbit_state.stream is None:

@@ -4,6 +4,8 @@ This module provides RGB color representation and a collection of predefined
 colors used throughout the application for UI elements and visualization.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Dict, Generator
 
@@ -39,7 +41,7 @@ class Color:
         return f"#{nums.upper()}"
 
     @classmethod
-    def from_code(cls, code: str) -> "Color":
+    def from_code(cls, code: str) -> Color:
         """Create a Color from a hexadecimal color code.
 
         Args:

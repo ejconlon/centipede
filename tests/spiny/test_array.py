@@ -312,7 +312,7 @@ def test_edge_cases() -> None:
     # Test with different data types
     arr_int = PArray.new(2, 42)
     arr_str = PArray.new(2, "default")
-    arr_list: PArray[list] = PArray.new(2, [])
+    arr_list: PArray[List[int]] = PArray.new(2, [])
 
     assert arr_int.get(0) == 42
     assert arr_str.get(0) == "default"
@@ -351,7 +351,7 @@ def test_array_with_various_types() -> None:
     assert bool_arr.get(1) is False
 
     # List array (mutable elements)
-    list_arr: PArray[list] = PArray.new(2, [])
+    list_arr: PArray[List[int]] = PArray.new(2, [])
     list_arr = list_arr.set(0, [1, 2, 3])
     assert list_arr.get(0) == [1, 2, 3]
     assert list_arr.get(1) == []

@@ -5,6 +5,8 @@ including message queuing, rate limiting, and utility functions for
 identifying different types of MIDI messages.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from abc import ABCMeta, abstractmethod
@@ -92,7 +94,7 @@ class MidiInput(MidiSource, Closeable):
     """
 
     @classmethod
-    def open(cls, in_port_name: str) -> "MidiInput":
+    def open(cls, in_port_name: str) -> MidiInput:
         """Open a MIDI input port.
 
         Args:
@@ -150,7 +152,7 @@ class MidiOutput(MidiSink, Resettable, Closeable):
     @classmethod
     def open(
         cls, out_port_name: str, virtual: bool = False, delay: Optional[float] = None
-    ) -> "MidiOutput":
+    ) -> MidiOutput:
         """Open a MIDI output port.
 
         Args:

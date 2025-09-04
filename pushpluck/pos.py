@@ -6,6 +6,8 @@ and grid selector positions. Each provides conversion between
 coordinates and MIDI note/control numbers.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Generator, Optional
 
@@ -52,7 +54,7 @@ class Pos:
         return constants.LOW_NOTE + self.to_index()
 
     @staticmethod
-    def from_input_note(note: int) -> "Optional[Pos]":
+    def from_input_note(note: int) -> Optional[Pos]:
         """Create a position from a MIDI note number.
 
         Args:
@@ -71,7 +73,7 @@ class Pos:
             return Pos(row=row, col=col)
 
     @staticmethod
-    def iter_all() -> "Generator[Pos, None, None]":
+    def iter_all() -> Generator[Pos, None, None]:
         """Iterate over all valid pad positions from lowest to highest.
 
         Yields:
@@ -103,7 +105,7 @@ class ChanSelPos:
         return constants.LOW_CHAN_CONTROL + self.col
 
     @staticmethod
-    def from_input_control(control: int) -> "Optional[ChanSelPos]":
+    def from_input_control(control: int) -> Optional[ChanSelPos]:
         """Create a position from a MIDI control number.
 
         Args:
@@ -120,7 +122,7 @@ class ChanSelPos:
             return ChanSelPos(col)
 
     @staticmethod
-    def iter_all() -> "Generator[ChanSelPos, None, None]":
+    def iter_all() -> Generator[ChanSelPos, None, None]:
         """Iterate over all valid channel selector positions.
 
         Yields:
@@ -150,7 +152,7 @@ class GridSelPos:
         return constants.LOW_GRID_CONTROL + self.col
 
     @staticmethod
-    def from_input_control(control: int) -> "Optional[GridSelPos]":
+    def from_input_control(control: int) -> Optional[GridSelPos]:
         """Create a position from a MIDI control number.
 
         Args:
@@ -167,7 +169,7 @@ class GridSelPos:
             return GridSelPos(col)
 
     @staticmethod
-    def iter_all() -> "Generator[GridSelPos, None, None]":
+    def iter_all() -> Generator[GridSelPos, None, None]:
         """Iterate over all valid grid selector positions.
 
         Yields:

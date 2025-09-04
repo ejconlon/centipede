@@ -4,6 +4,8 @@ This module provides fundamental abstract base classes, utility types, and
 exceptions used throughout the PushPluck application.
 """
 
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -37,7 +39,7 @@ class Unit:
     """
 
     @staticmethod
-    def instance() -> "Unit":
+    def instance() -> Unit:
         """Get the singleton Unit instance.
 
         Returns:

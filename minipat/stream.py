@@ -451,7 +451,7 @@ class EuclideanStream[T](Stream[T]):
     @classmethod
     def create(
         cls, atom: Stream[T], hits: int, steps: int, rotation: int
-    ) -> "EuclideanStream[T]":
+    ) -> EuclideanStream[T]:
         pattern = _generate_euclidean(hits, steps, rotation)
         return cls(atom, hits, steps, rotation, pattern)
 

@@ -129,7 +129,7 @@ def test_dkey_instance_and_key() -> None:
 
     age_key = AgeKey()
     assert age_key.key() == "AgeKey"
-    assert age_key is not name_key
+    assert age_key != name_key  # type: ignore[comparison-overlap]
 
 
 def test_multiple_key_types() -> None:

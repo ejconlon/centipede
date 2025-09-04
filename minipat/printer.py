@@ -30,9 +30,6 @@ def print_pattern(pat: Pat[str]) -> str:
 
     Returns:
         String representation in mini notation format
-
-    Raises:
-        NotPrintableError: If the pattern cannot be printed
     """
     match pat.unwrap:
         case PatSilence():

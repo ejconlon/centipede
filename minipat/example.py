@@ -22,7 +22,7 @@ from minipat.stream import pat_stream
 class LogBackendActor(Actor[BackendMessage[str]]):
     """Backend actor that handles processed events by logging them."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._logger = logging.getLogger("log_backend")
         self._playing = False
 
@@ -43,7 +43,7 @@ class LogBackendActor(Actor[BackendMessage[str]]):
                     self._logger.info(f"Backend Event: {event}")
 
 
-def main():
+def main() -> None:
     # Set up logging
     logging.basicConfig(level=logging.DEBUG)
 
@@ -51,7 +51,7 @@ def main():
     system = new_system("live_test")
 
     # Create processor and backend actor
-    processor: Processor[str, str] = LogProcessor()
+    processor: Processor[str, str] = LogProcessor[str]()
     backend_actor = LogBackendActor()
     backend_sender = system.spawn_actor("log_backend", backend_actor)
 
