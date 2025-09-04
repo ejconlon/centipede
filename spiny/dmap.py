@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Any, Optional, Self, Type, Union
+from typing import Any, Optional, Self, Type, Union, cast
 
 from spiny.map import PMap
 
@@ -96,7 +96,7 @@ class DMap[K]:
             else:
                 return default
         else:
-            return value
+            return cast(V, value)
 
     def put[V](self, dkey: DKey[K, V], value: V) -> DMap[K]:
         """Store a value with its dependent key.

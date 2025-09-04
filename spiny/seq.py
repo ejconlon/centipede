@@ -18,6 +18,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
     override,
 )
 
@@ -668,7 +669,7 @@ def _seq_get[T](seq: PSeq[T], ix: int) -> T:
             raise IndexError(ix)
         case PSeqSingle(value):
             if ix == 0:
-                return value
+                return cast(T, value)
             else:
                 raise IndexError(ix)
         case PSeqDeep(size, front, between, back):
@@ -676,15 +677,15 @@ def _seq_get[T](seq: PSeq[T], ix: int) -> T:
                 raise IndexError(ix)
             front_size = len(front)
             if ix < front_size:
-                return front[ix]
+                return cast(T, front[ix])
             ix -= front_size
             back_size = len(back)
             between_total_size = size - front_size - back_size
             if ix < between_total_size:
-                return _seq_get_between(between, ix)
+                return cast(T, _seq_get_between(between, ix))
             ix -= between_total_size
             if ix < back_size:
-                return back[ix]
+                return cast(T, back[ix])
             raise IndexError(ix)
         case _:
             raise Impossible

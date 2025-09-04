@@ -11,7 +11,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from bisect import bisect_left
 from dataclasses import dataclass
-from typing import Dict, Generator, List, Optional, Set, override
+from typing import Dict, Generator, List, Optional, Set, cast, override
 
 from mido.frozen import FrozenMessage
 
@@ -81,7 +81,7 @@ class FretboardMessage:
         Returns:
             The MIDI channel number (1-16).
         """
-        return self.msg.channel  # pyright: ignore
+        return cast(int, self.msg.channel)  # pyright: ignore
 
     @property
     def note(self) -> int:
@@ -90,7 +90,7 @@ class FretboardMessage:
         Returns:
             The MIDI note number (0-127).
         """
-        return self.msg.note  # pyright: ignore
+        return cast(int, self.msg.note)  # pyright: ignore
 
     @property
     def velocity(self) -> Optional[int]:
@@ -100,7 +100,7 @@ class FretboardMessage:
             The MIDI velocity (0-127) if this is a note message, None otherwise.
         """
         if self.is_note():
-            return self.msg.velocity  # pyright: ignore
+            return cast(int, self.msg.velocity)  # pyright: ignore
         else:
             return None
 

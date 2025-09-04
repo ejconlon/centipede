@@ -9,7 +9,7 @@ import logging
 import time
 from abc import ABCMeta, abstractmethod
 from queue import SimpleQueue
-from typing import Optional
+from typing import Optional, cast
 
 import mido
 from mido import Message
@@ -28,7 +28,7 @@ def is_note_msg(msg: FrozenMessage) -> bool:
     Returns:
         True if the message is either note_on or note_off.
     """
-    return msg.type == "note_on" or msg.type == "note_off"
+    return cast(bool, msg.type == "note_on" or msg.type == "note_off")
 
 
 def is_note_on_msg(msg: FrozenMessage) -> bool:
@@ -40,7 +40,7 @@ def is_note_on_msg(msg: FrozenMessage) -> bool:
     Returns:
         True if the message is note_on with velocity > 0.
     """
-    return msg.type == "note_on" and msg.velocity > 0
+    return cast(bool, msg.type == "note_on" and msg.velocity > 0)
 
 
 def is_note_off_msg(msg: FrozenMessage) -> bool:
@@ -52,7 +52,9 @@ def is_note_off_msg(msg: FrozenMessage) -> bool:
     Returns:
         True if the message is note_off or note_on with velocity 0.
     """
-    return (msg.type == "note_on" and msg.velocity == 0) or msg.type == "note_off"
+    return cast(
+        bool, (msg.type == "note_on" and msg.velocity == 0) or msg.type == "note_off"
+    )
 
 
 class MidiSource(metaclass=ABCMeta):

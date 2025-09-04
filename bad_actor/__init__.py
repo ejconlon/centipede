@@ -67,7 +67,7 @@ class Mutex[T]:
         self._lock.acquire()
         return self._value
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Release the lock.
 
         Args:
@@ -908,7 +908,7 @@ class ActorLifecycle[T]:
         # Cleanup
         loop.cleanup(saved_exc=saved_exc)
         with self._global_state as gs:
-            parent_ctx: Optional[ActorContext] = None
+            parent_ctx: Optional[ActorContext[Any]] = None
             if self._node.parent_id is not None:
                 parent_context = gs.contexts.get(self._node.parent_id)
                 if isinstance(parent_context, ActorContext):
@@ -969,7 +969,7 @@ class TaskLifecycle:
             # Set halt to wake any waiters
             self._halt.set()
         with self._global_state as gs:
-            parent_ctx: Optional[ActorContext] = None
+            parent_ctx: Optional[ActorContext[Any]] = None
             if self._node.parent_id is not None:
                 parent_context = gs.contexts.get(self._node.parent_id)
                 if isinstance(parent_context, ActorContext):

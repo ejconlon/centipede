@@ -9,7 +9,7 @@ controller's knobs, buttons, and display. It supports different pages
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, replace
 from enum import Enum, auto, unique
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, cast
 
 from pushpluck import constants
 from pushpluck.config import ChannelMode, Config, Layout, PlayMode
@@ -171,7 +171,7 @@ class DataclassLens(Lens[Y, N]):
         self._field_name = field_name
 
     def get_value(self, struct: Y) -> N:
-        return getattr(struct, self._field_name)
+        return cast(N, getattr(struct, self._field_name))
 
     def set_value(self, struct: Y, value: N) -> Y:
         return replace(struct, **{self._field_name: value})  # type: ignore
@@ -251,7 +251,7 @@ class DeviceState(Generic[Y, N]):
     @classmethod
     def initial(
         cls, knob_controls: List[KnobControl[Y, N]], config: Y
-    ) -> "DeviceState":
+    ) -> "DeviceState[Y, N]":
         return DeviceState(
             knob_states=[KnobState.initial(kc, config) for kc in knob_controls]
         )
@@ -323,7 +323,7 @@ def default_menu_layout() -> MenuLayout:
 class MenuState:
     config: Config
     cur_page: Page
-    device_state: DeviceState
+    device_state: DeviceState[Config, Any]
 
     def redraw(self, push: PushInterface) -> None:
         # Clear owned components

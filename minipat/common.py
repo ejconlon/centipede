@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from abc import ABCMeta, abstractmethod
 from fractions import Fraction
-from typing import Any, Callable, NewType
+from typing import Any, Callable, NewType, Self, override
 
 
 class PartialMatchException(Exception):
@@ -69,7 +69,7 @@ def format_fraction(frac: Fraction) -> str:
 class TimeOps[T, D](metaclass=ABCMeta):
     """Operations on times (T) and their deltas (D)."""
 
-    def __new__(cls) -> None:
+    def __new__(cls) -> Self:
         raise Exception("Cannot instantiate namespace")
 
     @classmethod
@@ -88,10 +88,12 @@ class TimeOps[T, D](metaclass=ABCMeta):
 class CycleTimeOps(TimeOps[CycleTime, CycleDelta]):
     """Time operations for CycleTime."""
 
+    @override
     @classmethod
     def diff(cls, end: CycleTime, start: CycleTime) -> CycleDelta:
         return CycleDelta(end - start)
 
+    @override
     @classmethod
     def add(cls, base: CycleTime, delta: CycleDelta) -> CycleTime:
         return CycleTime(base + delta)
@@ -100,10 +102,12 @@ class CycleTimeOps(TimeOps[CycleTime, CycleDelta]):
 class PosixTimeOps(TimeOps[PosixTime, PosixDelta]):
     """Time operations for PosixTime."""
 
+    @override
     @classmethod
     def diff(cls, end: PosixTime, start: PosixTime) -> PosixDelta:
         return PosixDelta(end - start)
 
+    @override
     @classmethod
     def add(cls, base: PosixTime, delta: PosixDelta) -> PosixTime:
         return PosixTime(base + delta)

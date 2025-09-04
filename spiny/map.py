@@ -12,6 +12,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
     override,
 )
 
@@ -466,11 +467,11 @@ def _pmap_get_with_default[K, V](
         case PMapBranch(_, left, branch_key, branch_value, right):
             cmp = compare(key, branch_key)
             if cmp == Ordering.Eq:
-                return branch_value
+                return cast(V, branch_value)
             elif cmp == Ordering.Lt:
-                return _pmap_get_with_default(left, key, default)
+                return cast(V, _pmap_get_with_default(left, key, default))
             else:
-                return _pmap_get_with_default(right, key, default)
+                return cast(V, _pmap_get_with_default(right, key, default))
         case _:
             raise Impossible
 
@@ -482,7 +483,7 @@ def _pmap_get[K, V](pmap: PMap[K, V], key: K) -> Optional[V]:
         case PMapBranch(_, left, branch_key, branch_value, right):
             cmp = compare(key, branch_key)
             if cmp == Ordering.Eq:
-                return branch_value
+                return cast(Optional[V], branch_value)
             elif cmp == Ordering.Lt:
                 return _pmap_get(left, key)
             else:
