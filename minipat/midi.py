@@ -8,14 +8,23 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
-from threading import Event, Thread
+from threading import Event
 from time import sleep
 from typing import Any, NewType, Optional, Tuple, cast, override
 
 import mido
 from mido.frozen import FrozenMessage, freeze_message
 
-from centipede.actor import Actor, ActorEnv, Callback, Mutex, Sender, System, new_system
+from centipede.actor import (
+    Actor,
+    ActorEnv,
+    Callback,
+    Mutex,
+    Sender,
+    System,
+    Task,
+    new_system,
+)
 from minipat.common import PosixTime, current_posix_time
 from minipat.ev import EvHeap
 from minipat.live import (
@@ -499,7 +508,7 @@ class ParMsgHeap:
             return msg
 
 
-class MidiSenderTask:
+class MidiSenderTask(Task):
     """Background task that sends scheduled MIDI messages at the correct time.
 
     Runs in a separate thread and continuously pops messages from a shared
@@ -507,9 +516,7 @@ class MidiSenderTask:
     appropriate timestamps.
     """
 
-    def __init__(
-        self, heap: ParMsgHeap, output_mutex: Mutex[Optional[mido.ports.BaseOutput]]
-    ):
+    def __init__(self, heap: ParMsgHeap, output_mutex: Mutex[mido.ports.BaseOutput]):
         """Initialize the MIDI sender task.
 
         Args:
@@ -518,33 +525,17 @@ class MidiSenderTask:
         """
         self._heap = heap
         self._output_mutex = output_mutex
-        self._stop_event = Event()
-        self._thread: Optional[Thread] = None
-        self._logger = Logger("midi_sender")
 
-    def start(self) -> None:
-        """Start the background sender thread."""
-        if self._thread is not None:
-            return  # Already started
+    @override
+    def run(self, logger: Logger, halt: Event) -> None:
+        """Execute the task using the actor system's threading model.
 
-        self._stop_event.clear()
-        self._thread = Thread(target=self._run, daemon=True)
-        self._thread.start()
-        self._logger.debug("MIDI sender task started")
-
-    def stop(self) -> None:
-        """Stop the background sender thread."""
-        if self._thread is None:
-            return  # Not started
-
-        self._stop_event.set()
-        self._thread.join()
-        self._thread = None
-        self._logger.debug("MIDI sender task stopped")
-
-    def _run(self) -> None:
-        """Main loop that processes scheduled MIDI messages."""
-        while not self._stop_event.is_set():
+        Args:
+            logger: Logger for the task to use.
+            halt: Event that will be set when the task should stop.
+        """
+        logger.debug("MIDI sender task started")
+        while not halt.is_set():
             try:
                 current_time = current_posix_time()
 
@@ -553,42 +544,35 @@ class MidiSenderTask:
 
                 if timed_msg is not None:
                     # Send the message if we have an output
-                    output_port = None
-                    send_error = None
+                    send_error: Optional[Exception] = None
 
-                    with self._output_mutex as output_box:
-                        if output_box is not None and output_box.value is not None:
-                            output_port = output_box.value
-                            try:
-                                output_port.send(timed_msg.message)
-                            except Exception as e:
-                                send_error = e
+                    with self._output_mutex as output_port:
+                        try:
+                            output_port.send(timed_msg.message)
+                        except Exception as e:
+                            send_error = e
 
                     # Log outside of mutex
-                    if output_port is not None:
-                        if send_error is None:
-                            self._logger.debug(
-                                "Sent scheduled MIDI message: %s", timed_msg.message
-                            )
-                        else:
-                            self._logger.error(
-                                "Error sending scheduled MIDI message: %s", send_error
-                            )
-                    else:
-                        self._logger.debug(
-                            "No MIDI output available, dropping message: %s",
-                            timed_msg.message,
+                    if send_error is None:
+                        logger.debug(
+                            "Sent scheduled MIDI message: %s", timed_msg.message
                         )
-
-                    # Continue immediately to check for more messages
-                    continue
+                    else:
+                        logger.error(
+                            "Error sending scheduled MIDI message: %s", send_error
+                        )
                 else:
                     # No messages ready, sleep briefly
+                    # TODO these sleeps should be halt.wait() with interval
+                    # based on current cps and gens per cycle - figure out how to
+                    # get that info into here
                     sleep(0.001)  # 1ms sleep to avoid busy waiting
 
             except Exception as e:
-                self._logger.error("Unexpected error in MIDI sender task: %s", e)
+                logger.error("Unexpected error in MIDI sender task: %s", e)
                 sleep(0.01)  # Longer sleep on error
+
+        logger.debug("MIDI sender task stopped")
 
 
 # =============================================================================
@@ -1016,9 +1000,7 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
     appropriate time.
     """
 
-    def __init__(
-        self, heap: ParMsgHeap, output_mutex: Mutex[Optional[mido.ports.BaseOutput]]
-    ):
+    def __init__(self, heap: ParMsgHeap, output_mutex: Mutex[mido.ports.BaseOutput]):
         """Initialize the MIDI actor.
 
         Args:
@@ -1032,23 +1014,19 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
     @override
     def on_stop(self, logger: Logger) -> None:
         """Reset the MIDI output when stopping."""
-        output_port = None
-        reset_error = None
+        reset_error: Optional[Exception] = None
 
-        with self._output_mutex as output_box:
-            if output_box is not None and output_box.value is not None:
-                output_port = output_box.value
-                try:
-                    output_port.reset()
-                except Exception as e:
-                    reset_error = e
+        with self._output_mutex as output_port:
+            try:
+                output_port.reset()
+            except Exception as e:
+                reset_error = e
 
         # Log outside of mutex
-        if output_port is not None:
-            if reset_error is None:
-                logger.debug("Reset MIDI output port")
-            else:
-                logger.error("Error resetting MIDI output: %s", reset_error)
+        if reset_error is None:
+            logger.debug("Reset MIDI output port")
+        else:
+            logger.error("Error resetting MIDI output: %s", reset_error)
 
     @override
     def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
@@ -1060,16 +1038,13 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                 else:
                     env.logger.info("MIDI: Pausing")
                     # Reset output when stopping
-                    output_port = None
-                    reset_error = None
+                    reset_error: Optional[Exception] = None
 
-                    with self._output_mutex as output_box:
-                        if output_box is not None and output_box.value is not None:
-                            output_port = output_box.value
-                            try:
-                                output_port.reset()
-                            except Exception as e:
-                                reset_error = e
+                    with self._output_mutex as output_port:
+                        try:
+                            output_port.reset()
+                        except Exception as e:
+                            reset_error = e
 
                     # Log outside of mutex
                     if reset_error is not None:
@@ -1144,6 +1119,74 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
 
             except Exception as e:
                 env.logger.error("Error processing MIDI message: %s", e)
+
+
+# =============================================================================
+# MIDI Supervisor Actor
+# =============================================================================
+
+
+class MidiSupervisor(Actor[BackendMessage[TimedMessage]]):
+    """Supervisory actor that manages MidiActor and MidiSenderTask lifetimes together.
+
+    This actor coordinates the startup and shutdown of both the MIDI message processing
+    actor and the background sender task, ensuring they work together as a cohesive unit.
+    When the supervisor starts, it starts the sender task. When it stops, it properly
+    shuts down both components in the correct order.
+    """
+
+    def __init__(self, output: mido.ports.BaseOutput):
+        """Initialize the MIDI supervisor.
+
+        Args:
+            output: MIDI output port, or None to disable actual output
+        """
+        # Create shared components
+        self._heap = ParMsgHeap()
+        self._output_mutex = Mutex(output)
+
+        # Create the MIDI actor (handles message processing)
+        self._midi_actor = MidiActor(self._heap, self._output_mutex)
+
+        # Create the sender task (handles scheduled message sending)
+        self._sender_task = MidiSenderTask(self._heap, self._output_mutex)
+
+    @override
+    def on_start(self, env: ActorEnv) -> None:
+        """Start the MIDI sender task when the supervisor starts."""
+        # Task is now managed by the actor system if spawned properly
+        env.logger.debug("MIDI supervisor started")
+
+    @override
+    def on_stop(self, logger: Logger) -> None:
+        """Clean up when the supervisor stops."""
+        try:
+            # Let the MIDI actor clean up (reset output port)
+            self._midi_actor.on_stop(logger)
+            logger.debug("MIDI supervisor completed cleanup")
+        except Exception as e:
+            logger.error("Error during MIDI supervisor shutdown: %s", e)
+
+    @override
+    def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
+        """Forward all messages to the managed MIDI actor."""
+        self._midi_actor.on_message(env, value)
+
+    def get_midi_actor(self) -> MidiActor:
+        """Get the managed MIDI actor for direct access if needed.
+
+        Returns:
+            The MidiActor instance managed by this supervisor.
+        """
+        return self._midi_actor
+
+    def get_sender_task(self) -> MidiSenderTask:
+        """Get the managed sender task for direct access if needed.
+
+        Returns:
+            The MidiSenderTask instance managed by this supervisor.
+        """
+        return self._sender_task
 
 
 # =============================================================================
@@ -1230,7 +1273,7 @@ def create_midi_system(
     """
     # Create shared components
     heap = ParMsgHeap()
-    output_mutex = Mutex(Box(output))
+    output_mutex = Mutex(output)
 
     # Create actor and sender task
     midi_actor = MidiActor(heap, output_mutex)
