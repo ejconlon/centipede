@@ -460,7 +460,7 @@ class ActorEnv:
     control: Control
 
 
-def on_report_stop_fatal(env: ActorEnv, exc: Optional[ActionException]):
+def on_report_stop_fatal(env: ActorEnv, exc: Optional[ActionException]) -> None:
     """Report handler that stops the system only on fatal exceptions.
 
     Args:
@@ -471,7 +471,7 @@ def on_report_stop_fatal(env: ActorEnv, exc: Optional[ActionException]):
         env.control.stop(immediate=exc.fatal)
 
 
-def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]):
+def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]) -> None:
     """Report handler that always stops the system when a child reports.
 
     Args:

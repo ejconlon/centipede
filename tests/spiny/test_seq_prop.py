@@ -17,7 +17,7 @@ def seq_strategy(draw, element_strategy=st.integers()) -> PSeq[int]:
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=50))
-def test_seq_mk_equals_list(elements: List[int]):
+def test_seq_mk_equals_list(elements: List[int]) -> None:
     """Creating a PSeq from elements should preserve order and size."""
     seq = PSeq.mk(elements)
     assert seq.list() == elements
@@ -26,7 +26,7 @@ def test_seq_mk_equals_list(elements: List[int]):
 
 
 @given(seq_strategy())
-def test_cons_uncons_inverse(seq):
+def test_cons_uncons_inverse(seq) -> None:
     """cons and uncons should be inverse operations."""
     element = 42
 
@@ -43,7 +43,7 @@ def test_cons_uncons_inverse(seq):
 
 
 @given(seq_strategy())
-def test_snoc_unsnoc_inverse(seq):
+def test_snoc_unsnoc_inverse(seq) -> None:
     """snoc and unsnoc should be inverse operations."""
     element = 42
 
@@ -60,7 +60,7 @@ def test_snoc_unsnoc_inverse(seq):
 
 
 @given(seq_strategy(), seq_strategy())
-def test_concat_associative(seq1, seq2):
+def test_concat_associative(seq1, seq2) -> None:
     """Concatenation should be associative: (a + b) + c == a + (b + c)."""
     seq3 = PSeq.mk([100, 200])
 
@@ -71,7 +71,7 @@ def test_concat_associative(seq1, seq2):
 
 
 @given(seq_strategy())
-def test_concat_empty_identity(seq):
+def test_concat_empty_identity(seq) -> None:
     """Concatenating with empty should be identity."""
     empty = PSeq.empty(int)
 
@@ -80,7 +80,7 @@ def test_concat_empty_identity(seq):
 
 
 @given(seq_strategy(), st.integers(min_value=0, max_value=10))
-def test_lookup_get_consistency(seq, index):
+def test_lookup_get_consistency(seq, index) -> None:
     """lookup and get should be consistent for valid indices."""
     elements = seq.list()
 
@@ -93,7 +93,7 @@ def test_lookup_get_consistency(seq, index):
 
 
 @given(seq_strategy(), st.integers(min_value=0, max_value=10), st.integers())
-def test_update_preserves_other_elements(seq, index, new_value):
+def test_update_preserves_other_elements(seq, index, new_value) -> None:
     """Update should only change the specified index."""
     elements = seq.list()
 
@@ -111,7 +111,7 @@ def test_update_preserves_other_elements(seq, index, new_value):
 
 
 @given(seq_strategy(), st.integers())
-def test_update_out_of_bounds_unchanged(seq, new_value):
+def test_update_out_of_bounds_unchanged(seq, new_value) -> None:
     """Update with out-of-bounds index should return unchanged sequence."""
     elements = seq.list()
     size = len(elements)
@@ -123,7 +123,7 @@ def test_update_out_of_bounds_unchanged(seq, new_value):
 
 
 @given(seq_strategy())
-def test_list_iter_consistency(seq):
+def test_list_iter_consistency(seq) -> None:
     """list() and iter() should produce the same elements in the same order."""
 
     list_result = seq.list()
@@ -133,7 +133,7 @@ def test_list_iter_consistency(seq):
 
 
 @given(seq_strategy())
-def test_reversed_iter_consistency(seq):
+def test_reversed_iter_consistency(seq) -> None:
     """reversed() should produce elements in reverse order of list()."""
 
     normal_list = seq.list()
@@ -143,7 +143,7 @@ def test_reversed_iter_consistency(seq):
 
 
 @given(st.lists(st.integers(), min_size=1))
-def test_size_matches_operations(elements: List[int]):
+def test_size_matches_operations(elements: List[int]) -> None:
     """Size should correctly track through various operations."""
     seq = PSeq.empty(int)
     expected_size = 0
@@ -163,7 +163,7 @@ def test_size_matches_operations(elements: List[int]):
 
 
 @given(seq_strategy(), seq_strategy())
-def test_concat_size_additive(seq1, seq2):
+def test_concat_size_additive(seq1, seq2) -> None:
     """Concatenated sequence size should equal sum of individual sizes."""
 
     concat_seq = seq1.concat(seq2)
@@ -171,7 +171,7 @@ def test_concat_size_additive(seq1, seq2):
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=20))
-def test_cons_snoc_operations_preserve_elements(elements: List[int]):
+def test_cons_snoc_operations_preserve_elements(elements: List[int]) -> None:
     """Mixed cons and snoc operations should preserve all elements."""
     seq = PSeq.empty(int)
     all_elements = []
@@ -191,7 +191,7 @@ def test_cons_snoc_operations_preserve_elements(elements: List[int]):
 
 
 @given(seq_strategy())
-def test_multiple_uncons_exhaustion(seq):
+def test_multiple_uncons_exhaustion(seq) -> None:
     """Repeated uncons should eventually reach empty sequence."""
     elements = seq.list()
     remaining_elements = elements.copy()
@@ -207,7 +207,7 @@ def test_multiple_uncons_exhaustion(seq):
 
 
 @given(seq_strategy())
-def test_multiple_unsnoc_exhaustion(seq):
+def test_multiple_unsnoc_exhaustion(seq) -> None:
     """Repeated unsnoc should eventually reach empty sequence."""
     elements = seq.list()
     remaining_elements = elements.copy()
@@ -223,7 +223,7 @@ def test_multiple_unsnoc_exhaustion(seq):
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=10))
-def test_operators_consistency(elements: List[int]):
+def test_operators_consistency(elements: List[int]) -> None:
     """>> and << operators should match snoc and cons methods."""
     seq1 = PSeq.mk(elements)
     seq2 = PSeq.mk(elements)
@@ -242,7 +242,7 @@ def test_operators_consistency(elements: List[int]):
 
 
 @given(seq_strategy(), seq_strategy())
-def test_addition_operator_concat(seq1, seq2):
+def test_addition_operator_concat(seq1, seq2) -> None:
     """+ operator should match concat method."""
 
     concat_method = seq1.concat(seq2)
@@ -252,7 +252,7 @@ def test_addition_operator_concat(seq1, seq2):
 
 
 @given(st.integers())
-def test_singleton_properties(value: int):
+def test_singleton_properties(value: int) -> None:
     """Singleton sequence should have expected properties."""
     seq = PSeq.singleton(value)
 
@@ -276,7 +276,7 @@ def test_singleton_properties(value: int):
 
 
 @given(seq_strategy(), st.integers(min_value=0, max_value=20))
-def test_chained_updates_independent(seq, new_value):
+def test_chained_updates_independent(seq, new_value) -> None:
     """Multiple updates should be independent and preserve immutability."""
     elements = seq.list()
 

@@ -18,7 +18,7 @@ def set_strategy(draw, element_strategy=st.integers()) -> PSet[int]:
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=50))
-def test_set_mk_deduplicates_and_sorts(elements: List[int]):
+def test_set_mk_deduplicates_and_sorts(elements: List[int]) -> None:
     """Creating a PSet from elements should deduplicate and maintain sorted order."""
     pset = PSet.mk(elements)
     unique_elements = sorted(set(elements))
@@ -29,7 +29,7 @@ def test_set_mk_deduplicates_and_sorts(elements: List[int]):
 
 
 @given(set_strategy(), st.integers())
-def test_insert_idempotent(pset, element):
+def test_insert_idempotent(pset, element) -> None:
     """Inserting the same element multiple times should be idempotent."""
     # Insert element once
     pset1 = pset.insert(element)
@@ -46,7 +46,7 @@ def test_insert_idempotent(pset, element):
 
 
 @given(set_strategy(), st.integers())
-def test_insert_maintains_sorted_order(pset, element):
+def test_insert_maintains_sorted_order(pset, element) -> None:
     """Inserting an element should maintain sorted order."""
     new_pset = pset.insert(element)
     result = new_pset.list()
@@ -56,7 +56,7 @@ def test_insert_maintains_sorted_order(pset, element):
 
 
 @given(set_strategy(), st.integers())
-def test_insert_increases_size_at_most_one(pset, element):
+def test_insert_increases_size_at_most_one(pset, element) -> None:
     """Inserting an element should increase size by at most 1."""
     original_size = pset.size()
     new_pset = pset.insert(element)
@@ -70,7 +70,7 @@ def test_insert_increases_size_at_most_one(pset, element):
 
 
 @given(set_strategy(), set_strategy())
-def test_union_commutative(pset1, pset2):
+def test_union_commutative(pset1, pset2) -> None:
     """Union should be commutative: A + B == B + A."""
     merged1 = pset1.union(pset2)
     merged2 = pset2.union(pset1)
@@ -80,7 +80,7 @@ def test_union_commutative(pset1, pset2):
 
 
 @given(set_strategy(), set_strategy())
-def test_union_associative(pset1, pset2):
+def test_union_associative(pset1, pset2) -> None:
     """Union should be associative: (A + B) + C == A + (B + C)."""
     pset3 = PSet.mk([100, 200, 300])
 
@@ -91,7 +91,7 @@ def test_union_associative(pset1, pset2):
 
 
 @given(set_strategy())
-def test_union_empty_identity(pset):
+def test_union_empty_identity(pset) -> None:
     """Union with empty should be identity."""
     empty = PSet.empty(int)
 
@@ -100,7 +100,7 @@ def test_union_empty_identity(pset):
 
 
 @given(set_strategy(), set_strategy())
-def test_union_contains_all_elements(pset1, pset2):
+def test_union_contains_all_elements(pset1, pset2) -> None:
     """Union set should contain all elements from both sets."""
     merged = pset1.union(pset2)
 
@@ -112,7 +112,7 @@ def test_union_contains_all_elements(pset1, pset2):
 
 
 @given(set_strategy())
-def test_find_min_returns_minimum(pset):
+def test_find_min_returns_minimum(pset) -> None:
     """find_min should return the minimum element if set is non-empty."""
     elements = pset.list()
     result = pset.find_min()
@@ -128,7 +128,7 @@ def test_find_min_returns_minimum(pset):
 
 
 @given(set_strategy())
-def test_find_max_returns_maximum(pset):
+def test_find_max_returns_maximum(pset) -> None:
     """find_max should return the maximum element if set is non-empty."""
     elements = pset.list()
     result = pset.find_max()
@@ -144,7 +144,7 @@ def test_find_max_returns_maximum(pset):
 
 
 @given(set_strategy())
-def test_find_min_max_consistency(pset):
+def test_find_min_max_consistency(pset) -> None:
     """find_min and find_max should be consistent on single-element sets."""
     if pset.size() == 1:
         min_result = pset.find_min()
@@ -162,7 +162,7 @@ def test_find_min_max_consistency(pset):
 
 
 @given(set_strategy())
-def test_delete_min_consistency(pset):
+def test_delete_min_consistency(pset) -> None:
     """delete_min should be consistent with find_min."""
     find_result = pset.find_min()
     delete_result = pset.delete_min()
@@ -176,7 +176,7 @@ def test_delete_min_consistency(pset):
 
 
 @given(set_strategy())
-def test_delete_max_consistency(pset):
+def test_delete_max_consistency(pset) -> None:
     """delete_max should be consistent with find_max."""
     find_result = pset.find_max()
     delete_result = pset.delete_max()
@@ -190,7 +190,7 @@ def test_delete_max_consistency(pset):
 
 
 @given(set_strategy())
-def test_repeated_find_min_extracts_sorted(pset):
+def test_repeated_find_min_extracts_sorted(pset) -> None:
     """Repeatedly calling find_min should extract elements in sorted order."""
     elements = pset.list()
     extracted = []
@@ -208,7 +208,7 @@ def test_repeated_find_min_extracts_sorted(pset):
 
 
 @given(set_strategy())
-def test_repeated_find_max_extracts_reverse_sorted(pset):
+def test_repeated_find_max_extracts_reverse_sorted(pset) -> None:
     """Repeatedly calling find_max should extract elements in reverse sorted order."""
     elements = pset.list()
     extracted = []
@@ -226,7 +226,7 @@ def test_repeated_find_max_extracts_reverse_sorted(pset):
 
 
 @given(set_strategy())
-def test_persistence_under_operations(pset):
+def test_persistence_under_operations(pset) -> None:
     """Original set should remain unchanged after operations."""
     original_list = pset.list()
     original_size = pset.size()
@@ -245,7 +245,7 @@ def test_persistence_under_operations(pset):
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=20))
-def test_operators_consistency(elements: List[int]):
+def test_operators_consistency(elements: List[int]) -> None:
     """>> and << operators should match insert method."""
     pset1 = PSet.mk(elements)
     pset2 = PSet.mk(elements)
@@ -264,7 +264,7 @@ def test_operators_consistency(elements: List[int]):
 
 
 @given(set_strategy(), set_strategy())
-def test_or_operator_union(pset1, pset2):
+def test_or_operator_union(pset1, pset2) -> None:
     """| operator should match union method."""
     union_method = pset1.union(pset2)
     union_op = pset1 | pset2
@@ -273,7 +273,7 @@ def test_or_operator_union(pset1, pset2):
 
 
 @given(st.integers())
-def test_singleton_properties(value: int):
+def test_singleton_properties(value: int) -> None:
     """Singleton set should have expected properties."""
     pset = PSet.singleton(value)
 
@@ -295,7 +295,7 @@ def test_singleton_properties(value: int):
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=15))
-def test_size_matches_unique_elements(elements: List[int]):
+def test_size_matches_unique_elements(elements: List[int]) -> None:
     """Set size should match number of unique elements."""
     pset = PSet.mk(elements)
     unique_count = len(set(elements))
@@ -304,7 +304,7 @@ def test_size_matches_unique_elements(elements: List[int]):
 
 
 @given(st.lists(st.integers(), min_size=1, max_size=20))
-def test_min_max_bounds(elements: List[int]):
+def test_min_max_bounds(elements: List[int]) -> None:
     """Min and max elements should be actual bounds of the set."""
     pset = PSet.mk(elements)
     expected_min = min(elements)
@@ -324,7 +324,7 @@ def test_min_max_bounds(elements: List[int]):
 
 
 @given(st.lists(st.integers(), min_size=2, max_size=20))
-def test_min_max_removal_bounds(elements: List[int]):
+def test_min_max_removal_bounds(elements: List[int]) -> None:
     """After removing min/max, remaining bounds should be correct."""
     assume(len(set(elements)) >= 2)  # Need at least 2 unique elements
 
@@ -351,7 +351,7 @@ def test_min_max_removal_bounds(elements: List[int]):
 
 
 @given(st.lists(st.integers(), min_size=0, max_size=20))
-def test_list_iter_consistency(elements: List[int]):
+def test_list_iter_consistency(elements: List[int]) -> None:
     """list() and iter() should produce the same elements in the same order."""
     pset = PSet.mk(elements)
 
@@ -362,7 +362,7 @@ def test_list_iter_consistency(elements: List[int]):
 
 
 @given(set_strategy())
-def test_empty_set_properties(pset):
+def test_empty_set_properties(pset) -> None:
     """Empty set should have consistent behavior."""
     if pset.null():
         assert pset.size() == 0
@@ -374,7 +374,7 @@ def test_empty_set_properties(pset):
 
 
 @given(st.lists(st.integers(), min_size=1, max_size=100))
-def test_large_set_efficiency(elements: List[int]):
+def test_large_set_efficiency(elements: List[int]) -> None:
     """Large sets should maintain efficiency properties."""
     pset = PSet.mk(elements)
 
@@ -388,7 +388,7 @@ def test_large_set_efficiency(elements: List[int]):
 
 
 @given(st.sets(st.integers(), min_size=0, max_size=20))
-def test_set_equivalence_with_python_set(elements: Set[int]):
+def test_set_equivalence_with_python_set(elements: Set[int]) -> None:
     """PSet behavior should match Python set for basic operations."""
     pset = PSet.mk(elements)
 
@@ -408,7 +408,7 @@ def test_set_equivalence_with_python_set(elements: Set[int]):
 
 
 @given(st.lists(st.text(min_size=1, max_size=10), min_size=0, max_size=15))
-def test_string_elements(elements: List[str]):
+def test_string_elements(elements: List[str]) -> None:
     """Set should work correctly with string elements."""
     pset = PSet.mk(elements)
     unique_elements = sorted(set(elements))
@@ -431,7 +431,7 @@ def test_string_elements(elements: List[str]):
 
 
 @given(set_strategy(), st.integers())
-def test_chained_operations_consistency(pset, element):
+def test_chained_operations_consistency(pset, element) -> None:
     """Chained operations should maintain consistency."""
     # Chain multiple operations
     result = pset.insert(element).insert(element + 1).insert(element - 1)

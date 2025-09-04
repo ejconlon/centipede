@@ -16,7 +16,7 @@ from bad_actor import (
 class SimpleActor(Actor[str]):
     """Simple test actor that logs received messages."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.messages: List[str] = []
         self.started = False
         self.stopped = False
@@ -37,7 +37,7 @@ class SimpleActor(Actor[str]):
 class CountingActor(Actor[int]):
     """Actor that counts received numbers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.total = 0
         self.count = 0
 
@@ -87,7 +87,7 @@ class ProducerTask(Task):
             time.sleep(self.delay)
 
 
-def test_system_startup_shutdown():
+def test_system_startup_shutdown() -> None:
     """Test basic system startup and shutdown."""
     # Create system
     sys = new_system()
@@ -103,7 +103,7 @@ def test_system_startup_shutdown():
     assert len(exceptions) == 0  # No exceptions should occur
 
 
-def test_system_immediate_shutdown():
+def test_system_immediate_shutdown() -> None:
     """Test immediate system shutdown."""
     sys = new_system()
 
@@ -115,7 +115,7 @@ def test_system_immediate_shutdown():
     assert len(exceptions) == 0
 
 
-def test_spawn_actor_basic():
+def test_spawn_actor_basic() -> None:
     """Test basic actor spawning and lifecycle."""
     sys = new_system()
 
@@ -141,7 +141,7 @@ def test_spawn_actor_basic():
     assert len(exceptions) == 0
 
 
-def test_message_passing():
+def test_message_passing() -> None:
     """Test sending messages to actors."""
     sys = new_system()
 
@@ -163,7 +163,7 @@ def test_message_passing():
     sys.wait(timeout=1.0)
 
 
-def test_multiple_actors():
+def test_multiple_actors() -> None:
     """Test spawning multiple actors."""
     sys = new_system()
 
@@ -191,7 +191,7 @@ def test_multiple_actors():
     sys.wait(timeout=1.0)
 
 
-def test_spawn_task_basic():
+def test_spawn_task_basic() -> None:
     """Test basic task spawning."""
     sys = new_system()
 
@@ -211,7 +211,7 @@ def test_spawn_task_basic():
     sys.wait(timeout=1.0)
 
 
-def test_task_halt():
+def test_task_halt() -> None:
     """Test halting a task before completion."""
     sys = new_system()
 
@@ -234,7 +234,7 @@ def test_task_halt():
     sys.wait(timeout=1.0)
 
 
-def test_producer_consumer():
+def test_producer_consumer() -> None:
     """Test producer task sending messages to consumer actor."""
     sys = new_system()
 
@@ -258,7 +258,7 @@ def test_producer_consumer():
     sys.wait(timeout=1.0)
 
 
-def test_actor_stop_immediate():
+def test_actor_stop_immediate() -> None:
     """Test stopping an actor immediately."""
     sys = new_system()
 
@@ -281,7 +281,7 @@ def test_actor_stop_immediate():
     assert actor.stopped
 
 
-def test_actor_stop_graceful():
+def test_actor_stop_graceful() -> None:
     """Test stopping an actor gracefully."""
     sys = new_system()
 
@@ -301,7 +301,7 @@ def test_actor_stop_graceful():
     assert actor.stopped
 
 
-def test_concurrent_message_sending():
+def test_concurrent_message_sending() -> None:
     """Test concurrent message sending to the same actor."""
     sys = new_system()
 
@@ -342,7 +342,7 @@ def test_concurrent_message_sending():
     sys.wait(timeout=1.0)
 
 
-def test_sender_destination():
+def test_sender_destination() -> None:
     """Test getting sender destination ID."""
     sys = new_system()
 
@@ -358,7 +358,7 @@ def test_sender_destination():
     sys.wait(timeout=1.0)
 
 
-def test_empty_system_shutdown():
+def test_empty_system_shutdown() -> None:
     """Test shutting down system with no spawned actors or tasks."""
     sys = new_system()
 
@@ -370,7 +370,7 @@ def test_empty_system_shutdown():
     assert sys.thread_count() == 0  # Should be 0 after shutdown
 
 
-def test_multiple_message_types():
+def test_multiple_message_types() -> None:
     """Test actor handling different message content."""
     sys = new_system()
 

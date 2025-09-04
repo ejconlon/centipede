@@ -1,12 +1,12 @@
 """Tests for PHeapMap implementation."""
 
-from typing import List
+from typing import List, Tuple
 
 from spiny.heapmap import PHeapMap
 
 
 class TestPHeapMapBasics:
-    def test_empty_heapmap(self):
+    def test_empty_heapmap(self) -> None:
         """Test empty heap map creation and properties."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         assert hm.null()
@@ -15,7 +15,7 @@ class TestPHeapMapBasics:
         assert list(hm.keys()) == []
         assert list(hm.values()) == []
 
-    def test_singleton_insert(self):
+    def test_singleton_insert(self) -> None:
         """Test inserting a single element."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         hm1 = hm.insert(1, "a")
@@ -26,7 +26,7 @@ class TestPHeapMapBasics:
         assert list(hm1.keys()) == [1]
         assert list(hm1.values()) == ["a"]
 
-    def test_singleton_method(self):
+    def test_singleton_method(self) -> None:
         """Test singleton creation method."""
         hm = PHeapMap.singleton(5, "hello")
 
@@ -34,7 +34,7 @@ class TestPHeapMapBasics:
         assert hm.size() == 1
         assert list(hm.iter()) == [(5, "hello")]
 
-    def test_multiple_inserts(self):
+    def test_multiple_inserts(self) -> None:
         """Test inserting multiple elements."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         hm1 = hm.insert(3, "c").insert(1, "a").insert(2, "b")
@@ -43,7 +43,7 @@ class TestPHeapMapBasics:
         # Heap order: should be sorted by key
         assert list(hm1.iter()) == [(1, "a"), (2, "b"), (3, "c")]
 
-    def test_duplicate_keys(self):
+    def test_duplicate_keys(self) -> None:
         """Test that heap maps can contain duplicate keys."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         hm1 = hm.insert(1, "first").insert(1, "second").insert(1, "third")
@@ -54,7 +54,7 @@ class TestPHeapMapBasics:
         assert all(key == 1 for key, _ in items)
         assert len(items) == 3
 
-    def test_mk_from_iterable(self):
+    def test_mk_from_iterable(self) -> None:
         """Test creating heap map from iterable."""
         pairs = [(3, "c"), (1, "a"), (2, "b")]
         hm = PHeapMap.mk(pairs)
@@ -62,7 +62,7 @@ class TestPHeapMapBasics:
         assert hm.size() == 3
         assert list(hm.iter()) == [(1, "a"), (2, "b"), (3, "c")]
 
-    def test_mk_empty_iterable(self):
+    def test_mk_empty_iterable(self) -> None:
         """Test creating heap map from empty iterable."""
         hm: PHeapMap[int, str] = PHeapMap.mk([])
         assert hm.null()
@@ -70,12 +70,12 @@ class TestPHeapMapBasics:
 
 
 class TestPHeapMapHeapOperations:
-    def test_find_min_empty(self):
+    def test_find_min_empty(self) -> None:
         """Test find_min on empty heap map."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         assert hm.find_min() is None
 
-    def test_find_min_single(self):
+    def test_find_min_single(self) -> None:
         """Test find_min on single-element heap map."""
         hm = PHeapMap.singleton(5, "value")
         result = hm.find_min()
@@ -85,7 +85,7 @@ class TestPHeapMapHeapOperations:
         assert min_value == "value"
         assert remaining.null()
 
-    def test_find_min_multiple(self):
+    def test_find_min_multiple(self) -> None:
         """Test find_min on multiple-element heap map."""
         hm = PHeapMap.mk([(3, "c"), (1, "a"), (5, "e"), (2, "b")])
         result = hm.find_min()
@@ -95,20 +95,20 @@ class TestPHeapMapHeapOperations:
         assert min_value == "a"
         assert remaining.size() == 3
 
-    def test_delete_min_empty(self):
+    def test_delete_min_empty(self) -> None:
         """Test delete_min on empty heap map."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         result = hm.delete_min()
         assert result is None
 
-    def test_delete_min_single(self):
+    def test_delete_min_single(self) -> None:
         """Test delete_min on single-element heap map."""
         hm = PHeapMap.singleton(5, "value")
         result = hm.delete_min()
         assert result is not None
         assert result.null()
 
-    def test_delete_min_multiple(self):
+    def test_delete_min_multiple(self) -> None:
         """Test delete_min on multiple-element heap map."""
         hm = PHeapMap.mk([(3, "c"), (1, "a"), (5, "e"), (2, "b")])
         result = hm.delete_min()
@@ -119,7 +119,7 @@ class TestPHeapMapHeapOperations:
         assert next_min is not None
         assert next_min[0] == 2  # Next minimum key
 
-    def test_find_min_consistency_with_delete_min(self):
+    def test_find_min_consistency_with_delete_min(self) -> None:
         """Test that find_min and delete_min are consistent."""
         hm = PHeapMap.mk([(3, "c"), (1, "a"), (5, "e"), (2, "b")])
 
@@ -132,7 +132,7 @@ class TestPHeapMapHeapOperations:
         _, _, remaining_from_find = find_result
         assert list(remaining_from_find.iter()) == list(delete_result.iter())
 
-    def test_repeated_find_min(self):
+    def test_repeated_find_min(self) -> None:
         """Test repeatedly extracting minimum elements."""
         hm = PHeapMap.mk([(3, "c"), (1, "a"), (5, "e"), (2, "b")])
         extracted = []
@@ -149,7 +149,7 @@ class TestPHeapMapHeapOperations:
 
 
 class TestPHeapMapMergeOperations:
-    def test_merge_empty_maps(self):
+    def test_merge_empty_maps(self) -> None:
         """Test merging two empty heap maps."""
         hm1: PHeapMap[int, str] = PHeapMap.empty()
         hm2: PHeapMap[int, str] = PHeapMap.empty()
@@ -157,7 +157,7 @@ class TestPHeapMapMergeOperations:
 
         assert result.null()
 
-    def test_merge_empty_with_non_empty(self):
+    def test_merge_empty_with_non_empty(self) -> None:
         """Test merging empty with non-empty heap map."""
         hm1: PHeapMap[int, str] = PHeapMap.empty()
         hm2 = PHeapMap.mk([(1, "a"), (2, "b")])
@@ -168,7 +168,7 @@ class TestPHeapMapMergeOperations:
         assert list(result1.iter()) == [(1, "a"), (2, "b")]
         assert list(result2.iter()) == [(1, "a"), (2, "b")]
 
-    def test_merge_disjoint_maps(self):
+    def test_merge_disjoint_maps(self) -> None:
         """Test merging heap maps with disjoint key sets."""
         hm1 = PHeapMap.mk([(1, "a"), (3, "c")])
         hm2 = PHeapMap.mk([(2, "b"), (4, "d")])
@@ -177,7 +177,7 @@ class TestPHeapMapMergeOperations:
         assert result.size() == 4
         assert list(result.iter()) == [(1, "a"), (2, "b"), (3, "c"), (4, "d")]
 
-    def test_merge_overlapping_maps(self):
+    def test_merge_overlapping_maps(self) -> None:
         """Test merging heap maps with overlapping keys."""
         hm1 = PHeapMap.mk([(1, "a1"), (2, "b1")])
         hm2 = PHeapMap.mk([(2, "b2"), (3, "c2")])
@@ -192,7 +192,7 @@ class TestPHeapMapMergeOperations:
 
 
 class TestPHeapMapOperators:
-    def test_insert_operator_right(self):
+    def test_insert_operator_right(self) -> None:
         """Test >> operator for inserting key-value pairs."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         result = hm >> (1, "a") >> (2, "b")
@@ -200,7 +200,7 @@ class TestPHeapMapOperators:
         assert result.size() == 2
         assert list(result.iter()) == [(1, "a"), (2, "b")]
 
-    def test_insert_operator_left(self):
+    def test_insert_operator_left(self) -> None:
         """Test << operator for inserting key-value pairs."""
         hm: PHeapMap[int, str] = PHeapMap.empty()
         result = (2, "b") << ((1, "a") << hm)
@@ -208,7 +208,7 @@ class TestPHeapMapOperators:
         assert result.size() == 2
         assert list(result.iter()) == [(1, "a"), (2, "b")]
 
-    def test_merge_operator_plus(self):
+    def test_merge_operator_plus(self) -> None:
         """Test + operator for merging heap maps."""
         hm1 = PHeapMap.mk([(1, "a"), (2, "b")])
         hm2 = PHeapMap.mk([(3, "c"), (4, "d")])
@@ -219,7 +219,7 @@ class TestPHeapMapOperators:
 
 
 class TestPHeapMapUtilityMethods:
-    def test_iteration_methods_consistency(self):
+    def test_iteration_methods_consistency(self) -> None:
         """Test that keys(), values(), and iter() are consistent."""
         hm = PHeapMap.mk([(3, "c"), (1, "a"), (2, "b")])
 
@@ -234,7 +234,7 @@ class TestPHeapMapUtilityMethods:
 
 
 class TestPHeapMapPersistence:
-    def test_persistence(self):
+    def test_persistence(self) -> None:
         """Test that original heap map remains unchanged after operations."""
         original = PHeapMap.mk([(2, "b"), (1, "a")])
         original_items = list(original.iter())
@@ -252,7 +252,7 @@ class TestPHeapMapPersistence:
 
 
 class TestPHeapMapEdgeCases:
-    def test_large_heapmap_insertion(self):
+    def test_large_heapmap_insertion(self) -> None:
         """Test inserting many elements."""
         pairs = [(i, f"value_{i}") for i in range(100, 0, -1)]  # Reverse order
         hm = PHeapMap.mk(pairs)
@@ -269,7 +269,7 @@ class TestPHeapMapEdgeCases:
         assert items[-1] == (100, "value_100")
         assert all(items[i][0] <= items[i + 1][0] for i in range(len(items) - 1))
 
-    def test_string_keys(self):
+    def test_string_keys(self) -> None:
         """Test heap map with string keys."""
         hm = PHeapMap.mk([("c", 3), ("a", 1), ("b", 2)])
 
@@ -279,7 +279,7 @@ class TestPHeapMapEdgeCases:
         assert result[0] == "a"
         assert result[1] == 1
 
-    def test_negative_number_keys(self):
+    def test_negative_number_keys(self) -> None:
         """Test heap map with negative number keys."""
         hm = PHeapMap.mk([(1, "pos"), (-1, "neg"), (0, "zero")])
 
@@ -289,7 +289,7 @@ class TestPHeapMapEdgeCases:
         assert result[0] == -1
         assert result[1] == "neg"
 
-    def test_duplicate_values_different_keys(self):
+    def test_duplicate_values_different_keys(self) -> None:
         """Test heap map with same values for different keys."""
         hm = PHeapMap.mk([(3, "same"), (1, "same"), (2, "same")])
 
@@ -301,7 +301,7 @@ class TestPHeapMapEdgeCases:
         assert result[1] == "same"
 
 
-def test_filter_keys_empty():
+def test_filter_keys_empty() -> None:
     """Test filter_keys on an empty heap map"""
     empty = PHeapMap.empty(str, int)
     filtered = empty.filter_keys(lambda k: len(k) > 3)
@@ -309,7 +309,7 @@ def test_filter_keys_empty():
     assert list(filtered.iter()) == []
 
 
-def test_filter_keys_single():
+def test_filter_keys_single() -> None:
     """Test filter_keys on a single element heap map"""
     hm = PHeapMap.singleton("test", 42)
 
@@ -324,18 +324,18 @@ def test_filter_keys_single():
     assert list(filtered_no_match.iter()) == []
 
 
-def test_filter_keys_multiple():
+def test_filter_keys_multiple() -> None:
     """Test filter_keys on heap maps with multiple elements"""
     hm = PHeapMap.mk([("apple", 1), ("banana", 2), ("apricot", 3), ("cherry", 4)])
 
     # Filter keys starting with 'a'
     filtered_a = hm.filter_keys(lambda k: k.startswith("a"))
-    result_a: List = list(filtered_a.iter())
+    result_a: List[Tuple[str, int]] = list(filtered_a.iter())
     assert result_a == [("apple", 1), ("apricot", 3)]
 
     # Filter keys with length > 5
     filtered_long = hm.filter_keys(lambda k: len(k) > 5)
-    result_long: List = list(filtered_long.iter())
+    result_long: List[Tuple[str, int]] = list(filtered_long.iter())
     assert result_long == [("apricot", 3), ("banana", 2), ("cherry", 4)]
 
     # Original heap map unchanged
@@ -348,7 +348,7 @@ def test_filter_keys_multiple():
     ]
 
 
-def test_filter_keys_none_match():
+def test_filter_keys_none_match() -> None:
     """Test filter_keys where no keys match"""
     hm = PHeapMap.mk([("a", 1), ("b", 2), ("c", 3)])
     filtered = hm.filter_keys(lambda k: k.startswith("z"))
@@ -356,7 +356,7 @@ def test_filter_keys_none_match():
     assert list(filtered.iter()) == []
 
 
-def test_filter_keys_all_match():
+def test_filter_keys_all_match() -> None:
     """Test filter_keys where all keys match"""
     hm = PHeapMap.mk([("a1", 1), ("a2", 2), ("a3", 3)])
     filtered = hm.filter_keys(lambda k: k.startswith("a"))
@@ -364,7 +364,7 @@ def test_filter_keys_all_match():
     assert list(filtered.iter()) == [("a1", 1), ("a2", 2), ("a3", 3)]
 
 
-def test_map_values_empty():
+def test_map_values_empty() -> None:
     """Test map_values on an empty heap map"""
     empty = PHeapMap.empty(str, int)
     mapped = empty.map_values(lambda v: v * 2)
@@ -372,7 +372,7 @@ def test_map_values_empty():
     assert list(mapped.iter()) == []
 
 
-def test_map_values_single():
+def test_map_values_single() -> None:
     """Test map_values on a single element heap map"""
     hm = PHeapMap.singleton("test", 5)
     mapped = hm.map_values(lambda v: v * 10)
@@ -380,43 +380,43 @@ def test_map_values_single():
     assert list(mapped.iter()) == [("test", 50)]
 
 
-def test_map_values_multiple():
+def test_map_values_multiple() -> None:
     """Test map_values on heap maps with multiple elements"""
     hm = PHeapMap.mk([("c", 3), ("a", 1), ("b", 2)])
 
     # Double all values
     doubled = hm.map_values(lambda v: v * 2)
     assert doubled.size() == 3
-    result: List = list(doubled.iter())
+    result: List[Tuple[str, int]] = list(doubled.iter())
     assert result == [("a", 2), ("b", 4), ("c", 6)]
 
     # Convert values to strings
     str_values = hm.map_values(lambda v: f"value_{v}")
-    str_result: List = list(str_values.iter())
+    str_result: List[Tuple[str, str]] = list(str_values.iter())
     assert str_result == [("a", "value_1"), ("b", "value_2"), ("c", "value_3")]
 
     # Original heap map unchanged
     assert hm.size() == 3
-    original_result: List = list(hm.iter())
+    original_result: List[Tuple[str, int]] = list(hm.iter())
     assert original_result == [("a", 1), ("b", 2), ("c", 3)]
 
 
-def test_map_values_type_change():
+def test_map_values_type_change() -> None:
     """Test map_values with type change"""
     hm = PHeapMap.mk([("x", 1), ("y", 2), ("z", 3)])
 
     # Transform int values to strings
     str_mapped = hm.map_values(lambda v: str(v))
-    result: List = list(str_mapped.iter())
+    result: List[Tuple[str, str]] = list(str_mapped.iter())
     assert result == [("x", "1"), ("y", "2"), ("z", "3")]
 
     # Transform to lists
     list_mapped = hm.map_values(lambda v: [v, v])
-    list_result: List = list(list_mapped.iter())
+    list_result: List[Tuple[str, List[int]]] = list(list_mapped.iter())
     assert list_result == [("x", [1, 1]), ("y", [2, 2]), ("z", [3, 3])]
 
 
-def test_map_values_heap_order_preserved():
+def test_map_values_heap_order_preserved() -> None:
     """Test that map_values preserves heap order"""
     # Create heap map with specific key order
     hmap = PHeapMap.mk([("zebra", 26), ("apple", 1), ("banana", 2)])
@@ -425,5 +425,5 @@ def test_map_values_heap_order_preserved():
     mapped = hmap.map_values(lambda v: v + 100)
 
     # Order should be preserved (sorted by key)
-    result: List = list(mapped.iter())
+    result: List[Tuple[str, int]] = list(mapped.iter())
     assert result == [("apple", 101), ("banana", 102), ("zebra", 126)]

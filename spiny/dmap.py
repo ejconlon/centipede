@@ -18,7 +18,7 @@ _MISSING = Missing()
 class DKey[K, V](metaclass=ABCMeta):
     _instance: Optional[Self] = None
 
-    def __new__(cls):
+    def __new__(cls) -> Self:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -29,7 +29,7 @@ class DKey[K, V](metaclass=ABCMeta):
 
 
 class DMap[K]:
-    def __init__(self):
+    def __init__(self) -> None:
         self._map: PMap[str, Any] = PMap.empty()
 
     @staticmethod

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from spiny.array import PArray
 
 
-def test_empty_array():
+def test_empty_array() -> None:
     """Test creating an empty PArray and asserting it is empty"""
     arr = PArray.new(0, "fill")
     assert arr.null()
@@ -14,7 +14,7 @@ def test_empty_array():
     assert len(arr) == 0
 
 
-def test_non_empty_array():
+def test_non_empty_array() -> None:
     """Test creating a non-empty PArray with fill element"""
     arr = PArray.new(5, "default")
     assert not arr.null()
@@ -30,7 +30,7 @@ def test_non_empty_array():
     assert list(arr) == ["default"] * 5  # Test __iter__
 
 
-def test_array_construction_validation():
+def test_array_construction_validation() -> None:
     """Test PArray construction with invalid parameters"""
     # Test negative size
     try:
@@ -44,7 +44,7 @@ def test_array_construction_validation():
     assert arr.size() == 0
 
 
-def test_get_method():
+def test_get_method() -> None:
     """Test PArray get method with various scenarios"""
     arr = PArray.new(5, "fill")
 
@@ -72,7 +72,7 @@ def test_get_method():
         pass
 
 
-def test_lookup_method():
+def test_lookup_method() -> None:
     """Test PArray lookup method"""
     arr = PArray.new(5, "fill")
 
@@ -94,7 +94,7 @@ def test_lookup_method():
         pass
 
 
-def test_set_method():
+def test_set_method() -> None:
     """Test PArray set method and immutability"""
     arr = PArray.new(3, "fill")
 
@@ -131,7 +131,7 @@ def test_set_method():
         pass
 
 
-def test_set_and_lookup_interaction():
+def test_set_and_lookup_interaction() -> None:
     """Test interaction between set, get, and lookup methods"""
     arr = PArray.new(3, "fill")
     arr = arr.set(1, "middle")
@@ -147,7 +147,7 @@ def test_set_and_lookup_interaction():
     assert arr.lookup(2) is None  # Not set, returns None
 
 
-def test_resize_method():
+def test_resize_method() -> None:
     """Test PArray resize functionality"""
     arr = PArray.new(3, "fill")
     arr = arr.set(0, "first").set(2, "third")
@@ -186,7 +186,7 @@ def test_resize_method():
         pass
 
 
-def test_iteration():
+def test_iteration() -> None:
     """Test PArray iteration methods"""
     arr = PArray.new(4, "default")
     arr = arr.set(1, "one").set(3, "three")
@@ -206,7 +206,7 @@ def test_iteration():
     assert list(empty_arr) == []
 
 
-def test_magic_methods():
+def test_magic_methods() -> None:
     """Test Python magic methods"""
     arr = PArray.new(3, "fill")
     arr = arr.set(1, "middle")
@@ -233,7 +233,7 @@ def test_magic_methods():
         pass
 
 
-def test_lexicographic_comparison():
+def test_lexicographic_comparison() -> None:
     """Test lexicographic comparison of PArrays"""
     arr1 = PArray.new(3, "a")
     arr2 = PArray.new(3, "a")
@@ -264,7 +264,7 @@ def test_lexicographic_comparison():
     assert arr2_modified > arr1_modified
 
 
-def test_complex_operations():
+def test_complex_operations() -> None:
     """Test complex combinations of PArray operations"""
     # Create and populate an array
     arr = PArray.new(5, 0)
@@ -295,7 +295,7 @@ def test_complex_operations():
         assert arr.get(i) == expected_val
 
 
-def test_edge_cases():
+def test_edge_cases() -> None:
     """Test edge cases and boundary conditions"""
     # Test with None as fill element
     arr_none: PArray[Optional[str]] = PArray.new(2, None)
@@ -330,7 +330,7 @@ def test_edge_cases():
     assert large_arr.lookup(501) is None
 
 
-def test_array_with_various_types():
+def test_array_with_various_types() -> None:
     """Test PArray with different element types"""
     # String array
     str_arr = PArray.new(3, "")
@@ -357,14 +357,14 @@ def test_array_with_various_types():
     assert list_arr.get(1) == []
 
 
-def test_fold_empty():
+def test_fold_empty() -> None:
     """Test folding an empty array"""
     empty = PArray.new(0, "fill")
     result = empty.fold(lambda acc, x: acc + len(x), 0)
     assert result == 0
 
 
-def test_fold_single():
+def test_fold_single() -> None:
     """Test folding a single element array"""
     arr = PArray.new(1, "hello")
 
@@ -377,7 +377,7 @@ def test_fold_single():
     assert result2 == "prefix:hello"
 
 
-def test_fold_multiple():
+def test_fold_multiple() -> None:
     """Test folding arrays with multiple elements"""
     arr = PArray.new(5, 0)
     arr = arr.set(0, 1).set(1, 2).set(2, 3).set(3, 4).set(4, 5)
@@ -395,7 +395,7 @@ def test_fold_multiple():
     assert result3 == [1, 2, 3, 4, 5]
 
 
-def test_fold_with_fill_elements():
+def test_fold_with_fill_elements() -> None:
     """Test folding arrays that include fill elements"""
     arr = PArray.new(4, 10)  # Fill element is 10
     arr = arr.set(1, 20).set(3, 30)  # [10, 20, 10, 30]
@@ -409,14 +409,14 @@ def test_fold_with_fill_elements():
     assert result2 == 2  # Only positions 1 and 3 have non-fill values
 
 
-def test_fold_with_index_empty():
+def test_fold_with_index_empty() -> None:
     """Test fold_with_index on an empty array"""
     empty = PArray.new(0, "fill")
     result = empty.fold_with_index(lambda acc, i, x: acc + i + len(x), 0)
     assert result == 0
 
 
-def test_fold_with_index_single():
+def test_fold_with_index_single() -> None:
     """Test fold_with_index on a single element array"""
     arr = PArray.new(1, "test")
 
@@ -429,7 +429,7 @@ def test_fold_with_index_single():
     assert result2 == ["0:test"]
 
 
-def test_fold_with_index_multiple():
+def test_fold_with_index_multiple() -> None:
     """Test fold_with_index on arrays with multiple elements"""
     arr = PArray.new(3, "a")
     arr = arr.set(0, "x").set(1, "y").set(2, "z")
@@ -447,7 +447,7 @@ def test_fold_with_index_multiple():
     assert result3 == {0: "x", 1: "y", 2: "z"}
 
 
-def test_fold_with_index_mixed_values():
+def test_fold_with_index_mixed_values() -> None:
     """Test fold_with_index with mixed set and fill values"""
     arr = PArray.new(4, 0)
     arr = arr.set(1, 10).set(3, 30)  # [0, 10, 0, 30]
@@ -463,7 +463,7 @@ def test_fold_with_index_mixed_values():
     assert result2 == 100  # (0*0) + (10*1) + (0*2) + (30*3) = 10 + 90 = 100
 
 
-def test_fold_type_change():
+def test_fold_type_change() -> None:
     """Test fold operations that change accumulator types"""
     arr = PArray.new(3, 1)
     arr = arr.set(0, 5).set(1, 10).set(2, 15)
@@ -477,7 +477,7 @@ def test_fold_type_change():
     assert result2 == 3
 
 
-def test_fold_persistence():
+def test_fold_persistence() -> None:
     """Test that fold operations don't modify the original array"""
     original = PArray.new(3, 1)
     original = original.set(0, 2).set(1, 4).set(2, 6)

@@ -17,14 +17,14 @@ class ActiveKey(DKey[Domain, bool]):
     pass
 
 
-def test_empty_dmap():
+def test_empty_dmap() -> None:
     """Test creating an empty DMap"""
     dmap = DMap[Domain]()
     assert dmap.null()
     assert dmap.size() == 0
 
 
-def test_put_and_lookup():
+def test_put_and_lookup() -> None:
     """Test putting and looking up values with dependent keys"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -43,7 +43,7 @@ def test_put_and_lookup():
     assert dmap.lookup(active_key) is None
 
 
-def test_contains():
+def test_contains() -> None:
     """Test checking if DMap contains a key"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -57,7 +57,7 @@ def test_contains():
     assert not dmap.contains(active_key)
 
 
-def test_remove():
+def test_remove() -> None:
     """Test removing values from DMap"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -81,7 +81,7 @@ def test_remove():
     assert dmap.lookup(age_key) == 25
 
 
-def test_size_and_null():
+def test_size_and_null() -> None:
     """Test size and null methods"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -111,14 +111,14 @@ def test_size_and_null():
     assert dmap.size() == 0
 
 
-def test_static_empty():
+def test_static_empty() -> None:
     """Test creating empty DMap with static method"""
     dmap = DMap[str].empty()
     assert dmap.null()
     assert dmap.size() == 0
 
 
-def test_dkey_instance_and_key():
+def test_dkey_instance_and_key() -> None:
     """Test DKey instance creation and key method"""
     name_key = NameKey()
     assert isinstance(name_key, NameKey)
@@ -132,7 +132,7 @@ def test_dkey_instance_and_key():
     assert age_key is not name_key
 
 
-def test_multiple_key_types():
+def test_multiple_key_types() -> None:
     """Test using different key types with the same value type"""
 
     class FirstNameKey(DKey[Domain, str]):
@@ -153,7 +153,7 @@ def test_multiple_key_types():
     assert dmap.size() == 2
 
 
-def test_underlying_storage():
+def test_underlying_storage() -> None:
     """Test that values are properly wrapped internally"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -167,7 +167,7 @@ def test_underlying_storage():
     assert dmap.contains(name_key)
 
 
-def test_singleton():
+def test_singleton() -> None:
     """Test creating a DMap with a single key-value pair"""
     name_key = NameKey()
     dmap = DMap.singleton(name_key, "SingleValue")
@@ -179,7 +179,7 @@ def test_singleton():
     assert dmap.contains(name_key)
 
 
-def test_get_with_default():
+def test_get_with_default() -> None:
     """Test get method with default values"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -203,7 +203,7 @@ def test_get_with_default():
         assert str(e) == "'AgeKey'"
 
 
-def test_get_vs_lookup():
+def test_get_vs_lookup() -> None:
     """Test that get and lookup behave consistently"""
     dmap = DMap[Domain]()
     name_key = NameKey()
@@ -229,7 +229,7 @@ def test_get_vs_lookup():
         pass
 
 
-def test_merge_empty_maps():
+def test_merge_empty_maps() -> None:
     """Test merging two empty DMaps"""
     dmap1 = DMap[Domain]()
     dmap2 = DMap[Domain]()
@@ -239,7 +239,7 @@ def test_merge_empty_maps():
     assert merged.size() == 0
 
 
-def test_merge_empty_with_nonempty():
+def test_merge_empty_with_nonempty() -> None:
     """Test merging an empty DMap with a non-empty one"""
     empty_dmap = DMap[Domain]()
     name_key = NameKey()
@@ -263,7 +263,7 @@ def test_merge_empty_with_nonempty():
     assert merged2.lookup(age_key) == 30
 
 
-def test_merge_disjoint_maps():
+def test_merge_disjoint_maps() -> None:
     """Test merging DMaps with no overlapping keys"""
     name_key = NameKey()
     age_key = AgeKey()
@@ -286,7 +286,7 @@ def test_merge_disjoint_maps():
     assert merged.lookup(active_key)
 
 
-def test_merge_overlapping_maps():
+def test_merge_overlapping_maps() -> None:
     """Test merging DMaps with overlapping keys - first map takes precedence"""
     name_key = NameKey()
     age_key = AgeKey()
@@ -317,7 +317,7 @@ def test_merge_overlapping_maps():
     assert merged_reverse.lookup(active_key)  # From second map (now first)
 
 
-def test_merge_preserves_original_maps():
+def test_merge_preserves_original_maps() -> None:
     """Test that merge operation doesn't modify the original maps"""
     name_key = NameKey()
     age_key = AgeKey()
@@ -347,7 +347,7 @@ def test_merge_preserves_original_maps():
     assert merged.lookup(age_key) == 42
 
 
-def test_merge_with_self():
+def test_merge_with_self() -> None:
     """Test merging a DMap with itself"""
     name_key = NameKey()
     age_key = AgeKey()
@@ -364,7 +364,7 @@ def test_merge_with_self():
     assert merged.lookup(age_key) == 99
 
 
-def test_merge_complex_scenario():
+def test_merge_complex_scenario() -> None:
     """Test a complex merge scenario with multiple key types"""
 
     class EmailKey(DKey[Domain, str]):

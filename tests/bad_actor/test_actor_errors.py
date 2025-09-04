@@ -18,7 +18,7 @@ from bad_actor import (
 class ErrorActor(Actor[str]):
     """Actor that can generate exceptions for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.started = False
         self.messages = []
 
@@ -34,7 +34,7 @@ class ErrorActor(Actor[str]):
 class ReportingActor(Actor[str]):
     """Actor that spawns children and collects error reports."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.reports = []
 
     def on_start(self, env: ActorEnv) -> None:
@@ -58,7 +58,7 @@ class FatalErrorActor(Actor[str]):
         raise KeyboardInterrupt("Fatal error for testing")
 
 
-def test_fatal_error_detection():
+def test_fatal_error_detection() -> None:
     """Test that fatal errors are properly identified and classified."""
     # Test that KeyboardInterrupt is fatal
 
@@ -73,7 +73,7 @@ def test_fatal_error_detection():
     assert not is_fatal_exception(RuntimeError("test"))
 
 
-def test_fatal_error_causes_shutdown():
+def test_fatal_error_causes_shutdown() -> None:
     """Test that fatal errors cause system shutdown with timeout."""
     sys = new_system()
 
@@ -100,7 +100,7 @@ def test_fatal_error_causes_shutdown():
             pass  # Even cleanup timed out - this indicates a real issue
 
 
-def test_child_error_reporting():
+def test_child_error_reporting() -> None:
     """Test that child errors are properly reported to parents."""
     sys = new_system()
 
@@ -120,7 +120,7 @@ def test_child_error_reporting():
     sys.wait(timeout=1.0)
 
 
-def test_normal_operation_no_errors():
+def test_normal_operation_no_errors() -> None:
     """Test that normal operation produces no fatal errors."""
     sys = new_system()
 
@@ -144,7 +144,7 @@ def test_normal_operation_no_errors():
     assert len(exceptions) == 0
 
 
-def test_system_resilience():
+def test_system_resilience() -> None:
     """Test that the system can handle multiple actors with mixed success."""
     sys = new_system()
 
@@ -171,7 +171,7 @@ def test_system_resilience():
     assert len(exceptions) == 0
 
 
-def test_queue_timeout():
+def test_queue_timeout() -> None:
     """Test that Queue methods properly handle timeouts."""
     # Create an empty queue
     queue: Queue[str] = Queue()
@@ -197,7 +197,7 @@ def test_queue_timeout():
     assert 0.08 <= elapsed <= 0.15
 
 
-def test_sender_wait_timeout():
+def test_sender_wait_timeout() -> None:
     """Test that Sender.wait() properly handles timeouts."""
 
     class SimpleTask(Task):

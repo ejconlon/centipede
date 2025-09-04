@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from typing import Any, List
 
 from lark import Lark, Transformer
 
@@ -79,17 +80,17 @@ probability_value: numeric_value
 class PatternTransformer(Transformer):
     """Transform parsed pattern into Pat objects."""
 
-    def start(self, items):
+    def start(self, items: List[Any]) -> Pat[Any]:
         """Transform the root pattern."""
         return items[0]
 
-    def pattern(self, items):
+    def pattern(self, items: List[Any]) -> Pat[Any]:
         """Transform a pattern into a sequence of events."""
         if len(items) == 1:
             return items[0]
         return Pat.seq(items)
 
-    def element_sequence(self, items):
+    def element_sequence(self, items: List[Any]) -> Pat[Any]:
         """Transform element sequence, handling trailing underscores."""
         if len(items) == 1:
             return items[0]
@@ -120,24 +121,24 @@ class PatternTransformer(Transformer):
             return result[0]
         return Pat.seq(result)
 
-    def element(self, items):
+    def element(self, items: List[Any]) -> Pat[Any]:
         """Transform an element into a pattern."""
         return items[0]
 
-    def base_element(self, items):
+    def base_element(self, items: List[Any]) -> Pat[Any]:
         """Transform a base element into a pattern."""
         return items[0]
 
     # Basic atoms
-    def atom(self, items):
+    def atom(self, items: List[Any]) -> Pat[Any]:
         """Transform an atom element."""
         return items[0]
 
-    def symbol(self, items):
+    def symbol(self, items: List[Any]) -> Pat[str]:
         """Transform a symbol."""
         return items[0]
 
-    def symbol_with_selector(self, items):
+    def symbol_with_selector(self, items: List[Any]) -> Pat[str]:
         """Transform a symbol with selector (e.g., 'bd:kick')."""
         # items[0] and items[2] are already transformed Pat[str] objects from SYMBOL
         symbol_pat = items[0]
@@ -151,11 +152,11 @@ class PatternTransformer(Transformer):
         combined_value = f"{symbol_str}:{selector_str}"
         return Pat.pure(combined_value)
 
-    def silence(self, _items):
+    def silence(self, _items: List[Any]) -> Pat[Any]:
         """Transform silence into empty pattern."""
         return Pat.silence()
 
-    def seq(self, items):
+    def seq(self, items: List[Any]) -> Pat[Any]:
         """Transform grouping [...] or .pattern."""
         pattern = items[0]
         # If the pattern is already a sequence, return it as-is
@@ -165,25 +166,25 @@ class PatternTransformer(Transformer):
         else:
             return Pat.seq([pattern])
 
-    def choice(self, items):
+    def choice(self, items: List[Any]) -> Pat[Any]:
         """Transform choice patterns [a|b|c]."""
         choices = items[0]
         return Pat.choice(choices)
 
-    def choice_list(self, items):
+    def choice_list(self, items: List[Any]) -> List[Any]:
         """Transform choice list a|b|c."""
         return items
 
-    def parallel(self, items):
+    def parallel(self, items: List[Any]) -> Pat[Any]:
         """Transform parallel patterns [a,b,c]."""
         patterns = items[0]
         return Pat.par(patterns)
 
-    def parallel_list(self, items):
+    def parallel_list(self, items: List[Any]) -> List[Any]:
         """Transform parallel list a,b,c."""
         return items
 
-    def alternating(self, items):
+    def alternating(self, items: List[Any]) -> Pat[Any]:
         """Transform alternating patterns <a b c>."""
         # If we get a single item that's a sequence, extract its children
         if len(items) == 1 and isinstance(items[0].unwrap, PatSeq):
@@ -193,7 +194,7 @@ class PatternTransformer(Transformer):
             return Pat.alternating(items)
 
     # Euclidean rhythms
-    def euclidean(self, items):
+    def euclidean(self, items: List[Any]) -> Pat[Any]:
         """Transform Euclidean rhythm pattern like bd(3,8)."""
         atom = items[0]
         # Convert Fraction to int (should be whole numbers for euclidean)
@@ -203,11 +204,11 @@ class PatternTransformer(Transformer):
         return Pat.euclidean(atom, hits, steps, rotation)
 
     # Polymetric sequences
-    def pattern_list(self, items):
+    def pattern_list(self, items: List[Any]) -> List[Any]:
         """Transform pattern list a,b,c."""
         return items
 
-    def polymetric(self, items):
+    def polymetric(self, items: List[Any]) -> Pat[Any]:
         """Transform polymetric patterns {a,b,c} or {a,b,c}%4."""
         patterns = items[0]  # The pattern_list
 
@@ -221,7 +222,7 @@ class PatternTransformer(Transformer):
             return Pat.polymetric(patterns)
 
     # Repetition and speed modifiers
-    def repetition(self, items):
+    def repetition(self, items: List[Any]) -> Pat[Any]:
         """Transform repetition patterns like bd*2 or bd/2."""
         element = items[0]
         op_str = str(items[1])
@@ -237,7 +238,7 @@ class PatternTransformer(Transformer):
 
         return Pat.repetition(element, op, num)
 
-    def elongation(self, items):
+    def elongation(self, items: List[Any]) -> Pat[Any]:
         """Transform elongation patterns like bd_ or bd@2."""
         element = items[0]
 
@@ -261,14 +262,14 @@ class PatternTransformer(Transformer):
             # Regular elongation
             return Pat.elongation(element, current_count)
 
-    def replicate(self, items):
+    def replicate(self, items: List[Any]) -> Pat[Any]:
         """Transform replicate patterns like bd!3."""
         element = items[0]
         # items[1] is the EXCLAMATION token, items[2] is the count
         count = int(items[2])
         return Pat.replicate(element, count)
 
-    def dot_group(self, items):
+    def dot_group(self, items: List[Any]) -> Pat[Any]:
         """Transform dot grouping patterns like bd sd _ . hh cp _ . oh."""
         # items alternate: element_sequence, DOT, element_sequence, DOT, ...
         # Extract just the element_sequences (skip DOT tokens)
@@ -280,7 +281,7 @@ class PatternTransformer(Transformer):
         return Pat.seq(sequences)
 
     # Probability
-    def probability(self, items):
+    def probability(self, items: List[Any]) -> Pat[Any]:
         """Transform probability patterns like bd?, bd?0.3, bd?(1/2)."""
         element = items[0]
 
@@ -295,29 +296,29 @@ class PatternTransformer(Transformer):
         else:
             raise ValueError(f"Invalid probability pattern with {len(items)} items")
 
-    def probability_value(self, items):
+    def probability_value(self, items: List[Any]) -> Any:
         """Transform probability value - numeric value."""
         return items[0]
 
-    def numeric_value(self, items):
+    def numeric_value(self, items: List[Any]) -> Any:
         """Transform numeric value - integer, decimal, or fraction."""
         return items[0]
 
-    def fraction(self, items):
+    def fraction(self, items: List[Any]) -> Fraction:
         """Transform fraction like 1%2 into Fraction."""
         numerator = int(items[0])
         denominator = int(items[1])
         return Fraction(numerator, denominator)
 
-    def SYMBOL(self, token):
+    def SYMBOL(self, token: Any) -> Pat[str]:
         """Transform a symbol token into a pure pattern with string value."""
         return Pat.pure(str(token))
 
-    def NUMBER(self, token):
+    def NUMBER(self, token: Any) -> Fraction:
         """Transform a number token."""
         return Fraction(int(str(token)))
 
-    def DECIMAL(self, token):
+    def DECIMAL(self, token: Any) -> Fraction:
         """Transform a decimal token."""
         return Fraction(str(token))
 
