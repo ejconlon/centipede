@@ -553,22 +553,32 @@ class MidiSenderTask:
 
                 if timed_msg is not None:
                     # Send the message if we have an output
+                    output_port = None
+                    send_error = None
+                    
                     with self._output_mutex as output_box:
                         if output_box is not None and output_box.value is not None:
+                            output_port = output_box.value
                             try:
-                                output_box.value.send(timed_msg.message)
-                                self._logger.debug(
-                                    "Sent scheduled MIDI message: %s", timed_msg.message
-                                )
+                                output_port.send(timed_msg.message)
                             except Exception as e:
-                                self._logger.error(
-                                    "Error sending scheduled MIDI message: %s", e
-                                )
-                        else:
+                                send_error = e
+                    
+                    # Log outside of mutex
+                    if output_port is not None:
+                        if send_error is None:
                             self._logger.debug(
-                                "No MIDI output available, dropping message: %s",
-                                timed_msg.message,
+                                "Sent scheduled MIDI message: %s", timed_msg.message
                             )
+                        else:
+                            self._logger.error(
+                                "Error sending scheduled MIDI message: %s", send_error
+                            )
+                    else:
+                        self._logger.debug(
+                            "No MIDI output available, dropping message: %s",
+                            timed_msg.message,
+                        )
 
                     # Continue immediately to check for more messages
                     continue
@@ -1022,13 +1032,23 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
     @override
     def on_stop(self, logger: Logger) -> None:
         """Reset the MIDI output when stopping."""
+        output_port = None
+        reset_error = None
+        
         with self._output_mutex as output_box:
             if output_box is not None and output_box.value is not None:
+                output_port = output_box.value
                 try:
-                    output_box.value.reset()
-                    logger.debug("Reset MIDI output port")
+                    output_port.reset()
                 except Exception as e:
-                    logger.error("Error resetting MIDI output: %s", e)
+                    reset_error = e
+        
+        # Log outside of mutex
+        if output_port is not None:
+            if reset_error is None:
+                logger.debug("Reset MIDI output port")
+            else:
+                logger.error("Error resetting MIDI output: %s", reset_error)
 
     @override
     def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
@@ -1040,12 +1060,20 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                 else:
                     env.logger.info("MIDI: Pausing")
                     # Reset output when stopping
+                    output_port = None
+                    reset_error = None
+                    
                     with self._output_mutex as output_box:
                         if output_box is not None and output_box.value is not None:
+                            output_port = output_box.value
                             try:
-                                output_box.value.reset()
+                                output_port.reset()
                             except Exception as e:
-                                env.logger.error("Error resetting MIDI output: %s", e)
+                                reset_error = e
+                    
+                    # Log outside of mutex
+                    if reset_error is not None:
+                        env.logger.error("Error resetting MIDI output: %s", reset_error)
             case BackendEvents(messages):
                 if self._playing:
                     self._queue_messages(env, messages)
