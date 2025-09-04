@@ -4,7 +4,7 @@ from fractions import Fraction
 
 from minipat.arc import Arc
 from minipat.common import CycleDelta, CycleTime
-from minipat.pat import Pat, RepetitionOp, Selected
+from minipat.pat import Pat, RepetitionOp
 from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
 
@@ -468,9 +468,9 @@ def test_stream_constructor_pat():
     # Create a pattern
     pattern = Pat.seq(
         [
-            Pat.pure(Selected("a", None)),
-            Pat.pure(Selected("b", None)),
-            Pat.pure(Selected("c", None)),
+            Pat.pure("a"),
+            Pat.pure("b"),
+            Pat.pure("c"),
         ]
     )
 
@@ -482,7 +482,7 @@ def test_stream_constructor_pat():
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
     assert len(event_list) == 3
-    values = [event.val.value for _, event in event_list]
+    values = [event.val for _, event in event_list]
     assert values == ["a", "b", "c"]
 
 

@@ -17,22 +17,19 @@ from minipat.pat import (
     PatSeq,
     PatSilence,
     RepetitionOp,
-    Selected,
 )
 
 
-def assert_selected_value(selected, expected_value, expected_selector=None):
-    """Helper function to assert Selected values."""
-    assert isinstance(selected, Selected)
-    assert selected.value == expected_value
-    assert selected.selector == expected_selector
+def assert_string_value(value, expected_value):
+    """Helper function to assert string values."""
+    assert value == expected_value
 
 
 def test_parse_basic_symbol():
     """Test parsing a single symbol."""
     result = parse_pattern("bd")
     assert isinstance(result.unwrap, PatPure)
-    assert_selected_value(result.unwrap.value, "bd")
+    assert_string_value(result.unwrap.value, "bd")
 
 
 def test_parse_simple_sequence():
@@ -43,9 +40,9 @@ def test_parse_simple_sequence():
     children = list(result.unwrap.patterns)
     assert len(children) == 3
     assert all(isinstance(child.unwrap, PatPure) for child in children)
-    assert_selected_value(children[0].unwrap.value, "bd")
-    assert_selected_value(children[1].unwrap.value, "sd")
-    assert_selected_value(children[2].unwrap.value, "hh")
+    assert_string_value(children[0].unwrap.value, "bd")
+    assert_string_value(children[1].unwrap.value, "sd")
+    assert_string_value(children[2].unwrap.value, "hh")
 
 
 def test_parse_silence():
@@ -58,8 +55,8 @@ def test_parse_silence():
     assert isinstance(children[0].unwrap, PatPure)
     assert isinstance(children[1].unwrap, PatSilence)
     assert isinstance(children[2].unwrap, PatPure)
-    assert_selected_value(children[0].unwrap.value, "bd")
-    assert_selected_value(children[2].unwrap.value, "sd")
+    assert_string_value(children[0].unwrap.value, "bd")
+    assert_string_value(children[2].unwrap.value, "sd")
 
 
 def test_parse_sample_selection():
@@ -71,14 +68,10 @@ def test_parse_sample_selection():
     assert len(children) == 2
     assert isinstance(children[0].unwrap, PatPure)
     selected_0 = children[0].unwrap.value
-    assert isinstance(selected_0, Selected)
-    assert selected_0.value == "bd"
-    assert selected_0.selector == "2"
+    assert selected_0 == "bd:2"
     assert isinstance(children[1].unwrap, PatPure)
     selected_1 = children[1].unwrap.value
-    assert isinstance(selected_1, Selected)
-    assert selected_1.value == "sd"
-    assert selected_1.selector == "0"
+    assert selected_1 == "sd:0"
 
 
 def test_parse_sample_selection_strings():
@@ -90,14 +83,10 @@ def test_parse_sample_selection_strings():
     assert len(children) == 2
     assert isinstance(children[0].unwrap, PatPure)
     selected_0 = children[0].unwrap.value
-    assert isinstance(selected_0, Selected)
-    assert selected_0.value == "bd"
-    assert selected_0.selector == "kick"
+    assert selected_0 == "bd:kick"
     assert isinstance(children[1].unwrap, PatPure)
     selected_1 = children[1].unwrap.value
-    assert isinstance(selected_1, Selected)
-    assert selected_1.value == "sd"
-    assert selected_1.selector == "snare"
+    assert selected_1 == "sd:snare"
 
 
 def test_parse_seq_brackets():
@@ -122,9 +111,9 @@ def test_parse_choice_pattern():
     assert isinstance(result.unwrap, PatChoice)
     choices = list(result.unwrap.patterns)
     assert len(choices) == 3
-    assert_selected_value(choices[0].unwrap.value, "bd")
-    assert_selected_value(choices[1].unwrap.value, "sd")
-    assert_selected_value(choices[2].unwrap.value, "cp")
+    assert_string_value(choices[0].unwrap.value, "bd")
+    assert_string_value(choices[1].unwrap.value, "sd")
+    assert_string_value(choices[2].unwrap.value, "cp")
 
 
 def test_parse_parallel_pattern():
@@ -134,9 +123,9 @@ def test_parse_parallel_pattern():
     assert isinstance(result.unwrap, PatPar)
     patterns = list(result.unwrap.patterns)
     assert len(patterns) == 3
-    assert_selected_value(patterns[0].unwrap.value, "bd")
-    assert_selected_value(patterns[1].unwrap.value, "sd")
-    assert_selected_value(patterns[2].unwrap.value, "cp")
+    assert_string_value(patterns[0].unwrap.value, "bd")
+    assert_string_value(patterns[1].unwrap.value, "sd")
+    assert_string_value(patterns[2].unwrap.value, "cp")
 
 
 def test_parse_alternating_pattern():
@@ -146,9 +135,9 @@ def test_parse_alternating_pattern():
     assert isinstance(result.unwrap, PatAlternating)
     patterns = list(result.unwrap.patterns)
     assert len(patterns) == 3
-    assert_selected_value(patterns[0].unwrap.value, "bd")
-    assert_selected_value(patterns[1].unwrap.value, "sd")
-    assert_selected_value(patterns[2].unwrap.value, "cp")
+    assert_string_value(patterns[0].unwrap.value, "bd")
+    assert_string_value(patterns[1].unwrap.value, "sd")
+    assert_string_value(patterns[2].unwrap.value, "cp")
 
 
 def test_parse_repetition_multiply():
@@ -157,7 +146,7 @@ def test_parse_repetition_multiply():
     assert isinstance(result.unwrap, PatRepetition)
     assert result.unwrap.operator == RepetitionOp.Fast
     assert result.unwrap.count == 2
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
 
 
 def test_parse_repetition_divide():
@@ -166,7 +155,7 @@ def test_parse_repetition_divide():
     assert isinstance(result.unwrap, PatRepetition)
     assert result.unwrap.operator == RepetitionOp.Slow
     assert result.unwrap.count == 2
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
 
 
 def test_parse_multiple_repetition():
@@ -189,19 +178,19 @@ def test_parse_elongation():
     result = parse_pattern("bd_")
     assert isinstance(result.unwrap, PatElongation)
     assert result.unwrap.count == 1  # Single elongation
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
 
     result2 = parse_pattern("bd__")
     assert isinstance(result2.unwrap, PatElongation)
     assert result2.unwrap.count == 2  # Double elongation
-    assert_selected_value(result2.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result2.unwrap.pattern.unwrap.value, "bd")
 
 
 def test_parse_probability():
     """Test parsing probability with ?."""
     result = parse_pattern("bd?")
     assert isinstance(result.unwrap, PatProbability)
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
     assert result.unwrap.probability == 0.5
 
 
@@ -209,7 +198,7 @@ def test_parse_euclidean_rhythm():
     """Test parsing Euclidean rhythms."""
     result = parse_pattern("bd(3,8)")
     assert isinstance(result.unwrap, PatEuclidean)
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
     assert result.unwrap.hits == 3
     assert result.unwrap.steps == 8
     assert result.unwrap.rotation == 0
@@ -219,7 +208,7 @@ def test_parse_euclidean_with_rotation():
     """Test parsing Euclidean rhythms with rotation."""
     result = parse_pattern("bd(3,8,1)")
     assert isinstance(result.unwrap, PatEuclidean)
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
     assert result.unwrap.hits == 3
     assert result.unwrap.steps == 8
     assert result.unwrap.rotation == 1
@@ -232,8 +221,8 @@ def test_parse_polymetric():
 
     patterns = list(result.unwrap.patterns)
     assert len(patterns) == 2
-    assert_selected_value(patterns[0].unwrap.value, "bd")
-    assert_selected_value(patterns[1].unwrap.value, "sd")
+    assert_string_value(patterns[0].unwrap.value, "bd")
+    assert_string_value(patterns[1].unwrap.value, "sd")
 
 
 def test_parse_complex_pattern():
@@ -270,7 +259,7 @@ def test_parse_nested_groups():
     assert isinstance(nested.unwrap, PatSeq)
 
     # Second should be "hh"
-    assert_selected_value(children[1].unwrap.value, "hh")
+    assert_string_value(children[1].unwrap.value, "hh")
 
 
 def test_parse_empty_pattern():
@@ -290,8 +279,8 @@ def test_parse_whitespace_handling():
         assert isinstance(result.unwrap, PatSeq)
         children = list(result.unwrap.patterns)
         assert len(children) == 2
-        assert_selected_value(children[0].unwrap.value, "bd")
-        assert_selected_value(children[1].unwrap.value, "sd")
+        assert_string_value(children[0].unwrap.value, "bd")
+        assert_string_value(children[1].unwrap.value, "sd")
 
 
 def test_parse_numeric_symbols():
@@ -301,8 +290,8 @@ def test_parse_numeric_symbols():
 
     children = list(result.unwrap.patterns)
     assert len(children) == 2
-    assert_selected_value(children[0].unwrap.value, "bd909")
-    assert_selected_value(children[1].unwrap.value, "tr808")
+    assert_string_value(children[0].unwrap.value, "bd909")
+    assert_string_value(children[1].unwrap.value, "tr808")
 
 
 def test_parse_symbols_with_underscores_and_dashes():
@@ -312,10 +301,10 @@ def test_parse_symbols_with_underscores_and_dashes():
 
     children = list(result.unwrap.patterns)
     assert len(children) == 4
-    assert_selected_value(children[0].unwrap.value, "bd_kick")
-    assert_selected_value(children[1].unwrap.value, "snare-roll")
-    assert_selected_value(children[2].unwrap.value, "hi_hat_open")
-    assert_selected_value(children[3].unwrap.value, "bass-drum_1")
+    assert_string_value(children[0].unwrap.value, "bd_kick")
+    assert_string_value(children[1].unwrap.value, "snare-roll")
+    assert_string_value(children[2].unwrap.value, "hi_hat_open")
+    assert_string_value(children[3].unwrap.value, "bass-drum_1")
 
 
 def test_parse_complex_sample_selection():
@@ -333,9 +322,7 @@ def test_parse_complex_sample_selection():
     assert first.unwrap.count == 2
     assert isinstance(first.unwrap.pattern.unwrap, PatPure)
     selected_first = first.unwrap.pattern.unwrap.value
-    assert isinstance(selected_first, Selected)
-    assert selected_first.value == "bd"
-    assert selected_first.selector == "0"
+    assert selected_first == "bd:0"
 
     # Second should be sd:1/2 (repetition with division of sample selection)
     second = children[1]
@@ -344,9 +331,7 @@ def test_parse_complex_sample_selection():
     assert second.unwrap.count == 2
     assert isinstance(second.unwrap.pattern.unwrap, PatPure)
     selected_second = second.unwrap.pattern.unwrap.value
-    assert isinstance(selected_second, Selected)
-    assert selected_second.value == "sd"
-    assert selected_second.selector == "1"
+    assert selected_second == "sd:1"
 
 
 def test_kick_snare_pattern():
@@ -356,10 +341,10 @@ def test_kick_snare_pattern():
     children = list(result.unwrap.patterns)
     assert len(children) == 4
     # Check each pattern value individually
-    assert_selected_value(children[0].unwrap.value, "bd")
-    assert_selected_value(children[1].unwrap.value, "sd")
-    assert_selected_value(children[2].unwrap.value, "bd")
-    assert_selected_value(children[3].unwrap.value, "sd")
+    assert_string_value(children[0].unwrap.value, "bd")
+    assert_string_value(children[1].unwrap.value, "sd")
+    assert_string_value(children[2].unwrap.value, "bd")
+    assert_string_value(children[3].unwrap.value, "sd")
 
 
 def test_hihat_subdivision():
@@ -398,7 +383,7 @@ def test_parse_replicate():
     assert isinstance(result.unwrap, PatReplicate)
     assert result.unwrap.count == 3
     assert isinstance(result.unwrap.pattern.unwrap, PatPure)
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
 
 
 def test_parse_ratio():
@@ -408,7 +393,7 @@ def test_parse_ratio():
     assert result.unwrap.operator == RepetitionOp.Fast
     assert result.unwrap.count == Fraction(3, 2)
     assert isinstance(result.unwrap.pattern.unwrap, PatPure)
-    assert_selected_value(result.unwrap.pattern.unwrap.value, "bd")
+    assert_string_value(result.unwrap.pattern.unwrap.value, "bd")
 
 
 def test_parse_polymetric_subdivision():
@@ -436,9 +421,7 @@ def test_parse_complex_new_features():
     assert isinstance(result.unwrap, PatReplicate)
     assert isinstance(result.unwrap.pattern.unwrap, PatPure)
     selected = result.unwrap.pattern.unwrap.value
-    assert isinstance(selected, Selected)
-    assert selected.value == "bd"
-    assert selected.selector == "0"
+    assert selected == "bd:0"
 
     # Fractional repetition with probability
     result = parse_pattern("bd?*2%3")

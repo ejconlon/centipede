@@ -36,7 +36,6 @@ from minipat.live import (
     Processor,
 )
 from minipat.parser import parse_pattern
-from minipat.pat import Selected
 from minipat.stream import MergeStrat, Stream, pat_stream
 from spiny.common import Box
 from spiny.dmap import DKey, DMap
@@ -493,31 +492,30 @@ class VelKey(MidiKey[Velocity]):
 # =============================================================================
 
 
-class Selector[V](metaclass=ABCMeta):
+class ElemParser[V](metaclass=ABCMeta):
     """Abstract base class for parsing and rendering pattern values.
 
-    A Selector handles the bidirectional conversion between string representations
+    An ElemParser handles the bidirectional conversion between string representations
     in patterns and strongly-typed values. This enables the pattern system to work
     with domain-specific types like MIDI notes and velocities while maintaining
     readable string syntax in patterns.
 
-    The pattern system uses Selected[str] values which contain both the string
-    value and optional selection context (for advanced pattern features).
+    The pattern system uses str values which ElemParser instances split apart.
 
     Type Parameters:
-        V: The value type this selector handles (e.g., Note, Vel)
+        V: The value type this parser handles (e.g., Note, Vel)
 
     Example:
-        A NoteSelector might parse "c4" -> Note(60) and render Note(60) -> "c4"
+        A NoteElemParser might parse "c4" -> Note(60) and render Note(60) -> "c4"
     """
 
     @classmethod
     @abstractmethod
-    def parse(cls, sel: Selected[str]) -> V:
+    def parse(cls, s: str) -> V:
         """Parse a string pattern value into a strongly-typed value.
 
         Args:
-            sel: A Selected string containing the pattern value and optional context
+            s: A string containing the pattern value
 
         Returns:
             The parsed value of type V
@@ -529,19 +527,19 @@ class Selector[V](metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def render(cls, value: V) -> Selected[str]:
+    def render(cls, value: V) -> str:
         """Render a strongly-typed value back to a string pattern representation.
 
         Args:
             value: The strongly-typed value to render
 
         Returns:
-            A Selected string representation suitable for patterns
+            A string representation suitable for patterns
         """
         raise NotImplementedError
 
 
-class NoteNumSelector(Selector[Note]):
+class NoteNumElemParser(ElemParser[Note]):
     """Selector for parsing numeric MIDI note representations.
 
     Handles direct numeric MIDI note values in the range 0-127.
@@ -560,20 +558,20 @@ class NoteNumSelector(Selector[Note]):
 
     @override
     @classmethod
-    def parse(cls, sel: Selected[str]) -> Note:
+    def parse(cls, s: str) -> Note:
         try:
-            note_num = int(sel.value)
+            note_num = int(s)
             return NoteField.mk(note_num)
         except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid note number: {sel.value}") from e
+            raise ValueError(f"Invalid note number: {s}") from e
 
     @override
     @classmethod
-    def render(cls, value: Note) -> Selected[str]:
-        return Selected(str(value), None)
+    def render(cls, value: Note) -> str:
+        return str(value)
 
 
-class NoteNameSelector(Selector[Note]):
+class NoteNameElemParser(ElemParser[Note]):
     """Selector for parsing musical note names with octave numbers.
 
     Converts standard musical notation to MIDI note numbers. Supports
@@ -601,21 +599,21 @@ class NoteNameSelector(Selector[Note]):
 
     @override
     @classmethod
-    def parse(cls, sel: Selected[str]) -> Note:
+    def parse(cls, s: str) -> Note:
         # Parse note names like "c4" (middle C = 60), "d#4", "eb3", etc.
-        note_str = sel.value.lower()
+        note_str = s.lower()
 
         # Note name to semitone mapping (C is 0)
         note_map = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
 
         # Parse note name and octave
         if len(note_str) < 2:
-            raise ValueError(f"Invalid note name: {sel.value}")
+            raise ValueError(f"Invalid note name: {s}")
 
         # Get base note
         base_note = note_str[0]
         if base_note not in note_map:
-            raise ValueError(f"Invalid note name: {sel.value}")
+            raise ValueError(f"Invalid note name: {s}")
 
         semitone = note_map[base_note]
         pos = 1
@@ -633,7 +631,7 @@ class NoteNameSelector(Selector[Note]):
         try:
             octave = int(note_str[pos:])
         except ValueError:
-            raise ValueError(f"Invalid octave in note: {sel.value}")
+            raise ValueError(f"Invalid octave in note: {s}")
 
         # Calculate MIDI note number (C4 = 60, so octave 4 starts at 60-12=48 for C)
         # MIDI note = (octave + 1) * 12 + semitone
@@ -643,7 +641,7 @@ class NoteNameSelector(Selector[Note]):
 
     @override
     @classmethod
-    def render(cls, value: Note) -> Selected[str]:
+    def render(cls, value: Note) -> str:
         # Convert MIDI note back to note name
         note_num = int(value)
         octave = (note_num // 12) - 1
@@ -653,10 +651,10 @@ class NoteNameSelector(Selector[Note]):
         note_names = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"]
         note_name = note_names[semitone] + str(octave)
 
-        return Selected(note_name, None)
+        return note_name
 
 
-class VelSelector(Selector[Velocity]):
+class VelElemParser(ElemParser[Velocity]):
     """Selector for parsing MIDI velocity values.
 
     Handles MIDI velocity values which control the volume/intensity of notes.
@@ -681,17 +679,17 @@ class VelSelector(Selector[Velocity]):
 
     @override
     @classmethod
-    def parse(cls, sel: Selected[str]) -> Velocity:
+    def parse(cls, s: str) -> Velocity:
         try:
-            vel_num = int(sel.value)
+            vel_num = int(s)
             return VelocityField.mk(vel_num)
         except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid velocity: {sel.value}") from e
+            raise ValueError(f"Invalid velocity: {s}") from e
 
     @override
     @classmethod
-    def render(cls, value: Velocity) -> Selected[str]:
-        return Selected(str(value), None)
+    def render(cls, value: Velocity) -> str:
+        return str(value)
 
 
 # =============================================================================
@@ -699,21 +697,21 @@ class VelSelector(Selector[Velocity]):
 # =============================================================================
 
 
-def _convert_midinote(sel: Selected[str]) -> MidiAttrs:
+def _convert_midinote(s: str) -> MidiAttrs:
     """Convert numeric note to MIDI attributes."""
-    note = NoteNumSelector.parse(sel)
+    note = NoteNumElemParser.parse(s)
     return DMap.singleton(NoteKey(), note)
 
 
-def _convert_note(sel: Selected[str]) -> MidiAttrs:
+def _convert_note(s: str) -> MidiAttrs:
     """Convert note name to MIDI attributes."""
-    note = NoteNameSelector.parse(sel)
+    note = NoteNameElemParser.parse(s)
     return DMap.singleton(NoteKey(), note)
 
 
-def _convert_vel(sel: Selected[str]) -> MidiAttrs:
+def _convert_vel(s: str) -> MidiAttrs:
     """Convert velocity to MIDI attributes."""
-    velocity = VelSelector.parse(sel)
+    velocity = VelElemParser.parse(s)
     return DMap.singleton(VelKey(), velocity)
 
 

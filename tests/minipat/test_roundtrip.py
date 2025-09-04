@@ -159,9 +159,9 @@ def test_whitespace_normalization():
 def test_patpar_now_printable():
     """Test that PatPar patterns can now be printed as parallel notation."""
     # Create a PatPar pattern directly (not through parsing)
-    from minipat.pat import Pat, Selected
+    from minipat.pat import Pat
 
-    pat = Pat.par([Pat.pure(Selected("bd", None)), Pat.pure(Selected("sd", None))])
+    pat = Pat.par([Pat.pure("bd"), Pat.pure("sd")])
 
     # Should print as parallel notation [a, b]
     result = print_pattern(pat)
@@ -172,9 +172,9 @@ def test_custom_probability_printable():
     """Test that custom probability values are printable."""
     from fractions import Fraction
 
-    from minipat.pat import Pat, Selected
+    from minipat.pat import Pat
 
-    pat = Pat.probability(Pat.pure(Selected("bd", None)), Fraction(3, 4))
+    pat = Pat.probability(Pat.pure("bd"), Fraction(3, 4))
     result = print_pattern(pat)
     assert result == "bd?(3/4)"
 

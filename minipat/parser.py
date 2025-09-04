@@ -6,7 +6,7 @@ from fractions import Fraction
 
 from lark import Lark, Transformer
 
-from minipat.pat import Pat, PatElongation, PatSeq, RepetitionOp, Selected
+from minipat.pat import Pat, PatElongation, PatSeq, RepetitionOp
 
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
@@ -139,17 +139,17 @@ class PatternTransformer(Transformer):
 
     def symbol_with_selector(self, items):
         """Transform a symbol with selector (e.g., 'bd:kick')."""
-        # items[0] and items[2] are already transformed Pat[Selected[str]] objects from SYMBOL
+        # items[0] and items[2] are already transformed Pat[str] objects from SYMBOL
         symbol_pat = items[0]
         selector_pat = items[2]
 
-        # Extract the actual string values from the Selected objects
-        symbol_selected = symbol_pat.unwrap.value
-        selector_selected = selector_pat.unwrap.value
+        # Extract the actual string values
+        symbol_str = symbol_pat.unwrap.value
+        selector_str = selector_pat.unwrap.value
 
-        # Create new Selected with the symbol and selector values
-        selected_value = Selected(symbol_selected.value, selector_selected.value)
-        return Pat.pure(selected_value)
+        # Combine symbol and selector with colon
+        combined_value = f"{symbol_str}:{selector_str}"
+        return Pat.pure(combined_value)
 
     def silence(self, _items):
         """Transform silence into empty pattern."""
@@ -310,9 +310,8 @@ class PatternTransformer(Transformer):
         return Fraction(numerator, denominator)
 
     def SYMBOL(self, token):
-        """Transform a symbol token into a pure pattern with Selected value."""
-        selected_value = Selected(str(token), None)
-        return Pat.pure(selected_value)
+        """Transform a symbol token into a pure pattern with string value."""
+        return Pat.pure(str(token))
 
     def NUMBER(self, token):
         """Transform a number token."""
@@ -323,7 +322,7 @@ class PatternTransformer(Transformer):
         return Fraction(str(token))
 
 
-def parse_pattern(pattern_str: str) -> Pat[Selected[str]]:
+def parse_pattern(pattern_str: str) -> Pat[str]:
     """Parse a pattern string into a Pat object.
 
     Args:

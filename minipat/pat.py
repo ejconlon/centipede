@@ -13,12 +13,6 @@ from minipat.common import ONE_HALF, PartialMatchException, ignore_arg
 from spiny import Box, PSeq
 
 
-@dataclass(frozen=True, order=True)
-class Selected[T]:
-    value: T
-    selector: Optional[str]
-
-
 class RepetitionOp(Enum):
     """Enumeration for repetition operators."""
 
