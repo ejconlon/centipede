@@ -81,7 +81,7 @@ class Stream[T](metaclass=ABCMeta):
         raise NotImplementedError
 
     @staticmethod
-    def silence() -> Stream[T]:
+    def silent() -> Stream[T]:
         """Create a silent stream.
 
         Returns:
@@ -126,7 +126,7 @@ class Stream[T](metaclass=ABCMeta):
         return ParStream(streams)
 
     @staticmethod
-    def choice(choices: PSeq[Stream[T]]) -> Stream[T]:
+    def rand(choices: PSeq[Stream[T]]) -> Stream[T]:
         """Create a choice stream.
 
         Args:
@@ -138,9 +138,7 @@ class Stream[T](metaclass=ABCMeta):
         return ChoiceStream(choices)
 
     @staticmethod
-    def euclidean(
-        stream: Stream[T], hits: int, steps: int, rotation: int = 0
-    ) -> Stream[T]:
+    def euc(stream: Stream[T], hits: int, steps: int, rotation: int = 0) -> Stream[T]:
         """Create a Euclidean rhythm stream.
 
         Args:
@@ -155,9 +153,7 @@ class Stream[T](metaclass=ABCMeta):
         return EuclideanStream.create(stream, hits, steps, rotation)
 
     @staticmethod
-    def polymetric(
-        patterns: PSeq[Stream[T]], subdiv: Optional[int] = None
-    ) -> Stream[T]:
+    def poly(patterns: PSeq[Stream[T]], subdiv: Optional[int] = None) -> Stream[T]:
         """Create a polymetric stream.
 
         Args:
@@ -170,26 +166,26 @@ class Stream[T](metaclass=ABCMeta):
         return PolymetricStream(patterns, subdiv)
 
     @staticmethod
-    def repetition(stream: Stream[T], operator: SpeedOp, count: int) -> Stream[T]:
-        """Create a repetition stream.
+    def speed(stream: Stream[T], op: SpeedOp, factor: int) -> Stream[T]:
+        """Create a speed stream.
 
         Args:
-            stream: The stream to repeat
-            operator: The repetition operator (Fast or Slow)
-            count: The repetition count
+            stream: The stream to speed up/down
+            op: The speed operator (Fast or Slow)
+            factor: The speed factor
 
         Returns:
-            A stream with the specified repetition
+            A stream with the specified speed
         """
-        return RepetitionStream(stream, operator, count)
+        return RepetitionStream(stream, op, factor)
 
     @staticmethod
-    def elongation(stream: Stream[T], count: int) -> Stream[T]:
-        """Create an elongated stream.
+    def stretch(stream: Stream[T], count: int) -> Stream[T]:
+        """Create a stretched stream.
 
         Args:
-            stream: The stream to elongate
-            count: The elongation count
+            stream: The stream to stretch
+            count: The stretch count
 
         Returns:
             A stream stretched by the given count
@@ -197,20 +193,20 @@ class Stream[T](metaclass=ABCMeta):
         return ElongationStream(stream, count)
 
     @staticmethod
-    def probability(stream: Stream[T], prob: Fraction) -> Stream[T]:
+    def prob(stream: Stream[T], chance: Fraction) -> Stream[T]:
         """Create a probabilistic stream.
 
         Args:
             stream: The stream to apply probability to
-            prob: The probability (0 to 1 as a Fraction)
+            chance: The probability (0 to 1 as a Fraction)
 
         Returns:
             A stream that plays with the given probability
         """
-        return ProbabilityStream(stream, prob)
+        return ProbabilityStream(stream, chance)
 
     @staticmethod
-    def alternating(patterns: PSeq[Stream[T]]) -> Stream[T]:
+    def alt(patterns: PSeq[Stream[T]]) -> Stream[T]:
         """Create an alternating stream.
 
         Args:
@@ -222,15 +218,15 @@ class Stream[T](metaclass=ABCMeta):
         return AlternatingStream(patterns)
 
     @staticmethod
-    def replicate(stream: Stream[T], count: int) -> Stream[T]:
-        """Create a replicate stream.
+    def repeat(stream: Stream[T], count: int) -> Stream[T]:
+        """Create a repeat stream.
 
         Args:
-            stream: The stream to replicate
-            count: The number of times to replicate
+            stream: The stream to repeat
+            count: The number of times to repeat
 
         Returns:
-            A replicated stream
+            A repeated stream
         """
         return ReplicateStream(stream, count)
 
@@ -645,7 +641,7 @@ class ProbabilityStream[T](Stream[T]):
     """Specialized stream for probability patterns."""
 
     pattern: Stream[T]
-    prob: Fraction
+    chance: Fraction
 
     @override
     def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
@@ -653,7 +649,7 @@ class ProbabilityStream[T](Stream[T]):
             return ev_heap_empty()
 
         random.seed(hash(arc.start))
-        if random.random() < self.prob:
+        if random.random() < self.chance:
             return self.pattern.unstream(arc)
         return ev_heap_empty()
 

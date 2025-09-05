@@ -246,8 +246,8 @@ def test_stream_late_by() -> None:
 
 
 def test_stream_constructor_silence() -> None:
-    """Test Stream.silence() constructor."""
-    stream: Stream[str] = Stream.silence()
+    """Test Stream.silent() constructor."""
+    stream: Stream[str] = Stream.silent()
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
@@ -303,9 +303,9 @@ def test_stream_constructor_par() -> None:
 
 
 def test_stream_constructor_choice() -> None:
-    """Test Stream.choice() constructor."""
+    """Test Stream.rand() constructor."""
     choices = PSeq.mk([Stream.pure("a"), Stream.pure("b"), Stream.pure("c")])
-    stream = Stream.choice(choices)
+    stream = Stream.rand(choices)
 
     # Test different cycles
     for cycle in range(3):
@@ -321,9 +321,9 @@ def test_stream_constructor_choice() -> None:
 
 
 def test_stream_constructor_euclidean() -> None:
-    """Test Stream.euclidean() constructor."""
+    """Test Stream.euc() constructor."""
     atom_stream = Stream.pure("x")
-    stream = Stream.euclidean(atom_stream, 3, 8, 0)
+    stream = Stream.euc(atom_stream, 3, 8, 0)
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
@@ -336,11 +336,11 @@ def test_stream_constructor_euclidean() -> None:
 
 
 def test_stream_constructor_polymetric() -> None:
-    """Test Stream.polymetric() constructor."""
+    """Test Stream.poly() constructor."""
     patterns = PSeq.mk([Stream.pure("a"), Stream.pure("b")])
 
     # Without subdivision
-    stream = Stream.polymetric(patterns)
+    stream = Stream.poly(patterns)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
@@ -351,7 +351,7 @@ def test_stream_constructor_polymetric() -> None:
     assert values == {"a", "b"}
 
     # With subdivision
-    stream_sub = Stream.polymetric(patterns, 2)
+    stream_sub = Stream.poly(patterns, 2)
     events_sub = stream_sub.unstream(arc)
     event_list_sub = list(events_sub)
 
@@ -360,11 +360,11 @@ def test_stream_constructor_polymetric() -> None:
 
 
 def test_stream_constructor_repetition() -> None:
-    """Test Stream.repetition() constructor."""
+    """Test Stream.speed() constructor."""
     base_stream = Stream.pure("x")
 
     # Fast repetition
-    fast_stream = Stream.repetition(base_stream, SpeedOp.Fast, 3)
+    fast_stream = Stream.speed(base_stream, SpeedOp.Fast, 3)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = fast_stream.unstream(arc)
     event_list = list(events)
@@ -375,7 +375,7 @@ def test_stream_constructor_repetition() -> None:
         assert event.val == "x"
 
     # Slow repetition
-    slow_stream = Stream.repetition(base_stream, SpeedOp.Slow, 2)
+    slow_stream = Stream.speed(base_stream, SpeedOp.Slow, 2)
     events_slow = slow_stream.unstream(arc)
     event_list_slow = list(events_slow)
 
@@ -384,9 +384,9 @@ def test_stream_constructor_repetition() -> None:
 
 
 def test_stream_constructor_elongation() -> None:
-    """Test Stream.elongation() constructor."""
+    """Test Stream.stretch() constructor."""
     base_stream = Stream.pure("x")
-    stream = Stream.elongation(base_stream, 2)
+    stream = Stream.stretch(base_stream, 2)
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
@@ -399,11 +399,11 @@ def test_stream_constructor_elongation() -> None:
 
 
 def test_stream_constructor_probability() -> None:
-    """Test Stream.probability() constructor."""
+    """Test Stream.prob() constructor."""
     base_stream = Stream.pure("x")
 
     # 100% probability
-    stream_always = Stream.probability(base_stream, Fraction(1))
+    stream_always = Stream.prob(base_stream, Fraction(1))
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream_always.unstream(arc)
     event_list = list(events)
@@ -413,7 +413,7 @@ def test_stream_constructor_probability() -> None:
     assert event.val == "x"
 
     # 0% probability
-    stream_never = Stream.probability(base_stream, Fraction(0))
+    stream_never = Stream.prob(base_stream, Fraction(0))
     events_never = stream_never.unstream(arc)
     event_list_never = list(events_never)
 
@@ -421,9 +421,9 @@ def test_stream_constructor_probability() -> None:
 
 
 def test_stream_constructor_alternating() -> None:
-    """Test Stream.alternating() constructor."""
+    """Test Stream.alt() constructor."""
     patterns = PSeq.mk([Stream.pure("a"), Stream.pure("b")])
-    stream = Stream.alternating(patterns)
+    stream = Stream.alt(patterns)
 
     # Test alternation over cycles
     values = []
@@ -442,9 +442,9 @@ def test_stream_constructor_alternating() -> None:
 
 
 def test_stream_constructor_replicate() -> None:
-    """Test Stream.replicate() constructor."""
+    """Test Stream.repeat() constructor."""
     base_stream = Stream.pure("x")
-    stream = Stream.replicate(base_stream, 4)
+    stream = Stream.repeat(base_stream, 4)
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)

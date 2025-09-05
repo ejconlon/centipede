@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 from minipat.common import CycleDelta
 from minipat.midi import MidiAttrs, midinote, note, vel
@@ -17,9 +17,9 @@ class Flow:
 
     # Factory methods (static)
     @staticmethod
-    def silence() -> Flow:
+    def silent() -> Flow:
         """Create a silent flow."""
-        return Flow(Stream.silence())
+        return Flow(Stream.silent())
 
     @staticmethod
     def pure(val: MidiAttrs) -> Flow:
@@ -39,31 +39,25 @@ class Flow:
         return Flow(Stream.par(streams))
 
     @staticmethod
-    def choice(*choices: Flow) -> Flow:
-        """Create a choice flow."""
+    def rand(*choices: Flow) -> Flow:
+        """Create a random choice flow."""
         streams = PSeq.mk(choice.stream for choice in choices)
-        return Flow(Stream.choice(streams))
+        return Flow(Stream.rand(streams))
 
     @staticmethod
     def euc(flow: Flow, hits: int, steps: int, rotation: int = 0) -> Flow:
         """Create a Euclidean rhythm flow."""
-        return Flow(Stream.euclidean(flow.stream, hits, steps, rotation))
+        return Flow(Stream.euc(flow.stream, hits, steps, rotation))
 
     @staticmethod
-    def poly(*patterns: Flow) -> Flow:
+    def poly(patterns: Iterable[Flow], subdiv: Optional[int] = None) -> Flow:
         """Create a polymetric flow."""
         streams = PSeq.mk(pattern.stream for pattern in patterns)
-        return Flow(Stream.polymetric(streams, None))
-
-    @staticmethod
-    def poly_sub(patterns: Iterable[Flow], subdiv: int) -> Flow:
-        """Create a polymetric flow."""
-        streams = PSeq.mk(pattern.stream for pattern in patterns)
-        return Flow(Stream.polymetric(streams, subdiv))
+        return Flow(Stream.poly(streams, subdiv))
 
     def _repetition(self, operator: SpeedOp, count: int) -> Flow:
         """Create a repetition flow."""
-        return Flow(Stream.repetition(self.stream, operator, count))
+        return Flow(Stream.speed(self.stream, operator, count))
 
     def fast(self, count: int) -> Flow:
         return self._repetition(SpeedOp.Fast, count)
@@ -73,21 +67,21 @@ class Flow:
 
     def stretch(self, count: int) -> Flow:
         """Create an elongated flow."""
-        return Flow(Stream.elongation(self.stream, count))
+        return Flow(Stream.stretch(self.stream, count))
 
-    def degrade(self, prob: Fraction) -> Flow:
+    def prob(self, chance: Fraction) -> Flow:
         """Create a probabilistic flow."""
-        return Flow(Stream.probability(self.stream, prob))
+        return Flow(Stream.prob(self.stream, chance))
 
     @staticmethod
     def alt(patterns: Iterable[Flow]) -> Flow:
         """Create an alternating flow."""
         streams = PSeq.mk(pattern.stream for pattern in patterns)
-        return Flow(Stream.alternating(streams))
+        return Flow(Stream.alt(streams))
 
-    def rep(self, count: int) -> Flow:
-        """Create a replicate flow."""
-        return Flow(Stream.replicate(self.stream, count))
+    def repeat(self, count: int) -> Flow:
+        """Create a repeat flow."""
+        return Flow(Stream.repeat(self.stream, count))
 
     @staticmethod
     def pat(pattern: Pat[MidiAttrs]) -> Flow:

@@ -938,7 +938,7 @@ def combine(*ss: Stream[MidiAttrs]) -> Stream[MidiAttrs]:
             acc = acc.apply(MergeStrat.Inner, _merge_attrs, el)
         return acc
     else:
-        return Stream.silence()
+        return Stream.silent()
 
 
 # =============================================================================
