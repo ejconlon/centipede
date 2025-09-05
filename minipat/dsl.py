@@ -55,14 +55,14 @@ class Flow:
         streams = PSeq.mk(pattern.stream for pattern in patterns)
         return Flow(Stream.poly(streams, subdiv))
 
-    def _repetition(self, operator: SpeedOp, count: int) -> Flow:
+    def _repetition(self, operator: SpeedOp, count: Fraction) -> Flow:
         """Create a repetition flow."""
         return Flow(Stream.speed(self.stream, operator, count))
 
-    def fast(self, count: int) -> Flow:
+    def fast(self, count: Fraction) -> Flow:
         return self._repetition(SpeedOp.Fast, count)
 
-    def slow(self, count: int) -> Flow:
+    def slow(self, count: Fraction) -> Flow:
         return self._repetition(SpeedOp.Slow, count)
 
     def stretch(self, count: int) -> Flow:

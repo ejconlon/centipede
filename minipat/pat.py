@@ -143,7 +143,7 @@ class Pat[T]:
         return Pat(PatPoly(PSeq.mk(pats), subdiv))
 
     @staticmethod
-    def speed(pat: Pat[T], op: SpeedOp, factor: int) -> Pat[T]:
+    def speed(pat: Pat[T], op: SpeedOp, factor: Fraction) -> Pat[T]:
         """Create a speed up/down pattern.
 
         Textual form: pattern*count or pattern/count
@@ -379,7 +379,7 @@ class PatSpeed[T, R](PatF[T, R]):
 
     pat: R
     op: SpeedOp
-    factor: int
+    factor: Fraction
 
 
 @dataclass(frozen=True)

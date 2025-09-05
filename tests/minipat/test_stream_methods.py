@@ -364,7 +364,7 @@ def test_stream_constructor_repetition() -> None:
     base_stream = Stream.pure("x")
 
     # Fast repetition
-    fast_stream = Stream.speed(base_stream, SpeedOp.Fast, 3)
+    fast_stream = Stream.speed(base_stream, SpeedOp.Fast, Fraction(3))
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = fast_stream.unstream(arc)
     event_list = list(events)
@@ -375,7 +375,7 @@ def test_stream_constructor_repetition() -> None:
         assert event.val == "x"
 
     # Slow repetition
-    slow_stream = Stream.speed(base_stream, SpeedOp.Slow, 2)
+    slow_stream = Stream.speed(base_stream, SpeedOp.Slow, Fraction(2))
     events_slow = slow_stream.unstream(arc)
     event_list_slow = list(events_slow)
 

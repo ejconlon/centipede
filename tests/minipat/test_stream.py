@@ -92,7 +92,7 @@ def test_repetition_fast() -> None:
     """Test fast repetition pattern."""
     # Pattern equivalent to "x!" with count 2
     base_pattern = Pat.pure("x")
-    pattern = Pat.speed(base_pattern, SpeedOp.Fast, 2)
+    pattern = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(2))
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -124,7 +124,7 @@ def test_repetition_slow() -> None:
     """Test slow repetition pattern."""
     # Pattern equivalent to "x" slowed down by factor of 2
     base_pattern = Pat.pure("x")
-    pattern = Pat.speed(base_pattern, SpeedOp.Slow, 2)
+    pattern = Pat.speed(base_pattern, SpeedOp.Slow, Fraction(2))
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -581,7 +581,7 @@ def test_fast_repetition_sub_cycle_splitting() -> None:
     """Test fast repetition patterns across sub-cycles."""
     # Fast repetition: "x!4" - 4 repetitions
     base_pattern = Pat.pure("x")
-    pattern = Pat.speed(base_pattern, SpeedOp.Fast, 4)
+    pattern = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(4))
     stream = pat_stream(pattern)
 
     # Query an arc that spans across cycle boundary (0.5 to 1.5)
@@ -604,7 +604,7 @@ def test_slow_repetition_sub_cycle_splitting() -> None:
     """Test slow repetition patterns across sub-cycles."""
     # Slow repetition: "x/2" - half speed
     base_pattern = Pat.pure("x")
-    pattern = Pat.speed(base_pattern, SpeedOp.Slow, 2)
+    pattern = Pat.speed(base_pattern, SpeedOp.Slow, Fraction(2))
     stream = pat_stream(pattern)
 
     # Query an arc spanning multiple cycles to see the slow pattern
