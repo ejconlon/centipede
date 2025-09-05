@@ -10,7 +10,7 @@ from fractions import Fraction
 from typing import Callable, List, Optional, Tuple, override
 
 from minipat.arc import Arc, Span
-from minipat.common import CycleDelta, CycleTime
+from minipat.common import CycleDelta, CycleTime, PartialMatchException
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
 from minipat.pat import (
     Pat,
@@ -30,6 +30,8 @@ from minipat.pat import (
 )
 from spiny import PSeq
 from spiny.heapmap import PHeapMap
+
+__all__ = ["MergeStrat", "Stream"]
 
 
 class MergeStrat(Enum):
@@ -293,49 +295,16 @@ class Stream[T](metaclass=ABCMeta):
         """
         return ApplyStream(self, merge_strat, func, other)
 
-    def fast_by(self, factor: Fraction) -> Stream[T]:
-        """Speed up stream events by a given factor.
+    def shift(self, delta: CycleDelta) -> Stream[T]:
+        """Shift stream events in time by a delta.
 
         Args:
-            factor: Factor to speed up by (> 1 makes it faster)
+            delta: Amount to shift (positive = later, negative = earlier)
 
         Returns:
-            A new stream with events sped up
+            A new stream with events shifted in time
         """
-        return FastStream(self, factor)
-
-    def slow_by(self, factor: Fraction) -> Stream[T]:
-        """Slow down stream events by a given factor.
-
-        Args:
-            factor: Factor to slow down by (> 1 makes it slower)
-
-        Returns:
-            A new stream with events slowed down
-        """
-        return SlowStream(self, factor)
-
-    def early_by(self, delta: CycleDelta) -> Stream[T]:
-        """Shift stream events earlier in time.
-
-        Args:
-            delta: Amount to shift earlier
-
-        Returns:
-            A new stream with events shifted earlier
-        """
-        return EarlyStream(self, delta)
-
-    def late_by(self, delta: CycleDelta) -> Stream[T]:
-        """Shift stream events later in time.
-
-        Args:
-            delta: Amount to shift later
-
-        Returns:
-            A new stream with events shifted later
-        """
-        return LateStream(self, delta)
+        return ShiftStream(self, delta)
 
 
 @dataclass(frozen=True)
@@ -887,72 +856,11 @@ class ApplyStream[A, B, C](Stream[C]):
 
 
 @dataclass(frozen=True)
-class FastStream[T](Stream[T]):
-    """Stream that speeds up events by a factor."""
+class ShiftStream[T](Stream[T]):
+    """Stream that shifts events in time by a delta.
 
-    source: Stream[T]
-    factor: Fraction
-
-    @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
-        if arc.null() or self.factor == 0:
-            return ev_heap_empty()
-
-        # Scale the query arc down by the factor
-        scaled_arc = arc.scale(Fraction(1) / self.factor)
-        source_events = self.source.unstream(scaled_arc)
-        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
-
-        for _, ev in source_events:
-            # Scale the event back up by the factor
-            fast_ev = ev.scale(self.factor)
-            span = _create_span(fast_ev.span.active, arc)
-            if span is not None:
-                if fast_ev.span.whole is not None:
-                    span = Span(active=span.active, whole=fast_ev.span.whole)
-                elif fast_ev.span.active != span.active:
-                    span = Span(active=span.active, whole=fast_ev.span.active)
-                new_ev = Ev(span, fast_ev.val)
-                result = ev_heap_push(new_ev, result)
-
-        return result
-
-
-@dataclass(frozen=True)
-class SlowStream[T](Stream[T]):
-    """Stream that slows down events by a factor."""
-
-    source: Stream[T]
-    factor: Fraction
-
-    @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
-        if arc.null() or self.factor == 0:
-            return ev_heap_empty()
-
-        # Scale the query arc up by the factor
-        scaled_arc = arc.scale(self.factor)
-        source_events = self.source.unstream(scaled_arc)
-        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
-
-        for _, ev in source_events:
-            # Scale the event down by the factor
-            slow_ev = ev.scale(Fraction(1) / self.factor)
-            span = _create_span(slow_ev.span.active, arc)
-            if span is not None:
-                if slow_ev.span.whole is not None:
-                    span = Span(active=span.active, whole=slow_ev.span.whole)
-                elif slow_ev.span.active != span.active:
-                    span = Span(active=span.active, whole=slow_ev.span.active)
-                new_ev = Ev(span, slow_ev.val)
-                result = ev_heap_push(new_ev, result)
-
-        return result
-
-
-@dataclass(frozen=True)
-class EarlyStream[T](Stream[T]):
-    """Stream that shifts events earlier in time."""
+    Positive delta shifts later, negative delta shifts earlier.
+    """
 
     source: Stream[T]
     delta: CycleDelta
@@ -962,32 +870,32 @@ class EarlyStream[T](Stream[T]):
         if arc.null():
             return ev_heap_empty()
 
-        # Shift the query arc later to get events that will be shifted earlier
+        # Shift the query arc in the opposite direction to compensate
         shifted_arc = Arc(
-            CycleTime(arc.start + self.delta), CycleTime(arc.end + self.delta)
+            CycleTime(arc.start - self.delta), CycleTime(arc.end - self.delta)
         )
         source_events = self.source.unstream(shifted_arc)
         result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
         for _, ev in source_events:
-            # Shift the event earlier
-            early_active = Arc(
-                CycleTime(ev.span.active.start - self.delta),
-                CycleTime(ev.span.active.end - self.delta),
+            # Shift the event by delta
+            shifted_active = Arc(
+                CycleTime(ev.span.active.start + self.delta),
+                CycleTime(ev.span.active.end + self.delta),
             )
-            early_whole = None
+            shifted_whole = None
             if ev.span.whole is not None:
-                early_whole = Arc(
-                    CycleTime(ev.span.whole.start - self.delta),
-                    CycleTime(ev.span.whole.end - self.delta),
+                shifted_whole = Arc(
+                    CycleTime(ev.span.whole.start + self.delta),
+                    CycleTime(ev.span.whole.end + self.delta),
                 )
 
-            span = _create_span(early_active, arc)
+            span = _create_span(shifted_active, arc)
             if span is not None:
-                if early_whole is not None:
-                    span = Span(active=span.active, whole=early_whole)
-                elif early_active != span.active:
-                    span = Span(active=span.active, whole=early_active)
+                if shifted_whole is not None:
+                    span = Span(active=span.active, whole=shifted_whole)
+                elif shifted_active != span.active:
+                    span = Span(active=span.active, whole=shifted_active)
                 new_ev = Ev(span, ev.val)
                 result = ev_heap_push(new_ev, result)
 
@@ -1010,50 +918,6 @@ class MapStream[T, U](Stream[U]):
             mapped_val = self.func(ev.val)
             mapped_ev = Ev(ev.span, mapped_val)
             result = ev_heap_push(mapped_ev, result)
-
-        return result
-
-
-@dataclass(frozen=True)
-class LateStream[T](Stream[T]):
-    """Stream that shifts events later in time."""
-
-    source: Stream[T]
-    delta: CycleDelta
-
-    @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
-        if arc.null():
-            return ev_heap_empty()
-
-        # Shift the query arc earlier to get events that will be shifted later
-        shifted_arc = Arc(
-            CycleTime(arc.start - self.delta), CycleTime(arc.end - self.delta)
-        )
-        source_events = self.source.unstream(shifted_arc)
-        result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
-
-        for _, ev in source_events:
-            # Shift the event later
-            late_active = Arc(
-                CycleTime(ev.span.active.start + self.delta),
-                CycleTime(ev.span.active.end + self.delta),
-            )
-            late_whole = None
-            if ev.span.whole is not None:
-                late_whole = Arc(
-                    CycleTime(ev.span.whole.start + self.delta),
-                    CycleTime(ev.span.whole.end + self.delta),
-                )
-
-            span = _create_span(late_active, arc)
-            if span is not None:
-                if late_whole is not None:
-                    span = Span(active=span.active, whole=late_whole)
-                elif late_active != span.active:
-                    span = Span(active=span.active, whole=late_active)
-                new_ev = Ev(span, ev.val)
-                result = ev_heap_push(new_ev, result)
 
         return result
 
@@ -1182,7 +1046,7 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
             return ReplicateStream(pattern_stream, count)
         case _:
             # This should never happen if all pattern types are handled above
-            raise Exception(f"Unhandled pattern type: {type(pat.unwrap).__name__}")
+            raise PartialMatchException(pat.unwrap)
 
 
 def _generate_euclidean(hits: int, steps: int, rotation: int) -> List[bool]:

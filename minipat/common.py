@@ -84,6 +84,12 @@ class TimeOps[T, D](metaclass=ABCMeta):
         """Returns base+delta as a time."""
         raise NotImplementedError
 
+    @classmethod
+    @abstractmethod
+    def negate(cls, delta: D) -> D:
+        """Negates delta"""
+        raise NotImplementedError
+
 
 class CycleTimeOps(TimeOps[CycleTime, CycleDelta]):
     """Time operations for CycleTime."""
@@ -98,6 +104,11 @@ class CycleTimeOps(TimeOps[CycleTime, CycleDelta]):
     def add(cls, base: CycleTime, delta: CycleDelta) -> CycleTime:
         return CycleTime(base + delta)
 
+    @override
+    @classmethod
+    def negate(cls, delta: CycleDelta) -> CycleDelta:
+        return CycleDelta(-delta)
+
 
 class PosixTimeOps(TimeOps[PosixTime, PosixDelta]):
     """Time operations for PosixTime."""
@@ -111,6 +122,11 @@ class PosixTimeOps(TimeOps[PosixTime, PosixDelta]):
     @classmethod
     def add(cls, base: PosixTime, delta: PosixDelta) -> PosixTime:
         return PosixTime(base + delta)
+
+    @override
+    @classmethod
+    def negate(cls, delta: PosixDelta) -> PosixDelta:
+        return PosixDelta(-delta)
 
 
 def current_posix_time() -> PosixTime:

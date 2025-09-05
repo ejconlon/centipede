@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable
 
 from minipat.common import CycleDelta
 from minipat.midi import MidiAttrs, midinote, note, vel
@@ -39,31 +39,43 @@ class Flow:
         return Flow(Stream.par(streams))
 
     @staticmethod
-    def rand(*choices: Flow) -> Flow:
+    def rand(*flows: Flow) -> Flow:
         """Create a random choice flow."""
-        streams = PSeq.mk(choice.stream for choice in choices)
+        streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.rand(streams))
 
     @staticmethod
-    def euc(flow: Flow, hits: int, steps: int, rotation: int = 0) -> Flow:
-        """Create a Euclidean rhythm flow."""
-        return Flow(Stream.euc(flow.stream, hits, steps, rotation))
+    def alt(patterns: Iterable[Flow]) -> Flow:
+        """Create an alternating flow."""
+        streams = PSeq.mk(pattern.stream for pattern in patterns)
+        return Flow(Stream.alt(streams))
 
     @staticmethod
-    def poly(patterns: Iterable[Flow], subdiv: Optional[int] = None) -> Flow:
+    def poly(*flows: Flow) -> Flow:
         """Create a polymetric flow."""
-        streams = PSeq.mk(pattern.stream for pattern in patterns)
+        streams = PSeq.mk(flow.stream for flow in flows)
+        return Flow(Stream.poly(streams, None))
+
+    @staticmethod
+    def polysub(subdiv: int, *flows: Flow) -> Flow:
+        """Create a polymetric flow with subdivision."""
+        streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.poly(streams, subdiv))
 
-    def _repetition(self, operator: SpeedOp, count: Fraction) -> Flow:
-        """Create a repetition flow."""
-        return Flow(Stream.speed(self.stream, operator, count))
+    def euc(self, hits: int, steps: int, rotation: int = 0) -> Flow:
+        """Create a Euclidean rhythm flow."""
+        return Flow(Stream.euc(self.stream, hits, steps, rotation))
 
-    def fast(self, count: Fraction) -> Flow:
-        return self._repetition(SpeedOp.Fast, count)
+    def _speed(self, operator: SpeedOp, factor: Fraction) -> Flow:
+        return Flow(Stream.speed(self.stream, operator, factor))
 
-    def slow(self, count: Fraction) -> Flow:
-        return self._repetition(SpeedOp.Slow, count)
+    def fast(self, factor: Fraction) -> Flow:
+        """Speed events up by a factor"""
+        return self._speed(SpeedOp.Fast, factor)
+
+    def slow(self, factor: Fraction) -> Flow:
+        """Slow events down by a factor"""
+        return self._speed(SpeedOp.Slow, factor)
 
     def stretch(self, count: int) -> Flow:
         """Create an elongated flow."""
@@ -72,12 +84,6 @@ class Flow:
     def prob(self, chance: Fraction) -> Flow:
         """Create a probabilistic flow."""
         return Flow(Stream.prob(self.stream, chance))
-
-    @staticmethod
-    def alt(patterns: Iterable[Flow]) -> Flow:
-        """Create an alternating flow."""
-        streams = PSeq.mk(pattern.stream for pattern in patterns)
-        return Flow(Stream.alt(streams))
 
     def repeat(self, count: Fraction) -> Flow:
         """Create a repeat flow."""
@@ -125,21 +131,17 @@ class Flow:
         """Apply a function across two flows."""
         return Flow(self.stream.apply(merge_strat, func, other.stream))
 
-    def fast_by(self, factor: Fraction) -> Flow:
-        """Speed up flow events by a given factor."""
-        return Flow(self.stream.fast_by(factor))
+    def shift(self, delta: CycleDelta) -> Flow:
+        """Shift flow events in time by a delta."""
+        return Flow(self.stream.shift(delta))
 
-    def slow_by(self, factor: Fraction) -> Flow:
-        """Slow down flow events by a given factor."""
-        return Flow(self.stream.slow_by(factor))
-
-    def early_by(self, delta: CycleDelta) -> Flow:
+    def early(self, delta: CycleDelta) -> Flow:
         """Shift flow events earlier in time."""
-        return Flow(self.stream.early_by(delta))
+        return self.shift(CycleDelta(-delta))
 
-    def late_by(self, delta: CycleDelta) -> Flow:
+    def late(self, delta: CycleDelta) -> Flow:
         """Shift flow events later in time."""
-        return Flow(self.stream.late_by(delta))
+        return self.shift(delta)
 
     # def __or__(self, other: Flow) -> Flow:
     #     """Operator overload for parallel combination."""

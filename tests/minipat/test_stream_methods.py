@@ -144,71 +144,13 @@ def test_stream_apply() -> None:
     assert values == [11, 22]
 
 
-def test_stream_fast_by() -> None:
-    """Test Stream.fast_by() speeds up events."""
-    # Create a sequence stream
-    stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
-
-    # Speed up by factor of 2
-    fast_stream = stream.fast_by(Fraction(2))
-
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
-    events = fast_stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].active.start)
-
-    # Fast by 2 means the pattern plays at double speed
-    # The implementation scales down the query arc, queries, then scales up results
-    # So we still get the same pattern but compressed in time
-    assert len(event_list) == 2
-    values = [event.val for _, event in event_list]
-    assert values == ["a", "b"]
-
-    # Check timing - pattern should complete in half the time
-    _, first_event = event_list[0]
-    assert first_event.span.active.start == Fraction(0)
-    assert first_event.span.active.end == Fraction(1, 2)
-
-    _, second_event = event_list[1]
-    assert second_event.span.active.start == Fraction(1, 2)
-    assert second_event.span.active.end == Fraction(1)
-
-
-def test_stream_slow_by() -> None:
-    """Test Stream.slow_by() slows down events."""
-    # Create a sequence stream
-    stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
-
-    # Slow down by factor of 2
-    slow_stream = stream.slow_by(Fraction(2))
-
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
-    events = slow_stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].active.start)
-
-    # Slow by 2 means the pattern plays at half speed
-    # The implementation scales up the query arc, queries, then scales down results
-    # So we still get the full pattern but at normal timing
-    assert len(event_list) == 2
-    values = [event.val for _, event in event_list]
-    assert values == ["a", "b"]
-
-    # Check timing - pattern should play at normal speed within the arc
-    _, first_event = event_list[0]
-    assert first_event.span.active.start == Fraction(0)
-    assert first_event.span.active.end == Fraction(1, 2)
-
-    _, second_event = event_list[1]
-    assert second_event.span.active.start == Fraction(1, 2)
-    assert second_event.span.active.end == Fraction(1)
-
-
-def test_stream_early_by() -> None:
-    """Test Stream.early_by() shifts events earlier."""
+def test_stream_shift_early() -> None:
+    """Test Stream.shift() with negative delta shifts events earlier."""
     # Create a pure stream
     stream = Stream.pure("x")
 
-    # Shift earlier by 1/4 cycle
-    early_stream = stream.early_by(CycleDelta(Fraction(1, 4)))
+    # Shift earlier by 1/4 cycle (negative delta)
+    early_stream = stream.shift(CycleDelta(-Fraction(1, 4)))
 
     # Query from 0 to 1
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -221,13 +163,13 @@ def test_stream_early_by() -> None:
     assert event.val == "x"
 
 
-def test_stream_late_by() -> None:
-    """Test Stream.late_by() shifts events later."""
+def test_stream_shift_late() -> None:
+    """Test Stream.shift() with positive delta shifts events later."""
     # Create a sequence stream
     stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b")]))
 
-    # Shift later by 1/4 cycle
-    late_stream = stream.late_by(CycleDelta(Fraction(1, 4)))
+    # Shift later by 1/4 cycle (positive delta)
+    late_stream = stream.shift(CycleDelta(Fraction(1, 4)))
 
     # Query from 0 to 1
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -527,10 +469,8 @@ def test_stream_complex_transformation() -> None:
     # Start with a parallel stream
     stream = Stream.par(PSeq.mk([Stream.pure(1), Stream.pure(2), Stream.pure(3)]))
 
-    # Transform: filter > 1, map to double, then slow down
-    result_stream = (
-        stream.filter(lambda x: x > 1).map(lambda x: x * 2).slow_by(Fraction(2))
-    )
+    # Transform: filter > 1, map to double
+    result_stream = stream.filter(lambda x: x > 1).map(lambda x: x * 2)
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     events = result_stream.unstream(arc)
@@ -568,12 +508,8 @@ def test_stream_timing_precision() -> None:
     # Create a complex pattern with precise timing
     stream = Stream.seq(PSeq.mk([Stream.pure("a"), Stream.pure("b"), Stream.pure("c")]))
 
-    # Apply multiple transformations
-    result = (
-        stream.fast_by(Fraction(3))
-        .slow_by(Fraction(2))
-        .early_by(CycleDelta(Fraction(1, 6)))
-    )
+    # Apply timing transformation (negative delta = earlier)
+    result = stream.shift(CycleDelta(-Fraction(1, 6)))
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     events = result.unstream(arc)
