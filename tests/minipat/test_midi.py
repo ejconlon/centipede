@@ -36,9 +36,9 @@ from minipat.midi import (
     combine,
     combine_all,
     echo_system,
-    note,
+    note_stream,
     parse_message,
-    vel,
+    vel_stream,
 )
 from spiny.dmap import DMap
 
@@ -46,12 +46,12 @@ from spiny.dmap import DMap
 def test_note_parsing() -> None:
     """Test parsing note names."""
     # Test basic note parsing
-    note_stream = note("c4 d4 e4")
+    notes = note_stream("c4 d4 e4")
 
     # Should create a stream that produces MIDI attributes
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
-    events = note_stream.unstream(arc)
+    events = notes.unstream(arc)
     event_list = list(events)
 
     assert len(event_list) == 3
@@ -70,10 +70,10 @@ def test_note_parsing() -> None:
 
 def test_velocity_parsing() -> None:
     """Test parsing velocity values."""
-    vel_stream = vel("64 80 100")
+    vels = vel_stream("64 80 100")
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
-    events = vel_stream.unstream(arc)
+    events = vels.unstream(arc)
     event_list = list(events)
 
     assert len(event_list) == 3
@@ -92,10 +92,10 @@ def test_velocity_parsing() -> None:
 
 def test_combine_two_streams() -> None:
     """Test combining two streams with combine function."""
-    note_stream = note("c4 d4")
-    vel_stream = vel("64 80")
+    notes = note_stream("c4 d4")
+    vels = vel_stream("64 80")
 
-    combined = combine(note_stream, vel_stream)
+    combined = combine(notes, vels)
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = combined.unstream(arc)
@@ -126,15 +126,15 @@ def test_combine_all_streams() -> None:
     assert len(events) == 0  # Should be silent
 
     # Test with one stream
-    single = combine_all([note("c4")])
+    single = combine_all([note_stream("c4")])
     events = list(single.unstream(arc))
     assert len(events) > 0
 
     # Test with multiple streams
-    note_stream = note("c4 d4")
-    vel_stream = vel("64 80")
+    notes = note_stream("c4 d4")
+    vels = vel_stream("64 80")
     # Test with two streams
-    combined = combine_all([note_stream, vel_stream])
+    combined = combine_all([notes, vels])
     events = list(combined.unstream(arc))
     assert len(events) > 0
 

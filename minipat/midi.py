@@ -486,6 +486,12 @@ class VelocityKey(MidiKey[Velocity]):
     pass
 
 
+class ChannelKey(MidiKey[Channel]):
+    """Key for channel in MIDI attributes."""
+
+    pass
+
+
 class ProgramKey(MidiKey[Program]):
     """Key for program in MIDI attributes."""
 
@@ -552,18 +558,25 @@ def parse_message(
         >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(ProgramKey(), Program(42))
         >>> parse_message(Orbit(0), attrs)  # Raises ValueError
     """
-    # Use orbit as MIDI channel (validate range)
-    orbit_value = int(orbit)
-    if not (0 <= orbit_value <= 15):
-        raise ValueError(f"Orbit {orbit_value} out of valid MIDI channel range (0-15)")
-    channel = ChannelField.mk(orbit_value)
-
     # Extract attributes
     note = attrs.lookup(NoteKey())
     velocity = attrs.lookup(VelocityKey())
+    channel_attr = attrs.lookup(ChannelKey())
     program = attrs.lookup(ProgramKey())
     control_num = attrs.lookup(ControlNumKey())
     control_val = attrs.lookup(ControlValKey())
+
+    # Determine channel: use explicit channel attribute if present, otherwise orbit
+    if channel_attr is not None:
+        channel = channel_attr
+    else:
+        # Use orbit as MIDI channel (validate range)
+        orbit_value = int(orbit)
+        if not (0 <= orbit_value <= 15):
+            raise ValueError(
+                f"Orbit {orbit_value} out of valid MIDI channel range (0-15)"
+            )
+        channel = ChannelField.mk(orbit_value)
 
     # Check for conflicting attribute combinations
     has_note = note is not None
@@ -835,6 +848,115 @@ class VelElemParser(ElemParser[Velocity]):
         return str(value)
 
 
+class ChannelElemParser(ElemParser[Channel]):
+    """Selector for parsing MIDI channel values.
+
+    Handles MIDI channel values which specify which MIDI channel to use.
+    Channels range from 0 to 15 (16 channels total).
+
+    Examples:
+        "0"   -> Channel(0)   # Channel 1 (0-based)
+        "9"   -> Channel(9)   # Channel 10 (commonly drums)
+        "15"  -> Channel(15)  # Channel 16
+
+    Raises:
+        ValueError: If the string is not a valid integer or is outside 0-15 range
+    """
+
+    @override
+    @classmethod
+    def parse(cls, s: str) -> Channel:
+        channel_num = int(s)
+        return ChannelField.mk(channel_num)
+
+    @override
+    @classmethod
+    def render(cls, value: Channel) -> str:
+        return str(value)
+
+
+class ProgramElemParser(ElemParser[Program]):
+    """Selector for parsing MIDI program values.
+
+    Handles MIDI program change values which select instrument patches.
+    Programs range from 0 to 127.
+
+    Examples:
+        "0"   -> Program(0)   # Acoustic Grand Piano
+        "40"  -> Program(40)  # Violin
+        "127" -> Program(127) # Gunshot
+
+    Raises:
+        ValueError: If the string is not a valid integer or is outside 0-127 range
+    """
+
+    @override
+    @classmethod
+    def parse(cls, s: str) -> Program:
+        program_num = int(s)
+        return ProgramField.mk(program_num)
+
+    @override
+    @classmethod
+    def render(cls, value: Program) -> str:
+        return str(value)
+
+
+class ControlNumElemParser(ElemParser[ControlNum]):
+    """Selector for parsing MIDI control number values.
+
+    Handles MIDI control change numbers which specify which parameter to control.
+    Control numbers range from 0 to 127.
+
+    Common control numbers:
+        "1"   -> ControlNum(1)   # Modulation Wheel
+        "7"   -> ControlNum(7)   # Volume
+        "10"  -> ControlNum(10)  # Pan
+        "64"  -> ControlNum(64)  # Sustain Pedal
+
+    Raises:
+        ValueError: If the string is not a valid integer or is outside 0-127 range
+    """
+
+    @override
+    @classmethod
+    def parse(cls, s: str) -> ControlNum:
+        control_num = int(s)
+        return ControlField.mk(control_num)
+
+    @override
+    @classmethod
+    def render(cls, value: ControlNum) -> str:
+        return str(value)
+
+
+class ControlValElemParser(ElemParser[ControlVal]):
+    """Selector for parsing MIDI control value values.
+
+    Handles MIDI control change values which specify the parameter value.
+    Control values range from 0 to 127.
+
+    Examples:
+        "0"   -> ControlVal(0)   # Minimum value
+        "64"  -> ControlVal(64)  # Center/default value
+        "127" -> ControlVal(127) # Maximum value
+
+    Raises:
+        ValueError: If the string is not a valid integer or is outside 0-127 range
+    """
+
+    @override
+    @classmethod
+    def parse(cls, s: str) -> ControlVal:
+        control_val = int(s)
+        return ValueField.mk(control_val)
+
+    @override
+    @classmethod
+    def render(cls, value: ControlVal) -> str:
+        return str(value)
+
+
 # =============================================================================
 # Pattern Stream Functions
 # =============================================================================
@@ -858,7 +980,31 @@ def _convert_vel(s: str) -> MidiAttrs:
     return DMap.singleton(VelocityKey(), velocity)
 
 
-def midinote(s: str) -> Stream[MidiAttrs]:
+def _convert_channel(s: str) -> MidiAttrs:
+    """Convert channel to MIDI attributes."""
+    channel = ChannelElemParser.parse(s)
+    return DMap.singleton(ChannelKey(), channel)
+
+
+def _convert_program(s: str) -> MidiAttrs:
+    """Convert program to MIDI attributes."""
+    program = ProgramElemParser.parse(s)
+    return DMap.singleton(ProgramKey(), program)
+
+
+def _convert_control(s: str) -> MidiAttrs:
+    """Convert control number to MIDI attributes."""
+    control_num = ControlNumElemParser.parse(s)
+    return DMap.singleton(ControlNumKey(), control_num)
+
+
+def _convert_value(s: str) -> MidiAttrs:
+    """Convert control value to MIDI attributes."""
+    control_val = ControlValElemParser.parse(s)
+    return DMap.singleton(ControlValKey(), control_val)
+
+
+def midinote_stream(s: str) -> Stream[MidiAttrs]:
     """Create stream from numeric MIDI notes.
 
     Parses a pattern string containing numeric MIDI note values (0-127)
@@ -872,7 +1018,7 @@ def midinote(s: str) -> Stream[MidiAttrs]:
     return pat_stream(parse_pattern(s).map(_convert_midinote))
 
 
-def note(s: str) -> Stream[MidiAttrs]:
+def note_stream(s: str) -> Stream[MidiAttrs]:
     """Create stream from note names.
 
     Parses a pattern string containing musical note names with octaves
@@ -887,18 +1033,77 @@ def note(s: str) -> Stream[MidiAttrs]:
     return pat_stream(parse_pattern(s).map(_convert_note))
 
 
-def vel(s: str) -> Stream[MidiAttrs]:
+def vel_stream(s: str) -> Stream[MidiAttrs]:
     """Create stream from velocity values.
 
     Parses a pattern string containing MIDI velocity values (0-127)
     and creates a stream of MIDI attributes for controlling note dynamics.
 
     Examples:
-        vel("64 80 100")         # Medium, loud, very loud
-        vel("127 0 64")          # Loud, silent, medium
-        vel("100*8")             # Repeat loud velocity 8 times
+        vel_stream("64 80 100")         # Medium, loud, very loud
+        vel_stream("127 0 64")          # Loud, silent, medium
+        vel_stream("100*8")             # Repeat loud velocity 8 times
     """
     return pat_stream(parse_pattern(s).map(_convert_vel))
+
+
+def channel_stream(s: str) -> Stream[MidiAttrs]:
+    """Create stream from channel values.
+
+    Parses a pattern string containing MIDI channel values (0-15)
+    and creates a stream of MIDI attributes for specifying channels.
+    If not specified, the orbit number will be used as the channel.
+
+    Examples:
+        channel_stream("0 1 9")          # Channels 1, 2, 10 (drums)
+        channel_stream("15 ~ 0")         # Channel 16, rest, Channel 1
+        channel_stream("9*4")            # Repeat Channel 10 (drums) 4 times
+    """
+    return pat_stream(parse_pattern(s).map(_convert_channel))
+
+
+def program_stream(s: str) -> Stream[MidiAttrs]:
+    """Create stream from program values.
+
+    Parses a pattern string containing MIDI program values (0-127)
+    and creates a stream of MIDI attributes for program change messages.
+
+    Examples:
+        program_stream("0 1 40")         # Piano, Bright Piano, Violin
+        program_stream("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
+        program_stream("1*4")            # Repeat Bright Piano 4 times
+    """
+    return pat_stream(parse_pattern(s).map(_convert_program))
+
+
+def control_stream(s: str) -> Stream[MidiAttrs]:
+    """Create stream from control number values.
+
+    Parses a pattern string containing MIDI control numbers (0-127)
+    and creates a stream of MIDI attributes for control change messages.
+    Note: Control change messages also require a control value.
+
+    Examples:
+        control_stream("1 7 10")         # Modulation, Volume, Pan
+        control_stream("64 ~ 1")         # Sustain, rest, Modulation
+        control_stream("7*8")            # Repeat Volume control 8 times
+    """
+    return pat_stream(parse_pattern(s).map(_convert_control))
+
+
+def value_stream(s: str) -> Stream[MidiAttrs]:
+    """Create stream from control value values.
+
+    Parses a pattern string containing MIDI control values (0-127)
+    and creates a stream of MIDI attributes for control change messages.
+    Note: Control change messages also require a control number.
+
+    Examples:
+        value_stream("0 64 127")         # Min, center, max values
+        value_stream("127 ~ 0")          # Max, rest, min
+        value_stream("64*8")             # Repeat center value 8 times
+    """
+    return pat_stream(parse_pattern(s).map(_convert_value))
 
 
 def _merge_attrs(x: MidiAttrs, y: MidiAttrs) -> MidiAttrs:
@@ -922,8 +1127,8 @@ def combine(s1: Stream[MidiAttrs], s2: Stream[MidiAttrs]) -> Stream[MidiAttrs]:
 
     Examples:
         # Combine notes with velocities
-        notes = note("c4 d4 e4")
-        velocities = vel("64 80 100")
+        notes = note_stream("c4 d4 e4")
+        velocities = vel_stream("64 80 100")
         combined = combine(notes, velocities)
     """
     return s1.apply(MergeStrat.Inner, _merge_attrs, s2)
@@ -945,13 +1150,13 @@ def combine_all(ss: Sequence[Stream[MidiAttrs]]) -> Stream[MidiAttrs]:
 
     Examples:
         # Combine notes with velocities
-        notes = note("c4 d4 e4")
-        velocities = vel("64 80 100")
+        notes = note_stream("c4 d4 e4")
+        velocities = vel_stream("64 80 100")
         combined = combine_all(notes, velocities)
 
         # Layer multiple attributes
-        notes = note("c4 ~ g4")
-        velocities = vel("100 ~ 80")
+        notes = note_stream("c4 ~ g4")
+        velocities = vel_stream("100 ~ 80")
         channels = ...  # hypothetical channel stream
         result = combine_all(notes, velocities, channels)
     """

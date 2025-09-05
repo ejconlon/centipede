@@ -600,6 +600,9 @@ class LiveSystem[T, U]:
         self._backend_sender = backend_sender
         self._env = env
 
+    def __del__(self):
+        self.panic()
+
     @staticmethod
     def start(
         system: System,

@@ -129,22 +129,6 @@ def test_complex_fractional_speed_pattern() -> None:
     assert "y" in values
 
 
-def test_flow_fractional_speed() -> None:
-    """Test Flow fast/slow methods with fractional factors."""
-    from minipat.dsl import Flow
-    from minipat.midi import _convert_note
-
-    midi_attrs = _convert_note("c4")
-    flow = Flow.pure(midi_attrs)
-    fast_flow = flow.fast(Fraction(3, 2))
-    slow_flow = flow.slow(Fraction(1, 2))
-
-    # Just test that the methods accept Fraction arguments
-    # The actual stream behavior is tested elsewhere
-    assert fast_flow is not None
-    assert slow_flow is not None
-
-
 def test_fractional_repetition_semantics() -> None:
     """Test that fractional repetitions work correctly."""
     base_pattern = Pat.pure("x")

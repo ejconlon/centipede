@@ -24,7 +24,7 @@ from minipat.midi import (
     MsgTypeField,
     NoteField,
     TimedMessage,
-    note,
+    note_stream,
     start_midi_live_system,
 )
 
@@ -124,7 +124,6 @@ def system() -> Generator[System, None, None]:
     """Create a test actor system."""
     sys = new_system()
     yield sys
-    sys.stop()
 
 
 @pytest.fixture
@@ -135,7 +134,6 @@ def live_system(system: System) -> Generator[MidiLiveFixture, None, None]:
     with patch("minipat.midi.mido.open_output", return_value=mock_port):
         live = start_midi_live_system(system, "test_port")
         yield live, mock_port
-        live.pause()
 
 
 class TestMidiLiveSystemIntegration:
@@ -149,7 +147,7 @@ class TestMidiLiveSystemIntegration:
         mock_port.clear()
 
         # Set up a simple single-note pattern
-        pattern = note("c4")
+        pattern = note_stream("c4")
         live.set_orbit(Orbit(0), pattern)
 
         # Set CPS to 1 (1 cycle per second)
@@ -199,11 +197,11 @@ class TestMidiLiveSystemIntegration:
 
         # Set up two orbits with different note patterns
         # Orbit 0: 3 notes per cycle
-        orbit0_pattern = note("c4 d4 e4")
+        orbit0_pattern = note_stream("c4 d4 e4")
         live.set_orbit(Orbit(0), orbit0_pattern)
 
         # Orbit 1: 2 notes per cycle
-        orbit1_pattern = note("f5 g5")
+        orbit1_pattern = note_stream("f5 g5")
         live.set_orbit(Orbit(1), orbit1_pattern)
 
         # Start playing to trigger the live system

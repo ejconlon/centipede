@@ -5,7 +5,17 @@ from fractions import Fraction
 from typing import Callable, Union
 
 from minipat.common import CycleDelta
-from minipat.midi import MidiAttrs, combine_all, midinote, note, vel
+from minipat.midi import (
+    MidiAttrs,
+    channel_stream,
+    combine_all,
+    control_stream,
+    midinote_stream,
+    note_stream,
+    program_stream,
+    value_stream,
+    vel_stream,
+)
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
@@ -80,18 +90,6 @@ class Flow:
     def pat(pattern: Pat[MidiAttrs]) -> Flow:
         """Create a flow from a pattern."""
         return Flow(Stream.pat(pattern))
-
-    @staticmethod
-    def note(pat_str: str) -> Flow:
-        return Flow(note(pat_str))
-
-    @staticmethod
-    def midinote(pat_str: str) -> Flow:
-        return Flow(midinote(pat_str))
-
-    @staticmethod
-    def vel(pat_str: str) -> Flow:
-        return Flow(vel(pat_str))
 
     def euc(self, hits: int, steps: int, rotation: int = 0) -> Flow:
         """Create a Euclidean rhythm flow."""
@@ -200,3 +198,137 @@ class Flow:
     def __pow__(self, count: Numeric) -> Flow:
         """Operator overload for repeating flow."""
         return self.repeat(count)
+
+
+def note(pat_str: str) -> Flow:
+    """Create a flow from note names.
+
+    Alias for Flow.note() that creates a Flow from musical note names.
+
+    Args:
+        pat_str: Pattern string containing musical note names with octaves
+
+    Returns:
+        A Flow containing MIDI note attributes
+
+    Examples:
+        note("c4 d4 e4")         # C major scale fragment
+        note("c4 ~ g4")          # C4, rest, G4
+        note("[c4,e4,g4]")       # C major chord (simultaneous)
+    """
+    return Flow(note_stream(pat_str))
+
+
+def midinote(pat_str: str) -> Flow:
+    """Create a flow from numeric MIDI notes.
+
+    Alias for Flow.midinote() that creates a Flow from numeric MIDI note values.
+
+    Args:
+        pat_str: Pattern string containing numeric MIDI note values (0-127)
+
+    Returns:
+        A Flow containing MIDI note attributes
+
+    Examples:
+        midinote("60 62 64")     # C4, D4, E4 (C major triad)
+        midinote("36 ~ 42")      # Kick, rest, snare pattern
+        midinote("[60,64,67]")   # C major chord (simultaneous)
+    """
+    return Flow(midinote_stream(pat_str))
+
+
+def vel(pat_str: str) -> Flow:
+    """Create a flow from velocity values.
+
+    Alias for Flow.vel() that creates a Flow from MIDI velocity values.
+
+    Args:
+        pat_str: Pattern string containing MIDI velocity values (0-127)
+
+    Returns:
+        A Flow containing MIDI velocity attributes
+
+    Examples:
+        vel("64 80 100")         # Medium, loud, very loud
+        vel("127 0 64")          # Loud, silent, medium
+        vel("100*8")             # Repeat loud velocity 8 times
+    """
+    return Flow(vel_stream(pat_str))
+
+
+def program(pat_str: str) -> Flow:
+    """Create a flow from program values.
+
+    Alias for Flow.program() that creates a Flow from MIDI program values.
+
+    Args:
+        pat_str: Pattern string containing MIDI program values (0-127)
+
+    Returns:
+        A Flow containing MIDI program attributes
+
+    Examples:
+        program("0 1 40")         # Piano, Bright Piano, Violin
+        program("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
+        program("1*4")            # Repeat Bright Piano 4 times
+    """
+    return Flow(program_stream(pat_str))
+
+
+def control(pat_str: str) -> Flow:
+    """Create a flow from control number values.
+
+    Alias for Flow.control() that creates a Flow from MIDI control numbers.
+
+    Args:
+        pat_str: Pattern string containing MIDI control numbers (0-127)
+
+    Returns:
+        A Flow containing MIDI control number attributes
+
+    Examples:
+        control("1 7 10")         # Modulation, Volume, Pan
+        control("64 ~ 1")         # Sustain, rest, Modulation
+        control("7*8")            # Repeat Volume control 8 times
+    """
+    return Flow(control_stream(pat_str))
+
+
+def value(pat_str: str) -> Flow:
+    """Create a flow from control value values.
+
+    Alias for Flow.value() that creates a Flow from MIDI control values.
+
+    Args:
+        pat_str: Pattern string containing MIDI control values (0-127)
+
+    Returns:
+        A Flow containing MIDI control value attributes
+
+    Examples:
+        value("0 64 127")         # Min, center, max values
+        value("127 ~ 0")          # Max, rest, min
+        value("64*8")             # Repeat center value 8 times
+    """
+    return Flow(value_stream(pat_str))
+
+
+def channel(pat_str: str) -> Flow:
+    """Create a flow from channel values.
+
+    Creates a Flow from MIDI channel values. If channel is not specified
+    in patterns, the orbit number will be used as the default channel.
+
+    Args:
+        pat_str: Pattern string containing MIDI channel values (0-15)
+
+    Returns:
+        A Flow containing MIDI channel attributes
+
+    Examples:
+        channel("0 1 9")          # Channels 1, 2, 10 (drums)
+        channel("15 ~ 0")         # Channel 16, rest, Channel 1
+        channel("9*4")            # Repeat Channel 10 (drums) 4 times
+    """
+    return Flow(channel_stream(pat_str))
