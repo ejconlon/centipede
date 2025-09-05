@@ -8,7 +8,9 @@ from typing import List
 import mido
 from mido.frozen import FrozenMessage
 
+from minipat.arc import Arc, Span
 from minipat.common import CycleTime, PosixTime
+from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
 from minipat.midi import (
     DEFAULT_VELOCITY,
@@ -46,8 +48,6 @@ def test_note_parsing() -> None:
     note_stream = note("c4 d4 e4")
 
     # Should create a stream that produces MIDI attributes
-    from minipat.arc import Arc
-    from minipat.common import CycleTime
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = note_stream.unstream(arc)
@@ -70,9 +70,6 @@ def test_note_parsing() -> None:
 def test_velocity_parsing() -> None:
     """Test parsing velocity values."""
     vel_stream = vel("64 80 100")
-
-    from minipat.arc import Arc
-    from minipat.common import CycleTime
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = vel_stream.unstream(arc)
@@ -98,9 +95,6 @@ def test_combine_streams() -> None:
     vel_stream = vel("64 80")
 
     combined = combine(note_stream, vel_stream)
-
-    from minipat.arc import Arc
-    from minipat.common import CycleTime
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = combined.unstream(arc)
@@ -134,8 +128,6 @@ def test_midi_processor() -> None:
     )
 
     # Create test event heap
-    from minipat.arc import Arc, Span
-    from minipat.ev import Ev, ev_heap_singleton
 
     span = Span(
         active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), whole=None
@@ -194,9 +186,6 @@ def test_midi_processor_defaults() -> None:
     # Create MIDI attributes with only note (no velocity)
     midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(72))
 
-    from minipat.arc import Arc, Span
-    from minipat.ev import Ev, ev_heap_singleton
-
     span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
@@ -224,8 +213,6 @@ def test_midi_processor_empty_events() -> None:
     """Test MidiProcessor handles empty event heap."""
     processor = MidiProcessor()
 
-    from minipat.ev import ev_heap_empty
-
     instant = Instant(
         cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
     )
@@ -244,9 +231,6 @@ def test_midi_processor_validates_values() -> None:
     midi_attrs: MidiAttrs = (
         DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelocityKey(), Velocity(-10))
     )
-
-    from minipat.arc import Arc, Span
-    from minipat.ev import Ev, ev_heap_singleton
 
     span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
     event = Ev(span, midi_attrs)
@@ -270,9 +254,6 @@ def test_midi_processor_orbit_as_channel() -> None:
 
     # Create test MIDI attributes
     midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
-
-    from minipat.arc import Arc, Span
-    from minipat.ev import Ev, ev_heap_singleton
 
     span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
     event = Ev(span, midi_attrs)
@@ -638,9 +619,6 @@ def test_midi_processor_with_parse_message() -> None:
     program_attrs: MidiAttrs = DMap.empty(MidiDom).put(
         ProgramKey(), ProgramField.mk(42)
     )
-
-    from minipat.arc import Arc, Span
-    from minipat.ev import Ev, ev_heap_singleton
 
     span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
     event = Ev(span, program_attrs)

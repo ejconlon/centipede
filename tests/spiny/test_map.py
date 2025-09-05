@@ -1,3 +1,5 @@
+import random
+
 from spiny.map import PMap
 from spiny.set import PSet
 
@@ -145,7 +147,6 @@ def test_large_map_insertion() -> None:
     pairs = [(i, f"value_{i}") for i in range(100)]
 
     # Insert in random order to test balancing
-    import random
 
     random.shuffle(pairs)
 

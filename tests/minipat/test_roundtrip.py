@@ -3,9 +3,12 @@
 Based on test patterns from https://raw.githubusercontent.com/ejconlon/minipat/refs/heads/master/minipat/test/Main.hs
 """
 
+from fractions import Fraction
+
 import pytest
 
 from minipat.parser import parse_pattern
+from minipat.pat import Pat
 from minipat.printer import print_pattern
 
 
@@ -159,7 +162,6 @@ def test_whitespace_normalization() -> None:
 def test_patpar_now_printable() -> None:
     """Test that PatPar patterns can now be printed as parallel notation."""
     # Create a PatPar pattern directly (not through parsing)
-    from minipat.pat import Pat
 
     pat = Pat.par([Pat.pure("bd"), Pat.pure("sd")])
 
@@ -170,9 +172,6 @@ def test_patpar_now_printable() -> None:
 
 def test_custom_probability_printable() -> None:
     """Test that custom probability values are printable."""
-    from fractions import Fraction
-
-    from minipat.pat import Pat
 
     pat = Pat.probability(Pat.pure("bd"), Fraction(3, 4))
     result = print_pattern(pat)

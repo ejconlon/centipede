@@ -2,6 +2,7 @@ from fractions import Fraction
 
 from minipat.arc import Arc
 from minipat.common import CycleTime
+from minipat.parser import parse_pattern
 from minipat.pat import Pat, RepetitionOp
 from minipat.stream import pat_stream
 
@@ -417,7 +418,6 @@ def test_partial_arc_query() -> None:
 
 def test_replicate_stream() -> None:
     """Test replicate patterns work with stream processing."""
-    from minipat.parser import parse_pattern
 
     pattern = parse_pattern("bd!3")
     stream = pat_stream(pattern)
@@ -444,7 +444,6 @@ def test_replicate_stream() -> None:
 
 def test_ratio_stream() -> None:
     """Test ratio patterns work with stream processing."""
-    from minipat.parser import parse_pattern
 
     pattern = parse_pattern("bd*2%1")  # 2/1 ratio
     stream = pat_stream(pattern)
@@ -463,7 +462,6 @@ def test_ratio_stream() -> None:
 
 def test_polymetric_subdivision_stream() -> None:
     """Test polymetric subdivision patterns work with stream processing."""
-    from minipat.parser import parse_pattern
 
     pattern = parse_pattern("{bd, sd}%2")
     stream = pat_stream(pattern)
@@ -483,7 +481,6 @@ def test_polymetric_subdivision_stream() -> None:
 
 def test_dot_grouping_stream() -> None:
     """Test dot grouping patterns work with stream processing."""
-    from minipat.parser import parse_pattern
 
     pattern = parse_pattern("bd sd . hh cp")
     stream = pat_stream(pattern)
@@ -506,7 +503,6 @@ def test_dot_grouping_stream() -> None:
 
 def test_new_features_stream_integration() -> None:
     """Test that new patterns integrate properly with stream processing."""
-    from minipat.parser import parse_pattern
 
     # Basic smoke test - these should not crash
     patterns = ["bd!3", "bd*2%1", "{bd, sd}%2", "bd sd . hh cp"]
@@ -526,7 +522,6 @@ def test_new_features_stream_integration() -> None:
 
 def test_complex_new_features_stream() -> None:
     """Test complex combinations of new features with streams."""
-    from minipat.parser import parse_pattern
 
     # Complex pattern with multiple new features
     pattern = parse_pattern("{bd!2, sd*3%2}%4")

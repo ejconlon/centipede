@@ -36,6 +36,10 @@ typecheck-strict:
 lint:
   {{python}} -m ruff check {{packages}} tests
 
+# Lint with ruff and apply fixes
+lint-fix:
+  {{python}} -m ruff check --fix {{packages}} tests
+
 # Unit test with pytest in parallel
 unit:
   {{python}} -m pytest tests -n auto

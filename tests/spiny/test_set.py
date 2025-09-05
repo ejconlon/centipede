@@ -1,3 +1,4 @@
+import random
 from typing import List
 
 from spiny.set import PSet
@@ -125,7 +126,6 @@ def test_large_set_insertion() -> None:
     values = list(range(100))
 
     # Insert in random order to test balancing
-    import random
 
     random.shuffle(values)
 

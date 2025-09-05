@@ -21,6 +21,7 @@ dev = [
     "mypy>=1.16.1",
     "pdoc>=15.0.4",
     "pytest>=8.4.1",
+    "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.12.1",
 ]
@@ -54,6 +55,8 @@ include = ["spiny", "bad_actor", "minipat", "pushpluck", "tests"]
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning"
 ]
+timeout = 5
+timeout_method = "thread"
 
 [tool.uv.sources]
 python-rtmidi = { git = "https://github.com/SpotlightKid/python-rtmidi", rev = "e3a71480a1965a313f697b528196f27bb6da13e9"}

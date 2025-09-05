@@ -18,7 +18,7 @@ from typing import List, NewType, Optional, override
 from bad_actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
 from minipat.common import ONE_HALF, ZERO, CycleTime, PosixTime
-from minipat.ev import EvHeap
+from minipat.ev import EvHeap, ev_heap_empty
 from minipat.stream import Stream
 from spiny.map import PMap
 from spiny.seq import PSeq
@@ -509,8 +509,6 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
 
             # Convert events to EvHeap
             if events:
-                from minipat.ev import ev_heap_empty
-
                 event_heap: EvHeap[T] = ev_heap_empty()
                 for span, ev in events:
                     event_heap = event_heap.insert(span, ev)

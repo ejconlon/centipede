@@ -1162,7 +1162,6 @@ def start_midi_live_system(
         live_system = start_midi_live_system(system, "my_midi_out")
 
         # Update timing when CPS changes
-        from fractions import Fraction
         timing = Timing(cps=Fraction(1, 1), generations_per_cycle=4, wait_factor=Fraction(1, 4))
         timing_update = BackendTiming(timing=timing)
         live_system._backend_sender.send(timing_update)
