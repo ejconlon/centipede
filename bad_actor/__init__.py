@@ -1253,7 +1253,7 @@ class System(Control):
         self._root_thread = root_thread
         self._control = control
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.stop()
 
     @override

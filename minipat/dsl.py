@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, Union
+from typing import Callable
 
-from minipat.common import CycleDelta
+from minipat.common import CycleDelta, Numeric, numeric_frac
 from minipat.midi import (
     MidiAttrs,
     channel_stream,
@@ -19,15 +19,6 @@ from minipat.midi import (
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
-
-Numeric = Union[int, float, Fraction]
-
-
-def numeric_frac(numeric: Numeric) -> Fraction:
-    """Convert a numeric value to a Fraction."""
-    if isinstance(numeric, Fraction):
-        return numeric
-    return Fraction(numeric)
 
 
 @dataclass(frozen=True, eq=False)

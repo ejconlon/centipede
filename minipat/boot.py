@@ -1,5 +1,3 @@
-from minipat.flow import Flow
+from minipat.dsl import Flow, channel, control, midinote, note, program, value, vel
 
-__all__ = ["Flow"]
-
-# TODO add more
+__all__ = ["Flow", "note", "midinote", "vel", "channel", "program", "control", "value"]

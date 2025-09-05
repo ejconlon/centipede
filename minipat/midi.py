@@ -511,7 +511,9 @@ class ControlValKey(MidiKey[ControlVal]):
 
 
 def parse_message(
-    orbit: Orbit, attrs: MidiAttrs, default_velocity: Optional[Velocity] = None
+    orbit: Optional[Orbit],
+    attrs: MidiAttrs,
+    default_velocity: Optional[Velocity] = None,
 ) -> FrozenMessage:
     """Parse MIDI attributes into a FrozenMessage.
 
@@ -527,7 +529,7 @@ def parse_message(
     (e.g., having both note and program attributes).
 
     Args:
-        orbit: The orbit number, used as MIDI channel (must be 0-15)
+        orbit: The orbit number, used as MIDI channel (must be 0-15), or None if not specified
         attrs: MIDI attributes containing the message parameters
         default_velocity: Default velocity to use when not specified (defaults to DEFAULT_VELOCITY)
 
@@ -536,6 +538,7 @@ def parse_message(
 
     Raises:
         ValueError: If the orbit is outside valid MIDI channel range (0-15),
+                   or if neither orbit nor channel attribute is provided,
                    or if conflicting attributes from different message types are present,
                    or if the attributes don't contain sufficient information to
                    create any supported message type, or if required attributes
@@ -569,7 +572,7 @@ def parse_message(
     # Determine channel: use explicit channel attribute if present, otherwise orbit
     if channel_attr is not None:
         channel = channel_attr
-    else:
+    elif orbit is not None:
         # Use orbit as MIDI channel (validate range)
         orbit_value = int(orbit)
         if not (0 <= orbit_value <= 15):
@@ -577,6 +580,11 @@ def parse_message(
                 f"Orbit {orbit_value} out of valid MIDI channel range (0-15)"
             )
         channel = ChannelField.mk(orbit_value)
+    else:
+        # No channel or orbit specified
+        raise ValueError(
+            "Either channel attribute or orbit must be provided for MIDI message"
+        )
 
     # Check for conflicting attribute combinations
     has_note = note is not None
@@ -1191,7 +1199,7 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
 
     @override
     def process(
-        self, instant: Instant, orbit: Orbit, events: EvHeap[MidiAttrs]
+        self, instant: Instant, orbit: Optional[Orbit], events: EvHeap[MidiAttrs]
     ) -> PSeq[TimedMessage]:
         """Process MIDI events into timed MIDI messages."""
         timed_messages = []

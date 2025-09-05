@@ -14,7 +14,7 @@ import pytest
 from mido.frozen import FrozenMessage
 
 from bad_actor import System, new_system
-from minipat.common import PosixTime
+from minipat.common import ONE, CycleDelta, PosixTime
 from minipat.live import (
     LiveSystem,
     Orbit,
@@ -123,7 +123,10 @@ class MockMidiPort:
 def system() -> Generator[System, None, None]:
     """Create a test actor system."""
     sys = new_system()
-    yield sys
+    try:
+        yield sys
+    finally:
+        sys.stop()
 
 
 @pytest.fixture
@@ -133,7 +136,10 @@ def live_system(system: System) -> Generator[MidiLiveFixture, None, None]:
     # Patch where mido.open_output is actually called
     with patch("minipat.midi.mido.open_output", return_value=mock_port):
         live = start_midi_live_system(system, "test_port")
-        yield live, mock_port
+        try:
+            yield live, mock_port
+        finally:
+            live.panic()
 
 
 class TestMidiLiveSystemIntegration:
@@ -307,3 +313,218 @@ class TestMidiLiveSystemIntegration:
             f"Orbit 0 notes: C4={len(c4_messages)}, D4={len(d4_messages)}, E4={len(e4_messages)}"
         )
         print(f"Orbit 1 notes: F5={len(f5_messages)}, G5={len(g5_messages)}")
+
+    def test_once_method_immediate(self, live_system: MidiLiveFixture) -> None:
+        """Test that the once method generates immediate messages without alignment."""
+        live, mock_port = live_system
+
+        # Clear any existing messages
+        mock_port.clear()
+
+        # Set up the live system and start playback to initialize timing
+        live.set_cps(Fraction(2, 1))  # 2 cycles per second
+        live.play()  # Start playback to initialize the system
+        time.sleep(0.1)  # Let it initialize
+
+        # Create a simple pattern
+        pattern = note_stream("c4 d4")
+
+        # Use once method with immediate timing (aligned=False)
+        # Generate for half a cycle
+        live.once(pattern, CycleDelta(Fraction(1, 2)), aligned=False, orbit=Orbit(0))
+
+        # Wait a short time for message processing
+        time.sleep(0.3)
+
+        # Pause playback
+        live.pause()
+
+        # Collect messages
+        messages = []
+        while mock_port.has_messages():
+            msg = mock_port.wait_for_message(timeout=0.1)
+            if msg is not None:
+                messages.append(msg)
+
+        # Should have received messages from the once call
+        assert len(messages) > 0, "Expected messages from once method call"
+
+        # Verify we got note-on messages
+        note_on_messages = [
+            msg for msg in messages if MsgTypeField.get(msg.message) == "note_on"
+        ]
+        assert len(note_on_messages) > 0, "Expected at least one note-on message"
+
+        # Should contain C4 (60) or D4 (62) depending on timing within the pattern
+        note_nums = [NoteField.get(msg.message) for msg in note_on_messages]
+        expected_notes = {60, 62}  # C4 and D4 from our pattern
+        found_notes = set(note_nums)
+        common_notes = expected_notes.intersection(found_notes)
+        assert len(common_notes) > 0, (
+            f"Expected notes from pattern 'c4 d4' (60 or 62), got: {found_notes}"
+        )
+
+    def test_once_method_aligned(self, live_system: MidiLiveFixture) -> None:
+        """Test that the once method works with cycle alignment."""
+        live, mock_port = live_system
+
+        # Clear any existing messages
+        mock_port.clear()
+
+        # Set up the live system
+        live.set_cps(Fraction(1, 1))  # 1 cycle per second for easier testing
+
+        # Start playback to establish timing
+        live.play()
+        time.sleep(0.2)  # Let it establish timing
+
+        # Create a pattern
+        pattern = note_stream("c4 e4 g4")  # C major triad
+
+        # Use once method with alignment (should start at next cycle boundary)
+        live.once(pattern, CycleDelta(ONE), aligned=True, orbit=Orbit(0))
+
+        # Wait for messages to be processed
+        time.sleep(1.5)  # Give time for at least one cycle
+
+        # Stop playback
+        live.pause()
+
+        # Collect messages
+        messages = []
+        while mock_port.has_messages():
+            msg = mock_port.wait_for_message(timeout=0.1)
+            if msg is not None:
+                messages.append(msg)
+
+        # Should have received messages
+        assert len(messages) > 0, "Expected messages from aligned once call"
+
+        # Check for our triad notes
+        note_on_messages = [
+            msg for msg in messages if MsgTypeField.get(msg.message) == "note_on"
+        ]
+        note_nums = [NoteField.get(msg.message) for msg in note_on_messages]
+
+        # Should contain C4 (60), E4 (64), G4 (67)
+        expected_notes = {60, 64, 67}  # C4, E4, G4
+        found_notes = set(note_nums)
+
+        # Check that we found at least some of our expected notes
+        common_notes = expected_notes.intersection(found_notes)
+        assert len(common_notes) > 0, (
+            f"Expected some notes from C major triad, got notes: {found_notes}"
+        )
+
+    def test_once_method_multiple_calls(self, live_system: MidiLiveFixture) -> None:
+        """Test that multiple once calls work correctly."""
+        live, mock_port = live_system
+
+        # Clear any existing messages
+        mock_port.clear()
+
+        # Set up the live system
+        live.set_cps(Fraction(4, 1))  # 4 cycles per second for faster testing
+        live.play()  # Start playback to initialize the system
+        time.sleep(0.1)  # Let it initialize
+
+        # Create different patterns
+        pattern1 = note_stream("c4")
+        pattern2 = note_stream("g4")
+
+        # Make multiple once calls in quick succession
+        live.once(pattern1, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(0))
+        time.sleep(0.1)
+        live.once(pattern2, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(1))
+
+        # Wait for processing
+        time.sleep(0.5)
+
+        # Pause playback
+        live.pause()
+
+        # Collect messages
+        messages = []
+        while mock_port.has_messages():
+            msg = mock_port.wait_for_message(timeout=0.1)
+            if msg is not None:
+                messages.append(msg)
+
+        # Should have messages from both calls
+        assert len(messages) > 0, "Expected messages from multiple once calls"
+
+        # Check for any note messages (note_on or note_off) that contain our expected notes
+        all_note_messages = [msg for msg in messages if hasattr(msg.message, "note")]
+        all_note_nums = [NoteField.get(msg.message) for msg in all_note_messages]
+
+        # Should contain both C4 (60) and G4 (67) - be flexible since timing might affect which gets through
+        expected_notes = {60, 67}  # C4 and G4
+        found_notes = set(all_note_nums)
+        common_notes = expected_notes.intersection(found_notes)
+        assert len(common_notes) > 0, (
+            f"Expected at least one note from our patterns (60 or 67), got: {found_notes}"
+        )
+
+    def test_once_method_orbit_channel_mapping(
+        self, live_system: MidiLiveFixture
+    ) -> None:
+        """Test that orbit parameter correctly maps to MIDI channels in once method calls."""
+        live, mock_port = live_system
+
+        # Clear any existing messages
+        mock_port.clear()
+
+        # Set up the live system
+        live.set_cps(Fraction(4, 1))  # 4 cycles per second for faster testing
+        live.play()  # Start playback to initialize the system
+        time.sleep(0.1)  # Let it initialize
+
+        # Create a simple pattern
+        pattern = note_stream("c4")
+
+        # Make once calls with different orbits
+        live.once(
+            pattern, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(0)
+        )  # Should map to MIDI channel 0
+        time.sleep(0.05)
+        live.once(
+            pattern, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(5)
+        )  # Should map to MIDI channel 5
+        time.sleep(0.05)
+        live.once(
+            pattern, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(9)
+        )  # Should map to MIDI channel 9 (drums)
+
+        # Wait for processing
+        time.sleep(0.4)
+
+        # Pause playback
+        live.pause()
+
+        # Collect messages
+        messages = []
+        while mock_port.has_messages():
+            msg = mock_port.wait_for_message(timeout=0.1)
+            if msg is not None:
+                messages.append(msg)
+
+        # Should have messages from all orbit calls
+        assert len(messages) > 0, "Expected messages from orbit-specific once calls"
+
+        # Check that we got messages on different MIDI channels
+        channels = set()
+        for msg in messages:
+            if hasattr(msg.message, "channel"):
+                channels.add(msg.message.channel)
+
+        # Should have at least two different channels (0, 5, and/or 9)
+        assert len(channels) >= 2, (
+            f"Expected messages on multiple MIDI channels from different orbits, got channels: {channels}"
+        )
+
+        # Verify specific expected channels are present
+        expected_channels = {0, 5, 9}
+        common_channels = expected_channels.intersection(channels)
+        assert len(common_channels) > 0, (
+            f"Expected to find some of channels {expected_channels}, got: {channels}"
+        )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from abc import ABCMeta, abstractmethod
 from fractions import Fraction
-from typing import Any, Callable, NewType, Self, override
+from typing import Any, Callable, NewType, Self, Union, override
 
 
 class PartialMatchException(Exception):
@@ -19,6 +19,55 @@ def ignore_arg[A, B](fn: Callable[[A], B]) -> Callable[[None, A], B]:
 
     return wrapper
 
+
+# =============================================================================
+# Numeric Utilities
+# =============================================================================
+
+Numeric = Union[int, float, Fraction]
+"""Type alias for numeric values that can be converted to Fraction."""
+
+
+def numeric_frac(numeric: Numeric) -> Fraction:
+    """Convert a numeric value to a Fraction.
+
+    Args:
+        numeric: The numeric value to convert
+
+    Returns:
+        The value as a Fraction
+    """
+    if isinstance(numeric, Fraction):
+        return numeric
+    return Fraction(numeric)
+
+
+def frac_ceil(f: Fraction) -> int:
+    """Ceiling function for Fraction that maintains exact arithmetic.
+
+    Avoids precision issues from converting to float.
+
+    Args:
+        f: The fraction to take the ceiling of
+
+    Returns:
+        The smallest integer greater than or equal to f
+    """
+    if f.numerator % f.denominator == 0:
+        # Already an integer
+        return f.numerator // f.denominator
+    elif f >= 0:
+        # Positive: round up
+        return f.numerator // f.denominator + 1
+    else:
+        # Negative: ceiling means towards positive infinity
+        # For negative numbers, we use the identity: ceil(x) = -floor(-x)
+        return -((-f.numerator) // f.denominator)
+
+
+# =============================================================================
+# Time Types
+# =============================================================================
 
 CycleTime = NewType("CycleTime", Fraction)
 """Time measured in elapsed cycles as fractions."""

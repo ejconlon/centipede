@@ -17,7 +17,15 @@ from typing import List, NewType, Optional, override
 
 from bad_actor import Actor, ActorEnv, Mutex, Sender, System, Task
 from minipat.arc import Arc
-from minipat.common import ONE_HALF, ZERO, CycleTime, PosixTime
+from minipat.common import (
+    ONE,
+    ONE_HALF,
+    ZERO,
+    CycleDelta,
+    CycleTime,
+    PosixTime,
+    frac_ceil,
+)
 from minipat.ev import EvHeap, ev_heap_empty
 from minipat.stream import Stream
 from spiny.map import PMap
@@ -192,12 +200,14 @@ class Processor[T, U](metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def process(self, instant: Instant, orbit: Orbit, events: EvHeap[T]) -> PSeq[U]:
-        """Process events from a single orbit.
+    def process(
+        self, instant: Instant, orbit: Optional[Orbit], events: EvHeap[T]
+    ) -> PSeq[U]:
+        """Process events from a single orbit (or global context).
 
         Args:
             instant: Timing information for this generation.
-            orbit: The orbit these events belong to.
+            orbit: The orbit these events belong to, or None if not specified.
             events: Events to process.
 
         Returns:
@@ -213,7 +223,9 @@ class LogProcessor[T](Processor[T, str]):
         self._logger = logging.getLogger("log_processor")
 
     @override
-    def process(self, instant: Instant, orbit: Orbit, events: EvHeap[T]) -> PSeq[str]:
+    def process(
+        self, instant: Instant, orbit: Optional[Orbit], events: EvHeap[T]
+    ) -> PSeq[str]:
         """Process events into log strings."""
         log_messages = []
 
@@ -301,6 +313,15 @@ class PatternClearOrbits[T](PatternMessage[T]):
     """Clear all patterns from orbits."""
 
     pass
+
+
+@dataclass(frozen=True)
+class PatternOnce[T](PatternMessage[T]):
+    """Send pre-evaluated events immediately."""
+
+    instant: Instant
+    orbit: Optional[Orbit]
+    events: EvHeap[T]
 
 
 class BackendMessage[U](metaclass=ABCMeta):
@@ -473,6 +494,8 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
                 self._solo_orbit(env.logger, orbit, solo)
             case PatternClearOrbits():
                 self.clear_all_patterns(env.logger)
+            case PatternOnce(instant, orbit, events):
+                self._generate_once(env.logger, instant, orbit, events)
 
     def _generate_events(self, logger: Logger, instant: Instant) -> None:
         """Generate events for the given instant."""
@@ -565,6 +588,26 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
         )
         logger.debug("Set orbit %s solo to %s", orbit, solo)
 
+    def _generate_once(
+        self,
+        logger: Logger,
+        instant: Instant,
+        orbit: Optional[Orbit],
+        events: EvHeap[T],
+    ) -> None:
+        """Process pre-evaluated events and send them immediately."""
+        logger.debug("Processing %d once events", len(events))
+
+        if not events.empty():
+            # Process events through the processor
+            processed_events = self._processor.process(instant, orbit, events)
+
+            # Send all processed events to the backend immediately
+            if not processed_events.empty():
+                backend_events: BackendEvents[U] = BackendEvents(processed_events)
+                self._backend_sender.send(backend_events)
+                logger.debug("Sent %d once events to backend", len(processed_events))
+
     def clear_all_patterns(self, logger: Logger) -> None:
         """Clear all streams from orbits."""
         logger.info("Clearing all patterns")
@@ -585,6 +628,7 @@ class LiveSystem[T, U]:
         pattern_sender: Sender[PatternMessage[T]],
         backend_sender: Sender[BackendMessage[U]],
         env: LiveEnv,
+        transport_state_mutex: Mutex[TransportState],
     ):
         """Initialize the live system.
 
@@ -593,14 +637,16 @@ class LiveSystem[T, U]:
             pattern_sender: Sender for pattern messages.
             backend_sender: Sender for backend messages.
             env: Environment configuration.
+            transport_state_mutex: Mutex for accessing transport state.
         """
         self._logger = logging.getLogger("minipat.live")
         self._transport_sender = transport_sender
         self._pattern_sender = pattern_sender
         self._backend_sender = backend_sender
         self._env = env
+        self._transport_state_mutex = transport_state_mutex
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.panic()
 
     @staticmethod
@@ -638,7 +684,9 @@ class LiveSystem[T, U]:
         transport_sender = system.spawn_actor("transport", transport_actor)
 
         # Create the live system with the senders
-        live_system = LiveSystem(transport_sender, pattern_sender, backend_sender, env)
+        live_system = LiveSystem(
+            transport_sender, pattern_sender, backend_sender, env, transport_state_mutex
+        )
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
@@ -746,6 +794,76 @@ class LiveSystem[T, U]:
             orbit: The orbit identifier.
         """
         self.solo(orbit, False)
+
+    def once(
+        self,
+        stream: Stream[T],
+        length: CycleDelta = CycleDelta(ONE),
+        aligned: bool = False,
+        orbit: Optional[Orbit] = None,
+    ) -> None:
+        """Generate and immediately send events for a stream over a specified duration.
+
+        Args:
+            stream: The stream to generate events from.
+            length: Duration of the generation in cycle time (defaults to 1 cycle).
+            aligned: If True, start at the next cycle boundary; if False, start immediately.
+            orbit: Optional orbit to use for event processing.
+        """
+        # Eagerly evaluate the stream
+        with self._transport_state_mutex as state:
+            current_cycle = state.current_cycle
+            current_cps = state.cps
+            posix_start = state.playback_start
+
+        # Calculate start time
+        generation_cycle_length = Fraction(1) / self._env.generations_per_cycle
+        minimum_future_time = current_cycle + generation_cycle_length
+
+        if aligned:
+            # Start at the next cycle boundary, but ensure it's at least one generation cycle ahead
+            next_cycle_boundary = CycleTime(Fraction(frac_ceil(current_cycle)))
+            if next_cycle_boundary < minimum_future_time:
+                # Next cycle boundary is too close, use the one after that
+                start_cycle = CycleTime(next_cycle_boundary + 1)
+            else:
+                start_cycle = next_cycle_boundary
+        else:
+            # Start at one generation cycle in the future
+            start_cycle = CycleTime(minimum_future_time)
+
+        # Calculate end time
+        end_cycle = CycleTime(start_cycle + length)
+
+        # Create arc and instant
+        arc = Arc(start_cycle, end_cycle)
+        instant = Instant(
+            cycle_time=start_cycle, cps=current_cps, posix_start=posix_start
+        )
+
+        # Generate events using the stream (outside the mutex)
+        events = stream.unstream(arc)
+        event_heap: EvHeap[T] = ev_heap_empty()
+
+        for span, ev in events:
+            event_heap = event_heap.insert(span, ev)
+
+        # Send pattern once message to the pattern actor
+        once_message: PatternOnce[T] = PatternOnce(
+            instant=instant,
+            orbit=orbit,
+            events=event_heap,
+        )
+        self._pattern_sender.send(once_message)
+
+        self._logger.debug(
+            "Sent once message: cycles %s-%s, aligned=%s, length=%s, events=%d",
+            start_cycle,
+            end_cycle,
+            aligned,
+            length,
+            len(event_heap),
+        )
 
     def panic(self) -> None:
         """Emergency stop - clear all patterns and stop playback."""
