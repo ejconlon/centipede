@@ -19,6 +19,7 @@ from bad_actor import (
     Actor,
     ActorEnv,
     Callback,
+    Initializer,
     Mutex,
     Sender,
     System,
@@ -32,6 +33,8 @@ from minipat.live import (
     BackendMessage,
     BackendPlay,
     Instant,
+    LiveEnv,
+    LiveSystem,
     Orbit,
     Processor,
 )
@@ -388,6 +391,11 @@ def pmh_seek_pop(pmh: ParMsgHeap, time: PosixTime) -> Optional[TimedMessage]:
             tm, mh = res
             box.value = mh
             return tm
+
+
+def pmh_clear(pmh: ParMsgHeap) -> None:
+    with pmh as box:
+        box.value = mh_empty()
 
 
 class MidiSenderTask(Task):
@@ -1026,7 +1034,7 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
 # =============================================================================
 
 
-class MidiActor(Actor[BackendMessage[TimedMessage]]):
+class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
     """Actor that queues MIDI messages for scheduled sending.
 
     Instead of sending MIDI messages immediately, this actor queues them
@@ -1071,7 +1079,10 @@ class MidiActor(Actor[BackendMessage[TimedMessage]]):
                     env.logger.info("MIDI: Playing")
                 else:
                     env.logger.info("MIDI: Pausing")
-                    # Reset output when stopping
+                    # Clear buffer
+                    pmh_clear(self._heap)
+
+                    # Reset output
                     reset_error: Optional[Exception] = None
 
                     with self._output_mutex as output_port:
@@ -1143,3 +1154,58 @@ def echo_system(in_port_name: str, out_port_name: str) -> System:
     send_actor = SendActor(out_port)
     system.spawn_callback("recv", send_actor, recv_callback)
     return system
+
+
+def start_midi_live_system(
+    system: System, out_port_name: str, env: Optional[LiveEnv] = None
+) -> LiveSystem[MidiAttrs, TimedMessage]:
+    """Start a LiveSystem with MIDI components.
+
+    Creates a complete MIDI live system with:
+    - MidiProcessor for converting pattern events to MIDI messages
+    - MidiBackendActor for queuing messages
+    - MidiSenderTask for sending scheduled messages
+    - Shared message heap for coordination
+
+    Args:
+        system: The actor system to use
+        out_port_name: Name of the MIDI output port
+        env: Optional LiveEnv configuration (defaults to LiveEnv())
+
+    Returns:
+        A started LiveSystem configured for MIDI output
+    """
+    if env is None:
+        env = LiveEnv()
+
+    # Create MIDI output port and protect with mutex
+    out_port = mido.open_output(name=out_port_name, virtual=True)  # pyright: ignore
+    output_mutex = Mutex(out_port)
+
+    # Create shared message heap for coordination between actor and task
+    message_heap = pmh_empty()
+
+    # Create and spawn the MIDI backend actor and sender task in a nursery
+    # so they share a lifecycle
+    def nursery_init(
+        state: None, env: ActorEnv
+    ) -> Sender[BackendMessage[TimedMessage]]:
+        midi_backend = MidiBackendActor(message_heap, output_mutex)
+        backend_sender = env.control.spawn_actor("midi_backend", midi_backend)
+
+        sender_task = MidiSenderTask(message_heap, output_mutex)
+        env.control.spawn_task("midi_sender", sender_task)
+
+        return backend_sender
+
+    nursery_init_typed: Initializer[None, BackendMessage[TimedMessage]] = nursery_init
+
+    backend_sender: Sender[BackendMessage[TimedMessage]] = system.nursery(
+        "midi_output", nursery_init_typed
+    )
+
+    # Create MIDI processor
+    processor = MidiProcessor()
+
+    # Start the live system with MIDI processor and backend
+    return LiveSystem.start(system, processor, backend_sender, env)

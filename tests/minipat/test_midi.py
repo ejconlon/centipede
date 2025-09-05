@@ -354,7 +354,7 @@ def test_echo_system_integration() -> None:
             received_msg = received_messages[0]
 
             # Compare message content (excluding timing-related fields)
-            assert received_msg.type == test_msg.type, (
+            assert MsgTypeField.get(received_msg) == MsgTypeField.get(test_msg), (
                 f"Message type mismatch for message {i}"
             )
 

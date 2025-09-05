@@ -515,7 +515,7 @@ class LiveSystem[T, U]:
         system: System,
         processor: Processor[T, U],
         backend_sender: Sender[BackendMessage[U]],
-        env: LiveEnv = LiveEnv(),
+        env: LiveEnv,
     ) -> LiveSystem[T, U]:
         """Start the live pattern system.
 
