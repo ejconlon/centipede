@@ -1,5 +1,6 @@
 .hypothesis
 .mypy_cache
+.mypy_cache_strict
 .pytest_cache
 .ruff_cache
 .venv

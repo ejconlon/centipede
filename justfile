@@ -30,7 +30,7 @@ typecheck:
 
 # Typecheck with mypy - strict mode
 typecheck-strict:
-  {{python}} -m mypy --strict --config-file=pyproject.toml {{mypy_packages}} -p tests
+  {{python}} -m mypy --strict --cache-dir=.mypy_cache_strict --config-file=pyproject.toml {{mypy_packages}} -p tests
 
 # Lint with ruff
 lint:
@@ -56,7 +56,7 @@ check: format lint test
 
 # Clean most generated files (+ venv)
 clean:
-  rm -rf .venv .mypy_cache .pytest_cache *.egg-info
+  rm -rf .venv .mypy_cache .mypy_cache_strict .pytest_cache *.egg-info
 
 # Enter an Python REPL
 repl:
