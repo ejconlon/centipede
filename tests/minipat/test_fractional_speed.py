@@ -56,16 +56,16 @@ def test_parser_fractional_speed() -> None:
     """Test parsing fractional speed factors."""
     from minipat.pat import PatSpeed
 
-    # Test parsing "x*(3%2)" - fast by 3/2
-    pattern = parse_pattern("x*(3%2)")
+    # Test parsing "x*3%2" - fast by 3/2
+    pattern = parse_pattern("x*3%2")
     assert isinstance(pattern.unwrap, PatSpeed)
     speed_pat = pattern.unwrap
     assert isinstance(speed_pat.pat.unwrap, type(Pat.pure("x").unwrap))
     assert speed_pat.op == SpeedOp.Fast
     assert speed_pat.factor == Fraction(3, 2)
 
-    # Test parsing "x/(1%2)" - slow by 1/2
-    pattern = parse_pattern("x/(1%2)")
+    # Test parsing "x/1%2" - slow by 1/2
+    pattern = parse_pattern("x/1%2")
     assert isinstance(pattern.unwrap, PatSpeed)
     speed_pat = pattern.unwrap
     assert isinstance(speed_pat.pat.unwrap, type(Pat.pure("x").unwrap))
@@ -115,7 +115,7 @@ def test_printer_fractional_speed() -> None:
 def test_complex_fractional_speed_pattern() -> None:
     """Test complex pattern with fractional speeds."""
     # Parse a pattern with sequence and fractional speed
-    pattern = parse_pattern("[x y]*(3%2)")
+    pattern = parse_pattern("[x y]*3%2")
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -210,8 +210,8 @@ def test_parser_fractional_repeat() -> None:
     """Test parsing fractional repeat factors."""
     from minipat.pat import PatRepeat
 
-    # Test parsing "x!(3%2)" - repeat by 3/2
-    pattern = parse_pattern("x!(3%2)")
+    # Test parsing "x!3%2" - repeat by 3/2
+    pattern = parse_pattern("x!3%2")
     assert isinstance(pattern.unwrap, PatRepeat)
     repeat_pat = pattern.unwrap
     assert repeat_pat.pat.unwrap.value == "x"

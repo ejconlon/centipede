@@ -115,7 +115,7 @@ def print_pattern(pat: Pat[str]) -> str:
                 pattern_str = f"[{print_pattern(pat)}]"
             else:
                 pattern_str = print_pattern(pat)
-            return f"{pattern_str}!{count}"
+            return f"{pattern_str}!{format_fraction(count)}"
 
         case PatPoly(pats, subdiv):
             pattern_strs = [print_pattern(pattern) for pattern in pats]

@@ -175,7 +175,7 @@ def test_custom_probability_printable() -> None:
 
     pat = Pat.prob(Pat.pure("bd"), Fraction(3, 4))
     result = print_pattern(pat)
-    assert result == "bd?(3/4)"
+    assert result == "bd?3%4"
 
 
 def test_empty_pattern_fails() -> None:

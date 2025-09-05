@@ -49,8 +49,8 @@ def format_fraction(frac: Fraction) -> str:
     """Format a fraction according to the printing rules.
 
     Rules:
-    - Always print fractional representations in parentheses
-    - Handle integers appropriately (no parentheses needed)
+    - Always print fractional representations with % syntax
+    - Handle integers appropriately (no % needed)
 
     Args:
         frac: The fraction to format
@@ -62,8 +62,8 @@ def format_fraction(frac: Fraction) -> str:
         # It's a whole number
         return str(frac.numerator)
     else:
-        # Always use parenthesized fraction format
-        return f"({frac.numerator}/{frac.denominator})"
+        # Always use % fraction format
+        return f"{frac.numerator}%{frac.denominator}"
 
 
 class TimeOps[T, D](metaclass=ABCMeta):

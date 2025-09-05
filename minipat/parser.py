@@ -32,7 +32,7 @@ DOT: "."
 COLON: ":"
 
 // Numeric values - supports integers, decimals, and fractions
-numeric_value: NUMBER | DECIMAL | fraction | "(" fraction ")"
+numeric_value: NUMBER | DECIMAL | fraction
 fraction: NUMBER "%" NUMBER
 
 start: pattern
@@ -291,7 +291,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
 
     # Probability
     def probability(self, items: List[Any]) -> Pat[Any]:
-        """Transform probability patterns like bd?, bd?0.3, bd?(1/2)."""
+        """Transform probability patterns like bd?, bd?0.3, bd?1%2."""
         element = items[0]
 
         # Handle different probability formats
