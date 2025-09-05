@@ -6,10 +6,10 @@ MIDI message handling utilities.
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
+from fractions import Fraction
 from functools import partial
 from logging import Logger
 from threading import Event
-from time import sleep
 from typing import Any, Iterable, NewType, Optional, Tuple, cast, override
 
 import mido
@@ -29,14 +29,19 @@ from bad_actor import (
 from minipat.common import PosixTime, current_posix_time
 from minipat.ev import EvHeap
 from minipat.live import (
+    DEFAULT_CPS,
+    DEFAULT_GENERATIONS_PER_CYCLE,
+    DEFAULT_WAIT_FACTOR,
     BackendEvents,
     BackendMessage,
     BackendPlay,
+    BackendTiming,
     Instant,
     LiveEnv,
     LiveSystem,
     Orbit,
     Processor,
+    calculate_sleep_interval,
 )
 from minipat.parser import parse_pattern
 from minipat.stream import MergeStrat, Stream, pat_stream
@@ -398,23 +403,57 @@ def pmh_clear(pmh: ParMsgHeap) -> None:
         box.value = mh_empty()
 
 
+@dataclass
+class TimingConfig:
+    """Configuration for MIDI timing calculations."""
+
+    cps: Fraction = DEFAULT_CPS
+    """Current cycles per second (tempo)."""
+
+    generations_per_cycle: int = DEFAULT_GENERATIONS_PER_CYCLE
+    """Number of event generations to calculate per cycle."""
+
+    wait_factor: Fraction = DEFAULT_WAIT_FACTOR
+    """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
+
+    def get_sleep_interval(self) -> float:
+        """Calculate appropriate sleep interval based on timing configuration.
+
+        Uses the shared calculation function from live.py for consistency.
+
+        Returns:
+            Sleep interval in seconds, clamped to reasonable bounds.
+        """
+        return calculate_sleep_interval(
+            self.cps, self.generations_per_cycle, self.wait_factor
+        )
+
+
 class MidiSenderTask(Task):
     """Background task that sends scheduled MIDI messages at the correct time.
 
     Runs in a separate thread and continuously pops messages from a shared
     ParMsgHeap, sending them to a Mutex-protected MIDI output at the
-    appropriate timestamps.
+    appropriate timestamps. Uses timing configuration to determine appropriate
+    sleep intervals based on current tempo and generation rate.
     """
 
-    def __init__(self, heap: ParMsgHeap, output_mutex: Mutex[mido.ports.BaseOutput]):
+    def __init__(
+        self,
+        heap: ParMsgHeap,
+        output_mutex: Mutex[mido.ports.BaseOutput],
+        timing_config_mutex: Mutex[TimingConfig],
+    ):
         """Initialize the MIDI sender task.
 
         Args:
             heap: Shared message heap for scheduled messages
             output_mutex: Mutex-protected MIDI output port (can be None if disabled)
+            timing_config_mutex: Mutex-protected timing configuration
         """
         self._heap = heap
         self._output_mutex = output_mutex
+        self._timing_config_mutex = timing_config_mutex
 
     @override
     def run(self, logger: Logger, halt: Event) -> None:
@@ -426,41 +465,20 @@ class MidiSenderTask(Task):
         """
         logger.debug("MIDI sender task started")
         while not halt.is_set():
-            try:
-                current_time = current_posix_time()
+            current_time = current_posix_time()
 
-                # Get the next message that's ready to send
-                timed_msg = pmh_seek_pop(self._heap, current_time)
+            # Get the next message that's ready to send
+            timed_msg = pmh_seek_pop(self._heap, current_time)
 
-                if timed_msg is not None:
-                    # Send the message if we have an output
-                    send_error: Optional[Exception] = None
-
-                    with self._output_mutex as output_port:
-                        try:
-                            output_port.send(timed_msg.message)
-                        except Exception as e:
-                            send_error = e
-
-                    # Log outside of mutex
-                    if send_error is None:
-                        logger.debug(
-                            "Sent scheduled MIDI message: %s", timed_msg.message
-                        )
-                    else:
-                        logger.error(
-                            "Error sending scheduled MIDI message: %s", send_error
-                        )
-                else:
-                    # No messages ready, sleep briefly
-                    # TODO these sleeps should be halt.wait() with interval
-                    # based on current cps and gens per cycle - figure out how to
-                    # get that info into here
-                    sleep(0.001)  # 1ms sleep to avoid busy waiting
-
-            except Exception as e:
-                logger.error("Unexpected error in MIDI sender task: %s", e)
-                sleep(0.01)  # Longer sleep on error
+            if timed_msg is None:
+                # No messages ready, sleep based on current timing configuration
+                with self._timing_config_mutex as timing_config:
+                    sleep_interval = timing_config.get_sleep_interval()
+                # Use halt.wait() instead of sleep() to be responsive to shutdown
+                halt.wait(timeout=sleep_interval)
+            else:
+                with self._output_mutex as output_port:
+                    output_port.send(timed_msg.message)
 
         logger.debug("MIDI sender task stopped")
 
@@ -720,11 +738,8 @@ class NoteNumElemParser(ElemParser[Note]):
     @override
     @classmethod
     def parse(cls, s: str) -> Note:
-        try:
-            note_num = int(s)
-            return NoteField.mk(note_num)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid note number: {s}") from e
+        note_num = int(s)
+        return NoteField.mk(note_num)
 
     @override
     @classmethod
@@ -841,11 +856,8 @@ class VelElemParser(ElemParser[Velocity]):
     @override
     @classmethod
     def parse(cls, s: str) -> Velocity:
-        try:
-            vel_num = int(s)
-            return VelocityField.mk(vel_num)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid velocity: {s}") from e
+        vel_num = int(s)
+        return VelocityField.mk(vel_num)
 
     @override
     @classmethod
@@ -1039,36 +1051,34 @@ class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
 
     Instead of sending MIDI messages immediately, this actor queues them
     in a shared ParMsgHeap where a MidiSenderTask will send them at the
-    appropriate time.
+    appropriate time. Also handles timing configuration updates.
     """
 
-    def __init__(self, heap: ParMsgHeap, output_mutex: Mutex[mido.ports.BaseOutput]):
+    def __init__(
+        self,
+        heap: ParMsgHeap,
+        output_mutex: Mutex[mido.ports.BaseOutput],
+        timing_config_mutex: Mutex[TimingConfig],
+    ):
         """Initialize the MIDI actor.
 
         Args:
             heap: Shared message heap for scheduling messages
             output_mutex: Mutex-protected MIDI output port
+            timing_config_mutex: Mutex-protected timing configuration
         """
         self._heap = heap
         self._output_mutex = output_mutex
+        self._timing_config_mutex = timing_config_mutex
         self._playing = False
 
     @override
     def on_stop(self, logger: Logger) -> None:
         """Reset the MIDI output when stopping."""
-        reset_error: Optional[Exception] = None
+        logger.debug("Resetting MIDI output port on stop")
 
         with self._output_mutex as output_port:
-            try:
-                output_port.reset()
-            except Exception as e:
-                reset_error = e
-
-        # Log outside of mutex
-        if reset_error is None:
-            logger.debug("Reset MIDI output port")
-        else:
-            logger.error("Error resetting MIDI output: %s", reset_error)
+            output_port.reset()
 
     @override
     def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
@@ -1078,28 +1088,31 @@ class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
                 if playing:
                     env.logger.info("MIDI: Playing")
                 else:
-                    env.logger.info("MIDI: Pausing")
+                    env.logger.info(
+                        "MIDI: Pausing - clearing queued messages and resetting port"
+                    )
                     # Clear buffer
                     pmh_clear(self._heap)
 
-                    # Reset output
-                    reset_error: Optional[Exception] = None
-
                     with self._output_mutex as output_port:
-                        try:
-                            output_port.reset()
-                        except Exception as e:
-                            reset_error = e
-
-                    # Log outside of mutex
-                    if reset_error is not None:
-                        env.logger.error("Error resetting MIDI output: %s", reset_error)
+                        output_port.reset()
             case BackendEvents(messages):
                 if self._playing:
                     env.logger.debug("MIDI: Pushing %d messages", len(messages))
                     pmh_push_all(self._heap, messages)
                 else:
                     env.logger.debug("MIDI: Ignoring events while stopped")
+            case BackendTiming(cps, generations_per_cycle, wait_factor):
+                with self._timing_config_mutex as timing_config:
+                    timing_config.cps = cps
+                    timing_config.generations_per_cycle = generations_per_cycle
+                    timing_config.wait_factor = wait_factor
+                env.logger.debug(
+                    "MIDI: Updated timing config - CPS: %s, Gens/Cycle: %d, Wait Factor: %s",
+                    cps,
+                    generations_per_cycle,
+                    wait_factor,
+                )
             case _:
                 env.logger.warning("Unknown MIDI message type: %s", type(value))
 
@@ -1163,9 +1176,9 @@ def start_midi_live_system(
 
     Creates a complete MIDI live system with:
     - MidiProcessor for converting pattern events to MIDI messages
-    - MidiBackendActor for queuing messages
-    - MidiSenderTask for sending scheduled messages
-    - Shared message heap for coordination
+    - MidiBackendActor for queuing messages and handling timing updates
+    - MidiSenderTask for sending scheduled messages with timing-aware sleep intervals
+    - Shared message heap and timing configuration for coordination
 
     Args:
         system: The actor system to use
@@ -1173,7 +1186,18 @@ def start_midi_live_system(
         env: Optional LiveEnv configuration (defaults to LiveEnv())
 
     Returns:
-        A started LiveSystem configured for MIDI output
+        A started LiveSystem configured for MIDI output. Send BackendTiming messages
+        to the backend sender to update timing configuration.
+
+    Example:
+        ```python
+        live_system = start_midi_live_system(system, "my_midi_out")
+
+        # Update timing when CPS changes
+        from fractions import Fraction
+        timing_update = BackendTiming(cps=Fraction(1, 1), generations_per_cycle=4, wait_factor=Fraction(1, 4))
+        live_system._backend_sender.send(timing_update)
+        ```
     """
     if env is None:
         env = LiveEnv()
@@ -1185,15 +1209,25 @@ def start_midi_live_system(
     # Create shared message heap for coordination between actor and task
     message_heap = pmh_empty()
 
+    # Create shared timing configuration with defaults from LiveEnv
+    timing_config = TimingConfig(
+        cps=DEFAULT_CPS,
+        generations_per_cycle=env.generations_per_cycle,
+        wait_factor=env.wait_factor,
+    )
+    timing_config_mutex = Mutex(timing_config)
+
     # Create and spawn the MIDI backend actor and sender task in a nursery
     # so they share a lifecycle
     def nursery_init(
         state: None, env: ActorEnv
     ) -> Sender[BackendMessage[TimedMessage]]:
-        midi_backend = MidiBackendActor(message_heap, output_mutex)
+        # Create the timing-aware MIDI backend actor
+        midi_backend = MidiBackendActor(message_heap, output_mutex, timing_config_mutex)
         backend_sender = env.control.spawn_actor("midi_backend", midi_backend)
 
-        sender_task = MidiSenderTask(message_heap, output_mutex)
+        # Create the sender task with timing awareness
+        sender_task = MidiSenderTask(message_heap, output_mutex, timing_config_mutex)
         env.control.spawn_task("midi_sender", sender_task)
 
         return backend_sender

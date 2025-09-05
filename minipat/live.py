@@ -25,6 +25,47 @@ from spiny.seq import PSeq
 
 Orbit = NewType("Orbit", int)
 
+# =============================================================================
+# Timing Constants
+# =============================================================================
+
+DEFAULT_CPS = ONE_HALF
+"""Default cycles per second (tempo)."""
+
+DEFAULT_GENERATIONS_PER_CYCLE = 4
+"""Default number of event generations to calculate per cycle."""
+
+DEFAULT_WAIT_FACTOR = Fraction(1, 4)
+"""Default factor for calculating sleep intervals - use 1/4 of generation interval for responsive polling."""
+
+
+def calculate_sleep_interval(
+    cps: Fraction,
+    generations_per_cycle: int,
+    wait_factor: Fraction = DEFAULT_WAIT_FACTOR,
+) -> float:
+    """Calculate appropriate sleep interval based on timing configuration.
+
+    Uses the specified wait_factor of the generation interval to ensure responsive timing
+    while avoiding excessive CPU usage.
+
+    Args:
+        cps: Current cycles per second (tempo).
+        generations_per_cycle: Number of event generations per cycle.
+        wait_factor: Factor for calculating sleep intervals - fraction of generation interval to use.
+
+    Returns:
+        Sleep interval in seconds, clamped to reasonable bounds.
+    """
+    # Calculate time per generation
+    generation_interval = 1.0 / (float(cps) * generations_per_cycle)
+
+    # Use wait_factor of generation interval for responsive polling
+    sleep_interval = generation_interval * float(wait_factor)
+
+    # Clamp to reasonable bounds (0.5ms to 50ms)
+    return max(0.0005, min(0.05, sleep_interval))
+
 
 @dataclass(frozen=True)
 class Instant:
@@ -50,11 +91,11 @@ class LiveEnv:
     debug: bool = False
     """Enable debug logging for pattern playback."""
 
-    generations_per_cycle: int = 4
+    generations_per_cycle: int = DEFAULT_GENERATIONS_PER_CYCLE
     """Number of event generations to calculate per cycle."""
 
-    pause_interval: float = 0.1
-    """Interval in seconds to check halt when paused."""
+    wait_factor: Fraction = DEFAULT_WAIT_FACTOR
+    """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
 
 
 @dataclass
@@ -249,6 +290,20 @@ class BackendEvents[U](BackendMessage[U]):
     events: PSeq[U]
 
 
+@dataclass(frozen=True)
+class BackendTiming[U](BackendMessage[U]):
+    """Update timing configuration for the backend."""
+
+    cps: Fraction
+    """Cycles per second (tempo)."""
+
+    generations_per_cycle: int
+    """Number of event generations to calculate per cycle."""
+
+    wait_factor: Fraction
+    """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
+
+
 class TimerTask[T](Task):
     """Task that manages timing and coordinates pattern generation."""
 
@@ -286,7 +341,12 @@ class TimerTask[T](Task):
                         state.current_cycle + frac_cycle_length
                     )
                 else:
-                    interval = self._env.pause_interval
+                    # When not playing, use current CPS to calculate pause interval
+                    interval = calculate_sleep_interval(
+                        state.cps,
+                        self._env.generations_per_cycle,
+                        self._env.wait_factor,
+                    )
                     instant = None
 
             if instant is not None:
@@ -497,6 +557,7 @@ class LiveSystem[T, U]:
         transport_sender: Sender[TransportMessage[T]],
         pattern_sender: Sender[PatternMessage[T]],
         backend_sender: Sender[BackendMessage[U]],
+        env: LiveEnv,
     ):
         """Initialize the live system.
 
@@ -504,11 +565,13 @@ class LiveSystem[T, U]:
             transport_sender: Sender for transport control messages.
             pattern_sender: Sender for pattern messages.
             backend_sender: Sender for backend messages.
+            env: Environment configuration.
         """
         self._logger = logging.getLogger("minipat.live")
         self._transport_sender = transport_sender
         self._pattern_sender = pattern_sender
         self._backend_sender = backend_sender
+        self._env = env
 
     @staticmethod
     def start(
@@ -545,7 +608,7 @@ class LiveSystem[T, U]:
         transport_sender = system.spawn_actor("transport", transport_actor)
 
         # Create the live system with the senders
-        live_system = LiveSystem(transport_sender, pattern_sender, backend_sender)
+        live_system = LiveSystem(transport_sender, pattern_sender, backend_sender, env)
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
@@ -557,6 +620,21 @@ class LiveSystem[T, U]:
         system.spawn_task("timer_loop", timer_task)
 
         logger.info("Live pattern system started")
+
+        # Send initial timing configuration to backend
+        initial_timing: BackendTiming[U] = BackendTiming(
+            cps=transport_state.cps,
+            generations_per_cycle=env.generations_per_cycle,
+            wait_factor=env.wait_factor,
+        )
+        backend_sender.send(initial_timing)
+        logger.debug(
+            "Sent initial timing configuration - CPS: %s, Gens/Cycle: %d, Wait Factor: %s",
+            transport_state.cps,
+            env.generations_per_cycle,
+            env.wait_factor,
+        )
+
         return live_system
 
     def set_orbit(self, orbit: Orbit, stream: Optional[Stream[T]]) -> None:
@@ -578,6 +656,13 @@ class LiveSystem[T, U]:
             cps: The new tempo in cycles per second.
         """
         self._transport_sender.send(TransportSetCps(cps))
+        # Also send timing update to backend
+        timing_update: BackendTiming[U] = BackendTiming(
+            cps=cps,
+            generations_per_cycle=self._env.generations_per_cycle,
+            wait_factor=self._env.wait_factor,
+        )
+        self._backend_sender.send(timing_update)
 
     def set_cycle(self, cycle: CycleTime) -> None:
         """Set the current cycle position.
