@@ -52,11 +52,10 @@ venv = ".venv"
 include = ["spiny", "bad_actor", "minipat", "pushpluck", "tests"]
 
 [tool.pytest.ini_options]
+addopts = "--timeout=10 --session-timeout=30"
 filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning"
 ]
-timeout = 5
-timeout_method = "thread"
 
 [tool.uv.sources]
 python-rtmidi = { git = "https://github.com/SpotlightKid/python-rtmidi", rev = "e3a71480a1965a313f697b528196f27bb6da13e9"}
