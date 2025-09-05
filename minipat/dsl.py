@@ -79,7 +79,7 @@ class Flow:
         streams = PSeq.mk(pattern.stream for pattern in patterns)
         return Flow(Stream.alt(streams))
 
-    def repeat(self, count: int) -> Flow:
+    def repeat(self, count: Fraction) -> Flow:
         """Create a repeat flow."""
         return Flow(Stream.repeat(self.stream, count))
 

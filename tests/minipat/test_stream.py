@@ -310,7 +310,7 @@ def test_complex_nested_pattern() -> None:
     """Test complex nested pattern combining multiple operations."""
     # Pattern equivalent to "[x y]!2" - sequence replicated twice
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
-    pattern = Pat.repeat(seq, 2)
+    pattern = Pat.repeat(seq, Fraction(2))
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 

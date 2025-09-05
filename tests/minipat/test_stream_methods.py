@@ -444,7 +444,7 @@ def test_stream_constructor_alternating() -> None:
 def test_stream_constructor_replicate() -> None:
     """Test Stream.repeat() constructor."""
     base_stream = Stream.pure("x")
-    stream = Stream.repeat(base_stream, 4)
+    stream = Stream.repeat(base_stream, Fraction(4))
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)

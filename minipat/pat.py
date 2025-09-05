@@ -203,14 +203,14 @@ class Pat[T]:
         return Pat(PatAlt(PSeq.mk(pats)))
 
     @staticmethod
-    def repeat(pat: Pat[T], count: int) -> Pat[T]:
+    def repeat(pat: Pat[T], count: Fraction) -> Pat[T]:
         """Create a finitely repeating pattern (!).
 
         Textual form: pattern!count
 
         Args:
             pat: The pattern to repeat
-            count: The number of times to repeat
+            count: The number of times to repeat (can be fractional)
 
         Returns:
             The repeated pattern
@@ -433,11 +433,11 @@ class PatRepeat[T, R](PatF[T, R]):
 
     Args:
         pat: The pattern to repeat
-        count: The number of times to repeat
+        count: The number of times to repeat (can be fractional)
     """
 
     pat: R
-    count: int
+    count: Fraction
 
 
 def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[T]], Z]:

@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
-from typing import Callable, List, Optional, override
+from typing import Callable, List, Optional, Tuple, override
 
 from minipat.arc import Arc, Span
 from minipat.common import CycleDelta, CycleTime
@@ -218,12 +218,12 @@ class Stream[T](metaclass=ABCMeta):
         return AlternatingStream(patterns)
 
     @staticmethod
-    def repeat(stream: Stream[T], count: int) -> Stream[T]:
+    def repeat(stream: Stream[T], count: Fraction) -> Stream[T]:
         """Create a repeat stream.
 
         Args:
             stream: The stream to repeat
-            count: The number of times to repeat
+            count: The number of times to repeat (can be fractional)
 
         Returns:
             A repeated stream
@@ -359,6 +359,55 @@ class PureStream[T](Stream[T]):
             return ev_heap_empty()
         span = Span(active=arc, whole=None)
         return ev_heap_singleton(Ev(span, self.value))
+
+
+@dataclass(frozen=True)
+class WeightedSeqStream[T](Stream[T]):
+    """Specialized stream for sequential patterns with weighted timing."""
+
+    weighted_children: List[Tuple[Stream[T], Fraction]]
+
+    @override
+    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        if arc.null() or len(self.weighted_children) == 0:
+            return ev_heap_empty()
+
+        # Calculate total weight
+        total_weight = sum(weight for _, weight in self.weighted_children)
+        if total_weight == 0:
+            return ev_heap_empty()
+
+        seq_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+        current_offset = Fraction(0)
+
+        for child_stream, weight in self.weighted_children:
+            # Calculate time allocation for this child based on its weight
+            child_proportion = weight / total_weight
+            child_duration = arc.length() * child_proportion
+
+            child_start = arc.start + current_offset
+            child_arc = Arc(
+                CycleTime(child_start), CycleTime(child_start + child_duration)
+            )
+
+            intersection = child_arc.intersect(arc)
+            if not intersection.null():
+                child_events = child_stream.unstream(child_arc)
+                for _, ev in child_events:
+                    # Create proper span for this event within the query arc
+                    span = _create_span(ev.span.active, arc)
+                    if span is not None:
+                        # Preserve the child's whole information if it exists, otherwise use the child's active as whole
+                        if ev.span.whole is not None:
+                            span = Span(active=span.active, whole=ev.span.whole)
+                        elif ev.span.active != span.active:
+                            span = Span(active=span.active, whole=ev.span.active)
+                        new_ev = Ev(span, ev.val)
+                        seq_result = ev_heap_push(new_ev, seq_result)
+
+            current_offset += child_duration
+
+        return seq_result
 
 
 @dataclass(frozen=True)
@@ -688,31 +737,72 @@ class ReplicateStream[T](Stream[T]):
     """Specialized stream for replicate patterns."""
 
     pattern: Stream[T]
-    count: int
+    count: Fraction
 
     @override
     def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        replicate_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
-        rep_duration = arc.length() / self.count
+        # Handle fractional repetitions: x!2.5 = 2 full + 0.5 partial repetition
+        # Get integer and fractional parts
+        int_part = int(self.count)  # Number of full repetitions
+        frac_part = self.count - int_part  # Fractional part for partial repetition
 
-        for i in range(self.count):
+        rep_duration = arc.length() / self.count  # Duration of each repetition
+        replicate_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
+
+        # Unstream once for a single repetition
+        full_rep_arc = Arc(arc.start, CycleTime(arc.start + rep_duration))
+        full_pattern_events = self.pattern.unstream(full_rep_arc)
+
+        # Add full repetitions
+        for i in range(int_part):
             rep_start = arc.start + i * rep_duration
-            rep_arc = Arc(CycleTime(rep_start), CycleTime(rep_start + rep_duration))
-            if not arc.intersect(rep_arc).null():
-                child_events = self.pattern.unstream(rep_arc)
-                for _, ev in child_events:
-                    span = _create_span(ev.span.active, arc)
-                    if span is not None:
-                        # Preserve the child's whole information if it exists
-                        if ev.span.whole is not None:
-                            span = Span(active=span.active, whole=ev.span.whole)
-                        elif ev.span.active != span.active:
-                            span = Span(active=span.active, whole=ev.span.active)
-                        new_ev = Ev(span, ev.val)
-                        replicate_result = ev_heap_push(new_ev, replicate_result)
+            for span, ev in full_pattern_events:
+                # Shift the event to the correct repetition position
+                offset = rep_start - arc.start
+                shifted_span = Span(
+                    active=Arc(
+                        CycleTime(span.active.start + offset),
+                        CycleTime(span.active.end + offset),
+                    ),
+                    whole=span.whole,
+                )
+
+                clipped_span = _create_span(shifted_span.active, arc)
+                if clipped_span is not None:
+                    if shifted_span.whole is not None:
+                        clipped_span = Span(
+                            active=clipped_span.active, whole=shifted_span.whole
+                        )
+                    elif shifted_span.active != clipped_span.active:
+                        clipped_span = Span(
+                            active=clipped_span.active, whole=shifted_span.active
+                        )
+                    new_ev = Ev(clipped_span, ev.val)
+                    replicate_result = ev_heap_push(new_ev, replicate_result)
+
+        # Add partial repetition if needed
+        if frac_part > 0:
+            partial_start = arc.start + int_part * rep_duration
+            partial_end = partial_start + frac_part * rep_duration
+            partial_arc = Arc(CycleTime(partial_start), CycleTime(partial_end))
+
+            # Unstream the partial repetition
+            partial_pattern_events = self.pattern.unstream(partial_arc)
+            for _, ev in partial_pattern_events:
+                clipped_span = _create_span(ev.span.active, arc)
+                if clipped_span is not None:
+                    if ev.span.whole is not None:
+                        span = Span(active=clipped_span.active, whole=ev.span.whole)
+                    elif ev.span.active != clipped_span.active:
+                        span = Span(active=clipped_span.active, whole=ev.span.active)
+                    else:
+                        span = clipped_span
+                    new_ev = Ev(span, ev.val)
+                    replicate_result = ev_heap_push(new_ev, replicate_result)
+
         return replicate_result
 
 
@@ -1053,8 +1143,16 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
         case PatPure(val):
             return PureStream(val)
         case PatSeq(children):
-            child_streams = PSeq.mk(pat_stream(child) for child in children)
-            return SeqStream(child_streams)
+            # Create weighted sequence where each child contributes its weight
+            weighted_children = []
+            for child in children:
+                # Calculate weight: repeat patterns contribute their count, others contribute 1
+                weight = Fraction(1)
+                if isinstance(child.unwrap, PatRepeat):
+                    weight = child.unwrap.count
+                weighted_children.append((pat_stream(child), weight))
+
+            return WeightedSeqStream(weighted_children)
         case PatPar(pats):
             child_streams = PSeq.mk(pat_stream(child) for child in pats)
             return ParStream(child_streams)

@@ -266,7 +266,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform replicate patterns like bd!3."""
         element = items[0]
         # items[1] is the EXCLAMATION token, items[2] is the count
-        count = int(items[2])
+        count = items[2]  # Keep as Fraction (already converted by numeric_value)
         return Pat.repeat(element, count)
 
     def dot_group(self, items: List[Any]) -> Pat[Any]:
