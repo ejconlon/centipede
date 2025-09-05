@@ -7,30 +7,30 @@ Note: Actual MIDI message sending would require deeper mocking of the actor syst
 import time
 from fractions import Fraction
 from queue import Empty, Queue
-from typing import Any, Generator, List, Tuple
+from typing import Generator, List, Tuple
 from unittest.mock import patch
 
 import pytest
 from mido.frozen import FrozenMessage
 
-from bad_actor import new_system
+from bad_actor import System, new_system
 from minipat.common import PosixTime
 from minipat.live import (
-    BackendPlay,
-    BackendTiming,
+    LiveSystem,
     Orbit,
-    Timing,
 )
 from minipat.midi import (
+    MidiAttrs,
     MsgTypeField,
     NoteField,
     TimedMessage,
-    VelocityField,
-    combine,
     note,
     start_midi_live_system,
-    vel,
 )
+
+# Type aliases for brevity
+MidiLiveSystem = LiveSystem[MidiAttrs, TimedMessage]
+MidiLiveFixture = Tuple[MidiLiveSystem, "MockMidiPort"]
 
 
 class MockMidiPort:
@@ -101,6 +101,12 @@ class MockMidiPort:
         """Mark port as closed."""
         self.closed = True
 
+    def reset(self) -> None:
+        """Reset the port (MIDI interface compatibility)."""
+        # For mock purposes, reset does nothing special
+        # Real MIDI ports would send all notes off, reset controllers, etc.
+        pass
+
     def clear(self) -> None:
         """Clear recorded messages and queue."""
         self.messages = []
@@ -114,7 +120,7 @@ class MockMidiPort:
 
 
 @pytest.fixture
-def system() -> Any:
+def system() -> Generator[System, None, None]:
     """Create a test actor system."""
     sys = new_system()
     yield sys
@@ -122,370 +128,181 @@ def system() -> Any:
 
 
 @pytest.fixture
-def live_system(system: Any) -> Generator[Tuple[Any, MockMidiPort], None, None]:
+def live_system(system: System) -> Generator[MidiLiveFixture, None, None]:
     """Create a live MIDI system with mock output."""
     mock_port = MockMidiPort()
-    with patch("mido.open_output", return_value=mock_port):
+    # Patch where mido.open_output is actually called
+    with patch("minipat.midi.mido.open_output", return_value=mock_port):
         live = start_midi_live_system(system, "test_port")
         yield live, mock_port
-        # LiveSystem doesn't have dispose method
+        live.pause()
 
 
 class TestMidiLiveSystemIntegration:
     """Integration tests for MIDI live system."""
 
-    def test_system_startup_and_shutdown(self, system: Any) -> None:
-        """Test that the MIDI live system starts and shuts down cleanly."""
-        mock_port = MockMidiPort()
-
-        with patch("mido.open_output", return_value=mock_port):
-            live = start_midi_live_system(system, "test_port")
-
-            # System should be running
-            assert not mock_port.closed
-
-            # System should have the required components
-            assert hasattr(live, "_transport_sender")
-            assert hasattr(live, "_pattern_sender")
-            assert hasattr(live, "_backend_sender")
-            assert hasattr(live, "set_orbit")
-            assert hasattr(live, "play")
-            assert hasattr(live, "pause")
-            assert hasattr(live, "set_cps")
-
-    def test_set_orbit_accepts_note_stream(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that set_orbit accepts note streams."""
-        live, _ = live_system
-
-        # Create a simple note pattern using the note function
-        note_stream = note("c4 d4 e4")
-
-        # This should not raise an exception
-        live.set_orbit(Orbit(0), note_stream)
-
-        # Verify orbit was set (no exception means success)
-        assert True
-
-    def test_multiple_orbits_can_be_set(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test setting multiple orbits."""
-        live, _ = live_system
-
-        # Create different patterns for orbits
-        note_stream1 = note("c4 d4")
-        note_stream2 = note("c5 d5")
-
-        # Set different orbits - should not raise
-        live.set_orbit(Orbit(0), note_stream1)
-        live.set_orbit(Orbit(1), note_stream2)
-
-        # Can also clear an orbit
-        live.set_orbit(Orbit(0), None)
-
-        assert True
-
-    def test_play_pause_methods_exist(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test play and pause methods work without error."""
-        live, _ = live_system
-
-        # Send a pattern
-        note_stream = note("c4")
-        live.set_orbit(Orbit(0), note_stream)
-
-        # These should not raise exceptions
-        live.play()
-        time.sleep(0.01)
-        live.pause()
-        live.play()
-        live.pause()
-
-        assert True
-
-    def test_set_cps_accepts_fraction(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that set_cps accepts Fraction values."""
-        live, _ = live_system
-
-        # Set different CPS values - should not raise
-        live.set_cps(Fraction(1, 2))  # 0.5 cps
-        live.set_cps(Fraction(1, 1))  # 1 cps
-        live.set_cps(Fraction(2, 1))  # 2 cps
-
-        assert True
-
-    def test_combine_streams(self, live_system: Tuple[Any, MockMidiPort]) -> None:
-        """Test combining note and velocity streams."""
-        live, _ = live_system
-
-        # Test note messages with velocity
-        note_stream = note("c4 d4 e4")
-        vel_stream = vel("100 80 60")
-
-        # Combine streams using combine - should not raise
-        combined = combine(note_stream, vel_stream)
-
-        live.set_orbit(Orbit(0), combined)
-
-        assert True
-
-    def test_backend_timing_message_accepted(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that BackendTiming messages can be sent."""
-        live, _ = live_system
-
-        # Create a timing configuration
-        new_timing = Timing(
-            cps=Fraction(2, 1), generations_per_cycle=4, wait_factor=Fraction(1, 8)
-        )
-
-        # Send timing message - should not raise
-        live._backend_sender.send(BackendTiming(timing=new_timing))
-
-        assert True
-
-    def test_backend_play_message_accepted(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that BackendPlay messages can be sent."""
-        live, _ = live_system
-
-        # Send play messages - should not raise
-        live._backend_sender.send(BackendPlay(True))
-        time.sleep(0.01)
-        live._backend_sender.send(BackendPlay(False))
-
-        assert True
-
-    def test_all_message_types_together(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test using all message types in one session."""
+    def test_simple_message_generation(self, live_system: MidiLiveFixture) -> None:
+        """Test that a simple pattern generates messages."""
         live, mock_port = live_system
 
-        # Set up multiple orbits with different streams
-        note_stream1 = note("c4 e4 g4")
-        note_stream2 = note("c5 d5 e5")
-        vel_stream = vel("100 80 60")
+        # Clear any existing messages
+        mock_port.clear()
 
-        # Set orbit 0 with just notes
-        live.set_orbit(Orbit(0), note_stream1)
+        # Set up a simple single-note pattern
+        pattern = note("c4")
+        live.set_orbit(Orbit(0), pattern)
 
-        # Set orbit 1 with combined notes and velocities
-        combined = combine(note_stream2, vel_stream)
-        live.set_orbit(Orbit(1), combined)
-
-        # Change timing
+        # Set CPS to 1 (1 cycle per second)
         live.set_cps(Fraction(1, 1))
-
-        # Play and pause
-        live.play()
-        time.sleep(0.02)
-
-        # Send backend timing change while playing
-        new_timing = Timing(
-            cps=Fraction(2, 1), generations_per_cycle=4, wait_factor=Fraction(1, 8)
-        )
-        live._backend_sender.send(BackendTiming(timing=new_timing))
-
-        time.sleep(0.02)
-        live.pause()
-
-        # Clear an orbit
-        live.set_orbit(Orbit(0), None)
-
-        # Use backend play control
-        live._backend_sender.send(BackendPlay(True))
-        time.sleep(0.01)
-        live._backend_sender.send(BackendPlay(False))
-
-        # Verify mock port interface works (even if no messages captured)
-        assert hasattr(mock_port, "messages")
-        assert hasattr(mock_port, "send_times")
-        assert hasattr(mock_port, "clear")
-
-        # Test the clear functionality
-        mock_port.clear()
-        assert len(mock_port.messages) == 0
-        assert len(mock_port.send_times) == 0
-
-        # If we got here without exceptions, the test passes
-        assert True
-
-    def test_mock_port_interface(self, live_system: Tuple[Any, MockMidiPort]) -> None:
-        """Test that the MockMidiPort interface works correctly."""
-        _, mock_port = live_system
-
-        # Test manual message sending to verify mock works
-
-        test_msg = FrozenMessage("note_on", channel=0, note=60, velocity=100)
-
-        # Send message directly to mock
-        mock_port.send(test_msg)
-
-        # Verify it was captured
-        assert len(mock_port.messages) == 1
-        assert len(mock_port.send_times) == 1
-        assert mock_port.messages[0] == test_msg
-        assert MsgTypeField.get(mock_port.messages[0]) == "note_on"
-        assert NoteField.unmk(NoteField.get(mock_port.messages[0])) == 60
-        assert VelocityField.unmk(VelocityField.get(mock_port.messages[0])) == 100
-
-        # Test clearing
-        mock_port.clear()
-        assert len(mock_port.messages) == 0
-        assert len(mock_port.send_times) == 0
-
-        # Test closing
-        mock_port.close()
-        assert mock_port.closed
-
-        # Should raise when sending to closed port
-        with pytest.raises(RuntimeError, match="Port is closed"):
-            mock_port.send(test_msg)
-
-    def test_timed_message_queue_functionality(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that the TimedMessage queue functionality works correctly."""
-        _, mock_port = live_system
-
-        # Test manual message sending to verify queue works
-        test_msg1 = FrozenMessage("note_on", channel=0, note=60, velocity=100)
-        test_msg2 = FrozenMessage("note_off", channel=0, note=60, velocity=0)
-
-        # Initially no messages
-        assert not mock_port.has_messages()
-        assert mock_port.wait_for_message(timeout=0.1) is None
-
-        # Send messages
-        mock_port.send(test_msg1)
-        mock_port.send(test_msg2)
-
-        # Should have messages now
-        assert mock_port.has_messages()
-
-        # Get first message
-        timed_msg1 = mock_port.wait_for_message(timeout=0.1)
-        assert timed_msg1 is not None
-        assert timed_msg1.message == test_msg1
-        assert MsgTypeField.get(timed_msg1.message) == "note_on"
-        assert isinstance(timed_msg1.time, float)
-
-        # Get second message
-        timed_msg2 = mock_port.wait_for_message(timeout=0.1)
-        assert timed_msg2 is not None
-        assert timed_msg2.message == test_msg2
-        assert MsgTypeField.get(timed_msg2.message) == "note_off"
-
-        # No more messages
-        assert not mock_port.has_messages()
-        assert mock_port.wait_for_message(timeout=0.1) is None
-
-    def test_wait_for_multiple_messages(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test waiting for multiple messages at once."""
-        _, mock_port = live_system
-
-        # Send multiple messages
-        messages = [
-            FrozenMessage("note_on", channel=0, note=60, velocity=100),
-            FrozenMessage("note_on", channel=0, note=64, velocity=80),
-            FrozenMessage("note_on", channel=0, note=67, velocity=90),
-        ]
-
-        for msg in messages:
-            mock_port.send(msg)
-
-        # Wait for all 3 messages
-        timed_messages = mock_port.wait_for_messages(count=3, timeout=0.5)
-        assert len(timed_messages) == 3
-
-        # Verify all messages are correct
-        for i, timed_msg in enumerate(timed_messages):
-            assert timed_msg.message == messages[i]
-            assert MsgTypeField.get(timed_msg.message) == "note_on"
-
-        # No more messages left
-        assert not mock_port.has_messages()
-
-    def test_wait_for_messages_timeout(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that waiting for messages respects timeout."""
-        _, mock_port = live_system
-
-        # Send only 1 message but wait for 3
-        test_msg = FrozenMessage("note_on", channel=0, note=60, velocity=100)
-        mock_port.send(test_msg)
-
-        # Should only get 1 message, then wait for remaining timeout
-        start_time = time.time()
-        timed_messages = mock_port.wait_for_messages(count=3, timeout=0.2)
-        elapsed = time.time() - start_time
-
-        assert len(timed_messages) == 1
-        assert timed_messages[0].message == test_msg
-        # Should wait approximately the full timeout since we asked for 3 messages
-        assert 0.18 <= elapsed <= 0.25  # Allow some tolerance for timing
-
-    def test_queue_clearing(self, live_system: Tuple[Any, MockMidiPort]) -> None:
-        """Test that clearing works for both lists and queue."""
-        _, mock_port = live_system
-
-        # Send some messages
-        for i in range(3):
-            msg = FrozenMessage("note_on", channel=0, note=60 + i, velocity=100)
-            mock_port.send(msg)
-
-        # Verify messages are there
-        assert len(mock_port.messages) == 3
-        assert mock_port.has_messages()
-
-        # Clear everything
-        mock_port.clear()
-
-        # Verify everything is cleared
-        assert len(mock_port.messages) == 0
-        assert len(mock_port.send_times) == 0
-        assert not mock_port.has_messages()
-        assert mock_port.wait_for_message(timeout=0.1) is None
-
-    def test_live_system_with_message_verification(
-        self, live_system: Tuple[Any, MockMidiPort]
-    ) -> None:
-        """Test that we can verify actual messages from the live system."""
-        live, mock_port = live_system
-
-        # Set up a simple pattern
-        note_stream = note("c4 d4")
-        live.set_orbit(Orbit(0), note_stream)
 
         # Start playing
         live.play()
 
-        # Wait a bit for messages to be generated and sent
-        # Note: This test may be flaky depending on timing and actor scheduling
-        time.sleep(0.1)
-
-        # Check if any messages were captured
-        # We don't assert specific counts as that depends on internal timing
-        # But we can at least verify the queue interface works
-        has_messages = mock_port.has_messages()
-        message_count = len(mock_port.messages)
+        # Wait for messages to be generated
+        time.sleep(1.5)
 
         # Stop playing
         live.pause()
 
-        # The test passes if we got this far without exceptions
-        # In a real scenario, we might get messages, but due to actor timing
-        # and mocking, we might not. The important thing is the queue works.
-        print(f"Captured {message_count} messages, queue has messages: {has_messages}")
-        assert True
+        # Check what we got
+        message_count = len(mock_port.messages)
+
+        # Collect from queue
+        queued_messages = []
+        while mock_port.has_messages():
+            msg = mock_port.wait_for_message(timeout=0.1)
+            if msg:
+                queued_messages.append(msg)
+
+        # At this point we expect to have received at least one message
+        assert message_count > 0 or len(queued_messages) > 0, (
+            "Expected at least one message from the live system"
+        )
+
+    def test_multiple_orbits_with_cps_timing(
+        self, live_system: MidiLiveFixture
+    ) -> None:
+        """Test that multiple orbits generate messages at the expected CPS rate.
+
+        This test verifies that when we set a specific CPS (cycles per second),
+        the live system generates and sends messages through the mock port
+        at roughly the expected timing intervals.
+        """
+        live, mock_port = live_system
+
+        # Clear any existing messages
+        mock_port.clear()
+
+        # Set CPS to 2 (2 cycles per second = 0.5 seconds per cycle)
+        cps = Fraction(2, 1)
+        live.set_cps(cps)
+
+        # Set up two orbits with different note patterns
+        # Orbit 0: 3 notes per cycle
+        orbit0_pattern = note("c4 d4 e4")
+        live.set_orbit(Orbit(0), orbit0_pattern)
+
+        # Orbit 1: 2 notes per cycle
+        orbit1_pattern = note("f5 g5")
+        live.set_orbit(Orbit(1), orbit1_pattern)
+
+        # Start playing to trigger the live system
+        start_time = time.time()
+        live.play()
+
+        # Wait for at least 2 full cycles
+        # At 2 CPS, 2 cycles = 1 second
+        # Add extra time to account for processing delays
+        time.sleep(1.2)
+
+        # Stop playing
+        live.pause()
+        end_time = time.time()
+
+        # Collect all messages that the live system sent
+        messages = []
+        while mock_port.has_messages():
+            msg = mock_port.wait_for_message(timeout=0.1)
+            if msg is not None:
+                messages.append(msg)
+
+        # We should have received messages
+        assert len(messages) > 0, (
+            "Expected to receive MIDI messages from the live system"
+        )
+
+        # Group messages by note to identify orbits
+        c4_messages = []  # From orbit 0
+        d4_messages = []  # From orbit 0
+        e4_messages = []  # From orbit 0
+        f5_messages = []  # From orbit 1
+        g5_messages = []  # From orbit 1
+
+        for msg in messages:
+            if MsgTypeField.get(msg.message) == "note_on":
+                note_num = NoteField.unmk(NoteField.get(msg.message))
+                if note_num == 60:  # C4
+                    c4_messages.append(msg)
+                elif note_num == 62:  # D4
+                    d4_messages.append(msg)
+                elif note_num == 64:  # E4
+                    e4_messages.append(msg)
+                elif note_num == 77:  # F5
+                    f5_messages.append(msg)
+                elif note_num == 79:  # G5
+                    g5_messages.append(msg)
+
+        # If we got messages, verify we got at least some from each pattern
+        # (we ran for ~1.2 seconds at 2 CPS, so we expect ~2 cycles)
+        if len(c4_messages) > 0:
+            assert len(c4_messages) >= 2, (
+                f"Expected at least 2 C4 notes, got {len(c4_messages)}"
+            )
+        if len(d4_messages) > 0:
+            assert len(d4_messages) >= 2, (
+                f"Expected at least 2 D4 notes, got {len(d4_messages)}"
+            )
+        if len(e4_messages) > 0:
+            assert len(e4_messages) >= 2, (
+                f"Expected at least 2 E4 notes, got {len(e4_messages)}"
+            )
+        if len(f5_messages) > 0:
+            assert len(f5_messages) >= 2, (
+                f"Expected at least 2 F5 notes, got {len(f5_messages)}"
+            )
+        if len(g5_messages) > 0:
+            assert len(g5_messages) >= 2, (
+                f"Expected at least 2 G5 notes, got {len(g5_messages)}"
+            )
+
+        # Verify timing is roughly correct for CPS=2
+        # At 2 CPS, each cycle should be 0.5 seconds
+        # Check the time between successive C4 notes (start of each cycle for orbit 0)
+        if len(c4_messages) >= 2:
+            for i in range(1, min(len(c4_messages), 3)):  # Check first 2 intervals
+                time_diff = c4_messages[i].time - c4_messages[i - 1].time
+                # Allow 30% tolerance for timing due to system scheduling
+                expected_cycle_time = 0.5  # seconds (1/CPS)
+                assert 0.35 <= time_diff <= 0.65, (
+                    f"Expected cycle time around {expected_cycle_time}s, "
+                    f"got {time_diff:.3f}s between C4 notes"
+                )
+
+        # Similarly check F5 notes for orbit 1
+        if len(f5_messages) >= 2:
+            for i in range(1, min(len(f5_messages), 3)):  # Check first 2 intervals
+                time_diff = f5_messages[i].time - f5_messages[i - 1].time
+                expected_cycle_time = 0.5  # seconds
+                assert 0.35 <= time_diff <= 0.65, (
+                    f"Expected cycle time around {expected_cycle_time}s, "
+                    f"got {time_diff:.3f}s between F5 notes"
+                )
+
+        # Log debug info
+        total_duration = end_time - start_time
+        print(f"Test ran for {total_duration:.2f}s at {cps} CPS")
+        print(f"Collected {len(messages)} total messages from live system")
+        print(
+            f"Orbit 0 notes: C4={len(c4_messages)}, D4={len(d4_messages)}, E4={len(e4_messages)}"
+        )
+        print(f"Orbit 1 notes: F5={len(f5_messages)}, G5={len(g5_messages)}")

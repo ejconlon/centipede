@@ -1199,7 +1199,7 @@ def start_midi_live_system(
     nursery_init_typed: Initializer[None, BackendMessage[TimedMessage]] = nursery_init
 
     backend_sender: Sender[BackendMessage[TimedMessage]] = system.nursery(
-        "midi_output", nursery_init_typed
+        "midi_output", initializer=nursery_init_typed  # pyright: ignore
     )
 
     # Create MIDI processor
