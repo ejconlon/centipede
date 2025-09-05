@@ -75,7 +75,7 @@ def test_repetition_patterns() -> None:
 
 
 def test_elongation_patterns() -> None:
-    """Test elongation patterns."""
+    """Test stretch patterns."""
     round_trip_test("x_")
     round_trip_test("bd__")
     round_trip_test("hh___")

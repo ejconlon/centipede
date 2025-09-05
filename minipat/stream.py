@@ -638,33 +638,21 @@ class RepetitionStream[T](Stream[T]):
 
 @dataclass(frozen=True)
 class ElongationStream[T](Stream[T]):
-    """Specialized stream for elongation patterns."""
+    """Specialized stream for stretch patterns."""
 
     pattern: Stream[T]
     count: int
 
     @override
     def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+        # Stretch semantics are handled at the sequence level
+        # When used outside a sequence, stretch just passes through
+        # This maintains backward compatibility with direct Stream.stretch() usage
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        stretched_arc = arc.scale(Fraction(self.count))
-        pattern_events = self.pattern.unstream(stretched_arc)
-        elong_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
-
-        for _, ev in pattern_events:
-            elongated_ev = ev.scale(Fraction(1, self.count))
-            span = _create_span(elongated_ev.span.active, arc)
-            if span is not None:
-                # Preserve the whole information from scaling
-                if elongated_ev.span.whole is not None:
-                    span = Span(active=span.active, whole=elongated_ev.span.whole)
-                elif elongated_ev.span.active != span.active:
-                    span = Span(active=span.active, whole=elongated_ev.span.active)
-                new_ev = Ev(span, elongated_ev.val)
-                elong_result = ev_heap_push(new_ev, elong_result)
-
-        return elong_result
+        # Pass through unchanged - the stretching happens in WeightedSeqStream
+        return self.pattern.unstream(arc)
 
 
 @dataclass(frozen=True)
@@ -1010,10 +998,16 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
             # Create weighted sequence where each child contributes its weight
             weighted_children = []
             for child in children:
-                # Calculate weight: repeat patterns contribute their count, others contribute 1
+                # Calculate weight based on pattern type
                 weight = Fraction(1)
                 if isinstance(child.unwrap, PatRepeat):
-                    weight = child.unwrap.count
+                    # Repeat patterns don't affect weight, they repeat within their slot
+                    weight = Fraction(1)
+                elif isinstance(child.unwrap, PatStretch):
+                    # Stretch patterns take up more space (weight = count)
+                    weight = Fraction(child.unwrap.count)
+                    # Use the inner pattern, not the stretch wrapper
+                    child = child.unwrap.pat
                 weighted_children.append((pat_stream(child), weight))
 
             return WeightedSeqStream(weighted_children)
@@ -1033,6 +1027,8 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
             pattern_stream = pat_stream(pat)
             return RepetitionStream(pattern_stream, op, factor)
         case PatStretch(pat, count):
+            # When stretch appears outside a sequence, we still create ElongationStream
+            # for backward compatibility, but it just passes through
             pattern_stream = pat_stream(pat)
             return ElongationStream(pattern_stream, count)
         case PatProb(pat, chance):

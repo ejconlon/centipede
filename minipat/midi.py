@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from functools import partial
 from logging import Logger
 from threading import Event
-from typing import Any, Iterable, NewType, Optional, Tuple, cast, override
+from typing import Any, Iterable, NewType, Optional, Sequence, Tuple, cast, override
 
 import mido
 from mido.frozen import FrozenMessage, freeze_message
@@ -906,7 +906,30 @@ def _merge_attrs(x: MidiAttrs, y: MidiAttrs) -> MidiAttrs:
     return x.merge(y)
 
 
-def combine(*ss: Stream[MidiAttrs]) -> Stream[MidiAttrs]:
+def combine(s1: Stream[MidiAttrs], s2: Stream[MidiAttrs]) -> Stream[MidiAttrs]:
+    """Combine two MIDI streams into a single stream.
+
+    Takes two streams of MIDI attributes and merges them together
+    using inner join semantics. This allows you to layer different
+    MIDI aspects (notes, velocities, etc.) into complete MIDI events.
+
+    Args:
+        s1: First MIDI attribute stream
+        s2: Second MIDI attribute stream
+
+    Returns:
+        A single stream containing merged MIDI attributes
+
+    Examples:
+        # Combine notes with velocities
+        notes = note("c4 d4 e4")
+        velocities = vel("64 80 100")
+        combined = combine(notes, velocities)
+    """
+    return s1.apply(MergeStrat.Inner, _merge_attrs, s2)
+
+
+def combine_all(ss: Sequence[Stream[MidiAttrs]]) -> Stream[MidiAttrs]:
     """Combine multiple MIDI streams into a single stream.
 
     Takes multiple streams of MIDI attributes and merges them together
@@ -924,21 +947,23 @@ def combine(*ss: Stream[MidiAttrs]) -> Stream[MidiAttrs]:
         # Combine notes with velocities
         notes = note("c4 d4 e4")
         velocities = vel("64 80 100")
-        combined = combine(notes, velocities)
+        combined = combine_all(notes, velocities)
 
         # Layer multiple attributes
         notes = note("c4 ~ g4")
         velocities = vel("100 ~ 80")
         channels = ...  # hypothetical channel stream
-        result = combine(notes, velocities, channels)
+        result = combine_all(notes, velocities, channels)
     """
-    if len(ss):
+    if len(ss) == 0:
+        return Stream.silent()
+    elif len(ss) == 1:
+        return ss[0]
+    else:
         acc = ss[0]
         for el in ss[1:]:
-            acc = acc.apply(MergeStrat.Inner, _merge_attrs, el)
+            acc = combine(acc, el)
         return acc
-    else:
-        return Stream.silent()
 
 
 # =============================================================================

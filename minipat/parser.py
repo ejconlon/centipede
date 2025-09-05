@@ -101,15 +101,15 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         for i in range(1, len(items)):
             item = items[i]
             if isinstance(item, str) and item == "_":
-                # This is an underscore token - elongate the current element
+                # This is an underscore token - stretch the current element
                 if isinstance(current_element.unwrap, PatStretch):
-                    # Already elongated, add to count
+                    # Already stretched, add 1 to count (each _ adds 1)
                     base_element = current_element.unwrap.pat
                     total_count = current_element.unwrap.count + 1
                     current_element = Pat.stretch(base_element, total_count)
                 else:
-                    # Create new elongation
-                    current_element = Pat.stretch(current_element, 1)
+                    # Create new stretch (1 underscore = stretch by 2)
+                    current_element = Pat.stretch(current_element, 2)
             else:
                 # This is another element
                 result.append(current_element)
@@ -239,27 +239,36 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         return Pat.speed(element, op, num)
 
     def elongation(self, items: List[Any]) -> Pat[Any]:
-        """Transform elongation patterns like bd_ or bd@2."""
+        """Transform stretch patterns like bd_ or bd@2."""
         element = items[0]
 
         # Check if we have @ followed by a number
         if len(items) >= 3 and str(items[1]) == "@":
             # Case: bd@N (@ followed by numeric value)
-            n = int(items[2])
-            current_count = max(0, n - 1)  # @N means N-1 underscores
+            # @N means stretch by a factor of N
+            current_count = int(items[2])
         else:
             # Case: bd_ (underscores)
-            elongation_symbols = items[1:]
-            current_count = len(elongation_symbols)
+            # Each underscore adds +1 to the base count of 1
+            # So bd_ = count 2, bd__ = count 3, etc.
+            stretch_symbols = items[1:]
+            current_count = 1 + len(stretch_symbols)
 
-        # Check if the element is already an elongation and collapse them
+        # Check if the element is already a stretch and collapse them
         if isinstance(element.unwrap, PatStretch):
-            # Nested elongation: combine the counts
+            # Nested stretch: add the additional underscores
+            # current_count represents the stretch from these underscores
             base_element = element.unwrap.pat
-            total_count = element.unwrap.count + current_count
+            if len(items) >= 3 and str(items[1]) == "@":
+                # @N case: replace the count entirely
+                total_count = current_count
+            else:
+                # Underscore case: each _ adds 1 to existing count
+                additional_underscores = len(items) - 1  # -1 for the element itself
+                total_count = element.unwrap.count + additional_underscores
             return Pat.stretch(base_element, total_count)
         else:
-            # Regular elongation
+            # Regular stretch
             return Pat.stretch(element, current_count)
 
     def replicate(self, items: List[Any]) -> Pat[Any]:

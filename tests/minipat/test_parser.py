@@ -174,16 +174,88 @@ def test_parse_multiple_repetition() -> None:
 
 
 def test_parse_elongation() -> None:
-    """Test parsing elongation with _ or @."""
+    """Test parsing stretch with _ or @."""
     result = parse_pattern("bd_")
     assert isinstance(result.unwrap, PatStretch)
-    assert result.unwrap.count == 1  # Single elongation
+    assert result.unwrap.count == 2  # bd_ = stretch by 2
     assert_string_value(result.unwrap.pat.unwrap.value, "bd")
 
     result2 = parse_pattern("bd__")
     assert isinstance(result2.unwrap, PatStretch)
-    assert result2.unwrap.count == 2  # Double elongation
+    assert result2.unwrap.count == 3  # bd__ = stretch by 3
     assert_string_value(result2.unwrap.pat.unwrap.value, "bd")
+
+
+def test_stretch_equivalence() -> None:
+    """Test that different stretch notations are equivalent."""
+    # All these forms should create stretch with count=3
+    patterns = ["x@3", "x__", "x _ _", "x_ _"]
+
+    for pattern_str in patterns:
+        result = parse_pattern(pattern_str)
+        # Handle both direct stretch and sequence with single stretched element
+        if isinstance(result.unwrap, PatStretch):
+            assert result.unwrap.count == 3, (
+                f"Pattern '{pattern_str}' should have count=3, got {result.unwrap.count}"
+            )
+        elif isinstance(result.unwrap, PatSeq) and len(list(result.unwrap.pats)) == 1:
+            child = next(iter(result.unwrap.pats))
+            assert isinstance(child.unwrap, PatStretch)
+            assert child.unwrap.count == 3, (
+                f"Pattern '{pattern_str}' should have count=3, got {child.unwrap.count}"
+            )
+        else:
+            assert False, (
+                f"Pattern '{pattern_str}' has unexpected structure: {result.unwrap}"
+            )
+
+
+def test_symbol_with_colon() -> None:
+    """Test that a:b is a valid identifier."""
+    result = parse_pattern("a:b")
+    assert isinstance(result.unwrap, PatPure)
+    assert result.unwrap.value == "a:b"
+
+    # Test in sequences too
+    result2 = parse_pattern("a:b c:d")
+    assert isinstance(result2.unwrap, PatSeq)
+    children = list(result2.unwrap.pats)
+    assert len(children) == 2
+    assert children[0].unwrap.value == "a:b"
+    assert children[1].unwrap.value == "c:d"
+
+
+def test_rests_without_spacing() -> None:
+    """Test that rests (~) work without spacing."""
+    test_patterns = [
+        ("a~b", ["a", "~", "b"]),
+        ("~a~", ["~", "a", "~"]),
+        ("a~b~c", ["a", "~", "b", "~", "c"]),
+    ]
+
+    for pattern_str, expected_values in test_patterns:
+        result = parse_pattern(pattern_str)
+        assert isinstance(result.unwrap, PatSeq), (
+            f"Pattern '{pattern_str}' should be a sequence"
+        )
+
+        children = list(result.unwrap.pats)
+        assert len(children) == len(expected_values), (
+            f"Pattern '{pattern_str}' should have {len(expected_values)} elements"
+        )
+
+        for i, (child, expected) in enumerate(zip(children, expected_values)):
+            if expected == "~":
+                assert isinstance(child.unwrap, PatSilent), (
+                    f"Element {i} in '{pattern_str}' should be silence"
+                )
+            else:
+                assert isinstance(child.unwrap, PatPure), (
+                    f"Element {i} in '{pattern_str}' should be pure value"
+                )
+                assert child.unwrap.value == expected, (
+                    f"Element {i} in '{pattern_str}' should be '{expected}'"
+                )
 
 
 def test_parse_probability() -> None:

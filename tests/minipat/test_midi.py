@@ -34,6 +34,7 @@ from minipat.midi import (
     VelocityField,
     VelocityKey,
     combine,
+    combine_all,
     echo_system,
     note,
     parse_message,
@@ -89,8 +90,8 @@ def test_velocity_parsing() -> None:
     assert 100 in values
 
 
-def test_combine_streams() -> None:
-    """Test combining note and velocity streams."""
+def test_combine_two_streams() -> None:
+    """Test combining two streams with combine function."""
     note_stream = note("c4 d4")
     vel_stream = vel("64 80")
 
@@ -114,6 +115,28 @@ def test_combine_streams() -> None:
             break
     else:
         assert False, "No event found with both note and velocity"
+
+
+def test_combine_all_streams() -> None:
+    """Test combining multiple streams with combine_all function."""
+    # Test with no streams
+    empty = combine_all([])
+    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = list(empty.unstream(arc))
+    assert len(events) == 0  # Should be silent
+
+    # Test with one stream
+    single = combine_all([note("c4")])
+    events = list(single.unstream(arc))
+    assert len(events) > 0
+
+    # Test with multiple streams
+    note_stream = note("c4 d4")
+    vel_stream = vel("64 80")
+    # Test with two streams
+    combined = combine_all([note_stream, vel_stream])
+    events = list(combined.unstream(arc))
+    assert len(events) > 0
 
 
 def test_midi_processor() -> None:

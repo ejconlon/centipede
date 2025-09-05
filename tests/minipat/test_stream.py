@@ -143,7 +143,7 @@ def test_repetition_slow() -> None:
 
 
 def test_elongation_pattern() -> None:
-    """Test elongation pattern."""
+    """Test stretch pattern."""
     # Pattern equivalent to "x@2"
     base_pattern = Pat.pure("x")
     pattern = Pat.stretch(base_pattern, 2)
@@ -730,13 +730,13 @@ def test_probability_sub_cycle_splitting() -> None:
 
 
 def test_elongation_sub_cycle_splitting() -> None:
-    """Test elongation patterns across sub-cycles."""
+    """Test stretch patterns across sub-cycles."""
     # Elongation pattern: "x@3"
     base_pattern = Pat.pure("x")
     pattern = Pat.stretch(base_pattern, 3)
     stream = pat_stream(pattern)
 
-    # Query multiple cycles to see the elongated pattern
+    # Query multiple cycles to see the stretched pattern
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
     events = stream.unstream(arc)
     event_list = list(events)
