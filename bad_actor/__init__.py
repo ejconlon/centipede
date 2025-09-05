@@ -10,14 +10,12 @@ from logging import Logger
 from threading import Condition, Event, Lock, Thread
 from typing import (
     Any,
-    Callable,
     Dict,
     List,
     Never,
     NewType,
     Optional,
     Set,
-    Tuple,
     TypeVar,
     override,
 )
@@ -385,26 +383,16 @@ class Control(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def nursery[S, T](
-        self,
-        name: str,
-        state: Optional[S] = None,
-        initializer: Optional[Initializer[S, T]] = None,
-        finalizer: Optional[Finalizer[S]] = None,
-    ) -> Sender[T]:
-        """Create a nursery for structured concurrency.
+    def spawn_nursery[T](self, name: str, nursery: Nursery[T]) -> Sender[T]:
+        """Create a nursery using the new Nursery class interface.
 
-        Spawns a NurseryActor that executes the initializer function to create
-        child actors and tasks. The nursery forwards messages to a target actor
-        and ensures all children complete together.
+        Spawns a NurseryActor that uses the provided Nursery instance for
+        initialization and finalization. This provides better type inference
+        than the older function-based interface.
 
         Args:
             name: The name for the nursery actor.
-            state: Optional state passed to initializer and finalizer.
-            initializer: Function that spawns children and returns a target Sender[T].
-                        Defaults to null_initializer if None.
-            finalizer: Function called during nursery shutdown for cleanup.
-                      Defaults to null_finalizer if None.
+            nursery: The Nursery instance defining initialization and finalization.
 
         Returns:
             A sender for communicating with the nursery (messages are forwarded).
@@ -1130,34 +1118,8 @@ class ControlImpl(Control):
         Returns:
             A sender for communicating with the spawned actor.
         """
-
-        def callback_initializer(
-            state: Optional[Tuple[Actor[T], Callback[T]]], env: ActorEnv
-        ) -> Sender[T]:
-            if state is None:
-                raise RuntimeError("spawn_callback initializer called with None state")
-            actor_instance, callback_instance = state
-            sender = env.control.spawn_actor(f"{name}-actor", actor_instance)
-            callback_instance.register(sender)
-            return sender
-
-        def callback_finalizer(
-            state: Optional[Tuple[Actor[T], Callback[T]]], logger: Logger
-        ) -> None:
-            if state is not None:
-                _, callback_instance = state
-                try:
-                    callback_instance.deregister()
-                    logger.debug("Callback deregistered successfully")
-                except Exception as e:
-                    logger.error("Failed to deregister callback: %s", e)
-
-        return self.nursery(
-            name=name,
-            state=(actor, callback),
-            initializer=callback_initializer,
-            finalizer=callback_finalizer,
-        )
+        nursery = CallbackNursery(actor, callback, f"{name}-actor")
+        return self.spawn_nursery(name, nursery)
 
     @override
     def null[T](self) -> Sender[T]:  # pyright: ignore
@@ -1255,34 +1217,17 @@ class ControlImpl(Control):
                 )
 
     @override
-    def nursery[S, T](
-        self,
-        name: str,
-        state: Optional[S] = None,
-        initializer: Optional[Initializer[S, T]] = None,
-        finalizer: Optional[Finalizer[S]] = None,
-    ) -> Sender[T]:
-        """Create a nursery for structured concurrency.
-
-        Creates a NurseryActor that executes the initializer to spawn children
-        and provides message forwarding to a target actor.
+    def spawn_nursery[T](self, name: str, nursery: Nursery[T]) -> Sender[T]:
+        """Create a nursery using the new Nursery class interface.
 
         Args:
             name: The name for the nursery actor.
-            state: Optional state passed to initializer and finalizer.
-            initializer: Function that spawns children and returns target Sender[T].
-                        Defaults to null_initializer if None.
-            finalizer: Function called during nursery shutdown for cleanup.
-                      Defaults to null_finalizer if None.
+            nursery: The Nursery instance defining initialization and finalization.
 
         Returns:
             A sender for communicating with the nursery.
         """
-        actual_initializer = (
-            initializer if initializer is not None else null_initializer
-        )
-        actual_finalizer = finalizer if finalizer is not None else null_finalizer
-        nursery_actor = NurseryActor(state, actual_initializer, actual_finalizer)
+        nursery_actor = NurseryActor(nursery)
         return self.spawn_actor(name, nursery_actor)
 
 
@@ -1363,27 +1308,17 @@ class System(Control):
         return self._control.null()
 
     @override
-    def nursery[S, T](
-        self,
-        name: str,
-        state: Optional[S] = None,
-        initializer: Optional[Initializer[S, T]] = None,
-        finalizer: Optional[Finalizer[S]] = None,
-    ) -> Sender[T]:
-        """Create a nursery for structured concurrency.
+    def spawn_nursery[T](self, name: str, nursery: Nursery[T]) -> Sender[T]:
+        """Create a nursery using the new Nursery class interface.
 
         Args:
             name: The name for the nursery actor.
-            state: Optional state passed to initializer and finalizer.
-            initializer: Function that spawns children and returns target Sender[T].
-                        Defaults to null_initializer if None.
-            finalizer: Function called during nursery shutdown for cleanup.
-                      Defaults to null_finalizer if None.
+            nursery: The Nursery instance defining initialization and finalization.
 
         Returns:
             A sender for communicating with the nursery.
         """
-        return self._control.nursery(name, state, initializer, finalizer)
+        return self._control.spawn_nursery(name, nursery)
 
     @override
     def stop(self, immediate: bool = False) -> None:
@@ -1537,61 +1472,90 @@ class Callback[T](metaclass=ABCMeta):
         raise NotImplementedError
 
 
-type Initializer[S, T] = Callable[[Optional[S], ActorEnv], Sender[T]]
-"""Type alias for nursery initializer functions.
+class Nursery[T](metaclass=ABCMeta):
+    """Abstract base class for nursery implementations.
 
-An initializer function takes the optional nursery state and actor environment,
-spawns child actors and tasks as needed, and returns a Sender[T] that
-will be used as the target for forwarding messages to the nursery.
-"""
+    A Nursery provides structured concurrency by managing child actors and tasks
+    as a unit. The nursery pattern ensures that all spawned children complete
+    before the nursery itself completes, implementing a one-for-all supervision
+    strategy.
 
-
-def null_initializer[S, T](state: Optional[S], env: ActorEnv) -> Sender[T]:  # pyright: ignore
-    """Default initializer that returns a null sender.
-
-    This initializer does not spawn any child actors or tasks and simply
-    returns a null sender that discards all messages. Useful for creating
-    empty nurseries or as a default when no initializer is provided.
-
-    Args:
-        state: The nursery state (unused).
-        env: The actor environment.
-
-    Returns:
-        A null sender that discards all messages.
+    Type Parameters:
+        T: The message type that the nursery forwards to its target.
     """
-    return env.control.null()
+
+    @abstractmethod
+    def initialize(self, env: ActorEnv) -> Sender[T]:
+        """Initialize the nursery and spawn child actors/tasks.
+
+        Called when the nursery actor starts. This method should spawn any
+        required child actors and tasks using the provided environment's
+        control interface.
+
+        Args:
+            env: The actor environment providing access to control operations.
+
+        Returns:
+            A Sender[T] that will receive forwarded messages from the nursery.
+            This is typically a sender to one of the spawned child actors.
+        """
+        raise NotImplementedError
+
+    def finalize(self, logger: Logger) -> None:
+        """Finalize the nursery during shutdown.
+
+        Called when the nursery actor stops. Override this method to perform
+        any cleanup operations. The default implementation does nothing.
+
+        Args:
+            logger: Logger for recording finalization messages.
+        """
+        pass
 
 
-type Finalizer[S] = Callable[[Optional[S], Logger], None]
-"""Type alias for nursery finalizer functions.
+class CallbackNursery[T](Nursery[T]):
+    """Nursery that integrates an actor with a callback.
 
-A finalizer function takes the optional nursery state and logger and performs
-cleanup operations when the nursery is shutting down. This is called
-during the nursery's on_stop lifecycle method.
-"""
-
-
-def null_finalizer[S](state: Optional[S], logger: Logger) -> None:
-    """Default finalizer that performs no cleanup.
-
-    This finalizer does nothing and serves as a safe default when no
-    cleanup is needed or when no finalizer is provided to a nursery.
-
-    Args:
-        state: The nursery state (unused).
-        logger: The logger (unused).
+    This nursery spawns an actor and registers a callback with it, ensuring
+    proper cleanup when the nursery shuts down. This is useful for integrating
+    actors with external event sources or notification systems.
     """
-    pass
+
+    def __init__(self, actor: Actor[T], callback: Callback[T], actor_name: str):
+        """Initialize the callback nursery.
+
+        Args:
+            actor: The actor to spawn.
+            callback: The callback to register with the actor.
+            actor_name: The name to use for the spawned actor.
+        """
+        self._actor = actor
+        self._callback = callback
+        self._actor_name = actor_name
+
+    def initialize(self, env: ActorEnv) -> Sender[T]:
+        """Spawn the actor and register the callback."""
+        sender = env.control.spawn_actor(self._actor_name, self._actor)
+        self._callback.register(sender)
+        return sender
+
+    def finalize(self, logger: Logger) -> None:
+        """Deregister the callback during shutdown."""
+        try:
+            self._callback.deregister()
+            logger.debug("Callback deregistered successfully")
+        except Exception as e:
+            logger.error("Failed to deregister callback: %s", e)
+            raise
 
 
-class NurseryActor[S, T](Actor[T]):
+class NurseryActor[T](Actor[T]):
     """Nursery actor that provides structured concurrency for child actors.
 
     The NurseryActor pattern creates a supervision scope where child actors and
     tasks can be dynamically spawned. It forwards all incoming messages to a
-    designated target actor returned by the initializer. The nursery implements
-    a one-for-all supervision strategy: if any child reports an error or
+    designated target actor returned by the nursery's initialize method. The nursery
+    implements a one-for-all supervision strategy: if any child reports an error or
     completes, all children are stopped together.
 
     This provides structured concurrency similar to Python's async nurseries or
@@ -1599,30 +1563,20 @@ class NurseryActor[S, T](Actor[T]):
     nursery itself completes.
     """
 
-    def __init__(
-        self,
-        state: Optional[S],
-        initializer: Initializer[S, T],
-        finalizer: Finalizer[S],
-    ):
-        """Initialize the nursery with an initializer function.
+    def __init__(self, nursery: Nursery[T]):
+        """Initialize the nursery actor with a Nursery instance.
 
         Args:
-            state: Optional state passed to initializer and finalizer.
-            initializer: Function that spawns child actors/tasks and returns
-                        a Sender[T] to which messages will be forwarded.
-            finalizer: Function called during nursery shutdown for cleanup.
+            nursery: The Nursery instance that defines initialization and finalization.
         """
-        self._state = state
-        self._initializer = initializer
-        self._finalizer = finalizer
+        self._nursery = nursery
         self._target_sender: Optional[Sender[T]] = None
 
     @override
     def on_start(self, env: ActorEnv) -> None:
-        """Execute the initializer to spawn children and get the target sender.
+        """Execute the nursery's initialize method to spawn children and get the target sender.
 
-        The initializer function is called with the actor environment, allowing
+        The nursery's initialize method is called with the actor environment, allowing
         it to spawn any number of child actors and tasks. The returned sender
         becomes the target for all forwarded messages.
 
@@ -1631,7 +1585,7 @@ class NurseryActor[S, T](Actor[T]):
         """
         env.logger.debug("NurseryActor starting, executing initializer")
         try:
-            self._target_sender = self._initializer(self._state, env)
+            self._target_sender = self._nursery.initialize(env)
             env.logger.debug("NurseryActor initializer completed successfully")
         except Exception as e:
             env.logger.error("NurseryActor initializer failed: %s", e)
@@ -1684,19 +1638,20 @@ class NurseryActor[S, T](Actor[T]):
 
     @override
     def on_stop(self, logger: Logger) -> None:
-        """Execute the finalizer to clean up state.
+        """Execute the nursery's finalize method to clean up state.
 
-        Calls the finalizer function with the state and logger, allowing
+        Calls the nursery's finalize method with the logger, allowing
         for safe cleanup of any resources or state maintained by the nursery.
         Exceptions from the finalizer are caught and logged to prevent
         them from propagating and causing actor system instability.
 
         Args:
-            logger: The logger to use for finalizer execution.
+            logger: The logger to use for finalization.
         """
         logger.debug("NurseryActor stopping, executing finalizer")
         try:
-            self._finalizer(self._state, logger)
+            self._nursery.finalize(logger)
             logger.debug("NurseryActor finalizer completed successfully")
         except Exception as e:
             logger.error("NurseryActor finalizer failed: %s", e)
+            raise

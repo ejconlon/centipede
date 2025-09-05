@@ -18,8 +18,8 @@ from bad_actor import (
     Actor,
     ActorEnv,
     Callback,
-    Initializer,
     Mutex,
+    Nursery,
     Sender,
     System,
     Task,
@@ -1181,26 +1181,23 @@ def start_midi_live_system(
     timing = Timing.default()
     timing_mutex = Mutex(Box(timing))
 
-    # Create and spawn the MIDI backend actor and sender task in a nursery
-    # so they share a lifecycle
-    def nursery_init(
-        state: None, env: ActorEnv
-    ) -> Sender[BackendMessage[TimedMessage]]:
-        # Create the timing-aware MIDI backend actor
-        midi_backend = MidiBackendActor(message_heap, output_mutex, timing_mutex)
-        backend_sender = env.control.spawn_actor("midi_backend", midi_backend)
+    # Create MIDI nursery to tie backend reciever and delayed-sender task lifecycles
+    class MidiNursery(Nursery[BackendMessage[TimedMessage]]):
+        """Nursery for MIDI backend components."""
 
-        # Create the sender task with timing awareness
-        sender_task = MidiSenderTask(message_heap, output_mutex, timing_mutex)
-        env.control.spawn_task("midi_sender", sender_task)
+        def initialize(self, env: ActorEnv) -> Sender[BackendMessage[TimedMessage]]:
+            """Initialize MIDI backend actor and sender task."""
+            # Create the timing-aware MIDI backend actor
+            midi_backend = MidiBackendActor(message_heap, output_mutex, timing_mutex)
+            backend_sender = env.control.spawn_actor("midi_backend", midi_backend)
 
-        return backend_sender
+            # Create the sender task with timing awareness
+            sender_task = MidiSenderTask(message_heap, output_mutex, timing_mutex)
+            env.control.spawn_task("midi_sender", sender_task)
 
-    nursery_init_typed: Initializer[None, BackendMessage[TimedMessage]] = nursery_init
+            return backend_sender
 
-    backend_sender: Sender[BackendMessage[TimedMessage]] = system.nursery(
-        "midi_output", initializer=nursery_init_typed  # pyright: ignore
-    )
+    backend_sender = system.spawn_nursery("midi_output", MidiNursery())
 
     # Create MIDI processor
     processor = MidiProcessor()
