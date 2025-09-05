@@ -8,7 +8,7 @@ from minipat.pat import (
 
 def test_pat_silence() -> None:
     """Test silence pattern creation."""
-    empty: Pat[str] = Pat.silence()
+    empty: Pat[str] = Pat.silent()
     assert empty.unwrap is not None
 
 

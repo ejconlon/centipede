@@ -8,18 +8,18 @@ from typing import cast
 from minipat.common import format_fraction
 from minipat.pat import (
     Pat,
-    PatAlternating,
-    PatChoice,
-    PatElongation,
-    PatEuclidean,
+    PatAlt,
+    PatEuc,
     PatPar,
-    PatPolymetric,
-    PatProbability,
+    PatPoly,
+    PatProb,
     PatPure,
-    PatRepetition,
-    PatReplicate,
+    PatRand,
+    PatRepeat,
     PatSeq,
-    PatSilence,
+    PatSilent,
+    PatSpeed,
+    PatStretch,
 )
 
 
@@ -33,7 +33,7 @@ def print_pattern(pat: Pat[str]) -> str:
         String representation in mini notation format
     """
     match pat.unwrap:
-        case PatSilence():
+        case PatSilent():
             return "~"
 
         case PatPure(value):
@@ -47,7 +47,7 @@ def print_pattern(pat: Pat[str]) -> str:
             for child in children:
                 # If the child is a sequence with multiple elements, bracket it
                 # Groups already have their own brackets
-                if isinstance(child.unwrap, PatSeq) and len(child.unwrap.patterns) > 1:
+                if isinstance(child.unwrap, PatSeq) and len(child.unwrap.pats) > 1:
                     parts.append(f"[{print_pattern(child)}]")
                 else:
                     parts.append(print_pattern(child))
@@ -58,71 +58,71 @@ def print_pattern(pat: Pat[str]) -> str:
             pattern_strs = [print_pattern(pattern) for pattern in children]
             return f"[{', '.join(pattern_strs)}]"
 
-        case PatChoice(choices):
-            choice_strs = [print_pattern(choice) for choice in choices]
+        case PatRand(pats):
+            choice_strs = [print_pattern(choice) for choice in pats]
             return f"[{' | '.join(choice_strs)}]"
 
-        case PatEuclidean(atom, hits, steps, rotation):
-            atom_str = print_pattern(atom)
+        case PatEuc(pat, hits, steps, rotation):
+            atom_str = print_pattern(pat)
             if rotation == 0:
                 return f"{atom_str}({hits},{steps})"
             else:
                 return f"{atom_str}({hits},{steps},{rotation})"
 
-        case PatPolymetric(patterns, None):
-            pattern_strs = [print_pattern(pattern) for pattern in patterns]
+        case PatPoly(pats, None):
+            pattern_strs = [print_pattern(pattern) for pattern in pats]
             return f"{{{', '.join(pattern_strs)}}}"
 
-        case PatRepetition(pattern, operator, count):
+        case PatSpeed(pat, op, factor):
             # If the pattern being repeated is a multi-element sequence, it needs brackets
             # Bracketed sequences already handled above
-            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.patterns) > 1:
-                pattern_str = f"[{print_pattern(pattern)}]"
+            if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.pats) > 1:
+                pattern_str = f"[{print_pattern(pat)}]"
             else:
-                pattern_str = print_pattern(pattern)
-            op_str = operator.value
+                pattern_str = print_pattern(pat)
+            op_str = op.value
             # Format fractions with % instead of /, but only for non-integer fractions
-            if hasattr(count, "numerator") and hasattr(count, "denominator"):
-                if count.denominator == 1:
+            if hasattr(factor, "numerator") and hasattr(factor, "denominator"):
+                if factor.denominator == 1:
                     # Integer, just show the numerator
-                    count_str = str(count.numerator)
+                    count_str = str(factor.numerator)
                 else:
                     # Non-integer fraction, use % notation
-                    count_str = f"{count.numerator}%{count.denominator}"
+                    count_str = f"{factor.numerator}%{factor.denominator}"
             else:
-                count_str = str(count)
+                count_str = str(factor)
             return f"{pattern_str}{op_str}{count_str}"
 
-        case PatElongation(pattern, count):
-            pattern_str = print_pattern(pattern)
+        case PatStretch(pat, count):
+            pattern_str = print_pattern(pat)
             # Use underscore for elongation (count is the actual number of underscores)
             return f"{pattern_str}{'_' * count}"
 
-        case PatProbability(pattern, probability):
-            pattern_str = print_pattern(pattern)
-            if probability == Fraction(1, 2):
+        case PatProb(pat, chance):
+            pattern_str = print_pattern(pat)
+            if chance == Fraction(1, 2):
                 return f"{pattern_str}?"
             else:
-                return f"{pattern_str}?{format_fraction(probability)}"
+                return f"{pattern_str}?{format_fraction(chance)}"
 
-        case PatAlternating(patterns):
-            pattern_strs = [print_pattern(pattern) for pattern in patterns]
+        case PatAlt(pats):
+            pattern_strs = [print_pattern(pattern) for pattern in pats]
             return f"<{' '.join(pattern_strs)}>"
 
-        case PatReplicate(pattern, count):
+        case PatRepeat(pat, count):
             # If the pattern being replicated is a multi-element sequence, it needs brackets
-            if isinstance(pattern.unwrap, PatSeq) and len(pattern.unwrap.patterns) > 1:
-                pattern_str = f"[{print_pattern(pattern)}]"
+            if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.pats) > 1:
+                pattern_str = f"[{print_pattern(pat)}]"
             else:
-                pattern_str = print_pattern(pattern)
+                pattern_str = print_pattern(pat)
             return f"{pattern_str}!{count}"
 
-        case PatPolymetric(patterns, subdivision):
-            pattern_strs = [print_pattern(pattern) for pattern in patterns]
-            if subdivision is None:
+        case PatPoly(pats, subdiv):
+            pattern_strs = [print_pattern(pattern) for pattern in pats]
+            if subdiv is None:
                 return f"{{{', '.join(pattern_strs)}}}"
             else:
-                return f"{{{', '.join(pattern_strs)}}}%{subdivision}"
+                return f"{{{', '.join(pattern_strs)}}}%{subdiv}"
 
         case _:
             # This should never happen if all pattern types are handled above
@@ -135,7 +135,7 @@ def print_pattern_grouped(pat: Pat[str]) -> str:
     This is useful for printing sub-patterns that might need bracketing
     in certain contexts.
     """
-    if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.patterns) > 1:
+    if isinstance(pat.unwrap, PatSeq) and len(pat.unwrap.pats) > 1:
         return f"[{print_pattern(pat)}]"
     else:
         return print_pattern(pat)

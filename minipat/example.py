@@ -62,7 +62,7 @@ def main() -> None:
     try:
         # Create some simple patterns and convert to streams
         pattern1 = Pat.pure("kick")
-        pattern2 = Pat.seq([Pat.pure("snare"), Pat.silence()])
+        pattern2 = Pat.seq([Pat.pure("snare"), Pat.silent()])
         stream1 = pat_stream(pattern1)
         stream2 = pat_stream(pattern2)
 

@@ -13,14 +13,14 @@ from minipat.common import ONE_HALF, PartialMatchException, ignore_arg
 from spiny import Box, PSeq
 
 
-class RepetitionOp(Enum):
-    """Enumeration for repetition operators."""
+class SpeedOp(Enum):
+    """Enumeration for speed operators."""
 
     Fast = "*"
-    """Fast repetition operator (*) - repeats pattern faster."""
+    """Fast speed operator (*) - repeats pattern faster."""
 
     Slow = "/"
-    """Slow repetition operator (/) - slows down pattern."""
+    """Slow speed operator (/) - slows down pattern."""
 
 
 # sealed
@@ -44,7 +44,7 @@ class Pat[T]:
     unwrap: PatF[T, Pat[T]]
 
     @staticmethod
-    def silence() -> Pat[T]:
+    def silent() -> Pat[T]:
         """Create a silent pattern.
 
         Textual form: ~
@@ -52,7 +52,7 @@ class Pat[T]:
         Returns:
             A pattern representing silence
         """
-        return _PAT_SILENCE
+        return _PAT_SILENT
 
     @staticmethod
     def pure(val: T) -> Pat[T]:
@@ -97,27 +97,27 @@ class Pat[T]:
         return Pat(PatPar(PSeq.mk(pats)))
 
     @staticmethod
-    def choice(choices: Iterable[Pat[T]]) -> Pat[T]:
-        """Create a choice pattern.
+    def rand(pats: Iterable[Pat[T]]) -> Pat[T]:
+        """Create a random choice pattern.
 
         Textual form: <p1 | p2 | p3 | ...>
 
         Args:
-            choices: The patterns to choose from
+            pats: The patterns to choose from
 
         Returns:
-            A pattern that cycles through the given choices
+            A pattern that randomly chooses from the given choices
         """
-        return Pat(PatChoice(PSeq.mk(choices)))
+        return Pat(PatRand(PSeq.mk(pats)))
 
     @staticmethod
-    def euclidean(pattern: Pat[T], hits: int, steps: int, rotation: int = 0) -> Pat[T]:
+    def euc(pat: Pat[T], hits: int, steps: int, rotation: int = 0) -> Pat[T]:
         """Create a Euclidean rhythm pattern.
 
         Textual form: pattern(hits,steps) or pattern(hits,steps,rotation)
 
         Args:
-            pattern: The pattern to distribute
+            pat: The pattern to distribute
             hits: Number of hits to distribute
             steps: Total number of steps
             rotation: Optional rotation offset
@@ -125,99 +125,97 @@ class Pat[T]:
         Returns:
             A pattern with Euclidean rhythm distribution
         """
-        return Pat(PatEuclidean(pattern, hits, steps, rotation))
+        return Pat(PatEuc(pat, hits, steps, rotation))
 
     @staticmethod
-    def polymetric(
-        patterns: Iterable[Pat[T]], subdivision: Optional[int] = None
-    ) -> Pat[T]:
+    def poly(pats: Iterable[Pat[T]], subdiv: Optional[int] = None) -> Pat[T]:
         """Create a polymetric pattern.
 
         Textual form: {p1, p2, p3, ...} or {p1, p2, p3, ...}%N
 
         Args:
-            patterns: The patterns to play polymetrically
-            subdivision: Optional subdivision factor for {}%N patterns
+            pats: The patterns to play polymetrically
+            subdiv: Optional subdivision factor for {}%N patterns
 
         Returns:
             A polymetric pattern with or without subdivision
         """
-        return Pat(PatPolymetric(PSeq.mk(patterns), subdivision))
+        return Pat(PatPoly(PSeq.mk(pats), subdiv))
 
     @staticmethod
-    def repetition(pattern: Pat[T], operator: RepetitionOp, count: int) -> Pat[T]:
-        """Create a repetition pattern.
+    def speed(pat: Pat[T], op: SpeedOp, factor: int) -> Pat[T]:
+        """Create a speed up/down pattern.
 
         Textual form: pattern*count or pattern/count
 
         Args:
-            pattern: The pattern to repeat
-            operator: The repetition operator (Fast or Slow)
-            count: The repetition count
+            pat: The pattern to speed up/down
+            op: The speed operator (Fast or Slow)
+            factor: The factor by which we speed up/down
 
         Returns:
-            A pattern with the specified repetition
+            A pattern with the specified speed
         """
-        return Pat(PatRepetition(pattern, operator, count))
+        return Pat(PatSpeed(pat, op, factor))
 
     @staticmethod
-    def elongation(pattern: Pat[T], count: int) -> Pat[T]:
-        """Create an elongated pattern.
+    def stretch(pattern: Pat[T], count: int) -> Pat[T]:
+        """Create an stretched pattern.
 
         Textual form: pattern@count
 
         Args:
-            pattern: The pattern to elongate
-            count: The elongation count
+            pattern: The pattern to stretch
+            count: The stretch count
 
         Returns:
             A pattern stretched by the given count
         """
-        return Pat(PatElongation(pattern, count))
+        return Pat(PatStretch(pattern, count))
 
     @staticmethod
-    def probability(pattern: Pat[T], prob: Fraction = ONE_HALF) -> Pat[T]:
+    def prob(pat: Pat[T], chance: Fraction = ONE_HALF) -> Pat[T]:
         """Create a probabilistic pattern.
 
         Textual form: pattern?
 
         Args:
-            pattern: The pattern to apply probability to
-            prob: The probability (0 to 1 as a Fraction)
+            pat: The pattern to apply probability to
+            chance: The probability (0 to 1 as a Fraction)
 
         Returns:
             A pattern that plays with the given probability
         """
-        return Pat(PatProbability(pattern, prob))
+        return Pat(PatProb(pat, chance))
 
     @staticmethod
-    def alternating(patterns: Iterable[Pat[T]]) -> Pat[T]:
+    def alt(pats: Iterable[Pat[T]]) -> Pat[T]:
         """Create an alternating pattern.
 
         Textual form: <p1 p2 p3 ...>
 
         Args:
-            patterns: The patterns to alternate between
+            pat: The patterns to alternate between
 
         Returns:
             A pattern that alternates between the given patterns
         """
-        return Pat(PatAlternating(PSeq.mk(patterns)))
+        return Pat(PatAlt(PSeq.mk(pats)))
 
     @staticmethod
-    def replicate(pattern: Pat[T], count: int) -> Pat[T]:
-        """Create a replicate pattern (!).
+    def repeat(pat: Pat[T], count: int) -> Pat[T]:
+        """Create a finitely repeating pattern (!).
 
         Textual form: pattern!count
 
         Args:
-            pattern: The pattern to replicate
-            count: The number of times to replicate
+            pat: The pattern to repeat
+            count: The number of times to repeat
 
         Returns:
-            A replicated pattern
+            The repeated pattern
         """
-        return Pat(PatReplicate(pattern, count))
+        return Pat(PatRepeat(pat, count))
 
     def map[U](self, fn: Callable[[T], U]) -> Pat[U]:
         """Map a function over the pattern values.
@@ -269,7 +267,7 @@ class Pat[T]:
 
 
 @dataclass(frozen=True)
-class PatSilence(PatF[Any, Any]):
+class PatSilent(PatF[Any, Any]):
     """Pattern functor representing silence.
 
     Textual form: ~
@@ -278,7 +276,7 @@ class PatSilence(PatF[Any, Any]):
     pass
 
 
-_PAT_SILENCE = Pat(PatSilence())
+_PAT_SILENT = Pat(PatSilent())
 
 
 @dataclass(frozen=True)
@@ -301,10 +299,10 @@ class PatSeq[T, R](PatF[T, R]):
     Textual form: [p1 p2 p3 ...]
 
     Args:
-        patterns: The child patterns to play in sequence
+        pats: The child patterns to play in sequence
     """
 
-    patterns: PSeq[R]
+    pats: PSeq[R]
 
 
 @dataclass(frozen=True)
@@ -317,128 +315,128 @@ class PatPar[T, R](PatF[T, R]):
         patterns: The child patterns to play in parallel
     """
 
-    patterns: PSeq[R]
+    pats: PSeq[R]
 
 
 @dataclass(frozen=True)
-class PatChoice[T, R](PatF[T, R]):
-    """Pattern functor for choice between patterns.
+class PatRand[T, R](PatF[T, R]):
+    """Pattern functor for random choice between patterns.
 
     Textual form: <p1 | p2 | p3 | ...>
 
     Args:
-        patterns: The patterns to choose from
+        pats: The patterns to choose from
     """
 
-    patterns: PSeq[R]
+    pats: PSeq[R]
 
 
 @dataclass(frozen=True)
-class PatEuclidean[T, R](PatF[T, R]):
+class PatEuc[T, R](PatF[T, R]):
     """Pattern functor for Euclidean rhythms.
 
     Textual form: pattern(hits,steps) or pattern(hits,steps,rotation)
 
     Args:
-        pattern: The pattern to distribute
+        pat: The pattern to distribute
         hits: Number of hits to distribute
         steps: Total number of steps
         rotation: Rotation offset
     """
 
-    pattern: R
+    pat: R
     hits: int
     steps: int
     rotation: int
 
 
 @dataclass(frozen=True)
-class PatPolymetric[T, R](PatF[T, R]):
+class PatPoly[T, R](PatF[T, R]):
     """Pattern functor for polymetric patterns.
 
     Textual form: {p1, p2, p3, ...} or {p1, p2, p3, ...}%N
 
     Args:
-        patterns: The patterns to play polymetrically
+        pats: The patterns to play polymetrically
         subdivision: Optional subdivision factor for {}%N patterns
     """
 
-    patterns: PSeq[R]
-    subdivision: Optional[int] = None
+    pats: PSeq[R]
+    subdiv: Optional[int] = None
 
 
 @dataclass(frozen=True)
-class PatRepetition[T, R](PatF[T, R]):
-    """Pattern functor for repetition.
+class PatSpeed[T, R](PatF[T, R]):
+    """Pattern functor for speed patterns.
 
     Textual form: pattern*count or pattern/count
 
     Args:
-        pattern: The pattern to repeat
-        operator: The repetition operator
-        count: The repetition count
+        pat: The pattern to speed up/down
+        op: The speed operator
+        factor: The speed factor
     """
 
-    pattern: R
-    operator: RepetitionOp
-    count: int
+    pat: R
+    op: SpeedOp
+    factor: int
 
 
 @dataclass(frozen=True)
-class PatElongation[T, R](PatF[T, R]):
-    """Pattern functor for elongation.
+class PatStretch[T, R](PatF[T, R]):
+    """Pattern functor for stretch patterns.
 
     Textual form: pattern@count
 
     Args:
-        pattern: The pattern to elongate
-        count: The elongation count
+        pat: The pattern to stretch
+        count: The stretch count
     """
 
-    pattern: R
+    pat: R
     count: int
 
 
 @dataclass(frozen=True)
-class PatProbability[T, R](PatF[T, R]):
+class PatProb[T, R](PatF[T, R]):
     """Pattern functor for probabilistic patterns.
 
     Textual form: pattern?
 
     Args:
-        pattern: The pattern to apply probability to
-        probability: The probability value (0 to 1 as a Fraction)
+        pat: The pattern to apply probability to
+        chance: The probability value (0 to 1 as a Fraction)
     """
 
-    pattern: R
-    probability: Fraction
+    pat: R
+    chance: Fraction
 
 
 @dataclass(frozen=True)
-class PatAlternating[T, R](PatF[T, R]):
+class PatAlt[T, R](PatF[T, R]):
     """Pattern functor for alternating patterns.
 
     Textual form: <p1 p2 p3 ...>
 
     Args:
-        patterns: The patterns to alternate between
+        pats: The patterns to alternate between
     """
 
-    patterns: PSeq[R]
+    pats: PSeq[R]
 
 
 @dataclass(frozen=True)
-class PatReplicate[T, R](PatF[T, R]):
-    """Pattern functor for replicate patterns (!).
+class PatRepeat[T, R](PatF[T, R]):
+    """Pattern functor for repeat patterns (!).
 
     Textual form: pattern!count
 
     Args:
-        pattern: The pattern to replicate
-        count: The number of times to replicate
+        pat: The pattern to repeat
+        count: The number of times to repeat
     """
 
-    pattern: R
+    pat: R
     count: int
 
 
@@ -455,43 +453,43 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
     def wrapper(env: V, pat: Pat[T]) -> Z:
         pf = pat.unwrap
         match pf:
-            case PatSilence():
+            case PatSilent():
                 return fn(env, pf)
             case PatPure(_):
                 return fn(env, pf)
-            case PatSeq(cs):
-                czs = PSeq.mk(wrapper(env, c) for c in cs)
+            case PatSeq(pats):
+                czs = PSeq.mk(wrapper(env, c) for c in pats)
                 return fn(env, PatSeq(czs))
-            case PatPar(cs):
-                czs = PSeq.mk(wrapper(env, c) for c in cs)
+            case PatPar(pats):
+                czs = PSeq.mk(wrapper(env, c) for c in pats)
                 return fn(env, PatPar(czs))
-            case PatChoice(cs):
-                czs = PSeq.mk(wrapper(env, c) for c in cs)
-                return fn(env, PatChoice(czs))
-            case PatEuclidean(atom, hits, steps, rotation):
-                atom_z = wrapper(env, atom)
-                return fn(env, PatEuclidean(atom_z, hits, steps, rotation))
-            case PatPolymetric(ps, None):
-                pzs = PSeq.mk(wrapper(env, p) for p in ps)
-                return fn(env, PatPolymetric(pzs, None))
-            case PatRepetition(p, op, count):
-                pz = wrapper(env, p)
-                return fn(env, PatRepetition(pz, op, count))
-            case PatElongation(p, count):
-                pz = wrapper(env, p)
-                return fn(env, PatElongation(pz, count))
-            case PatProbability(p, prob):
-                pz = wrapper(env, p)
-                return fn(env, PatProbability(pz, prob))
-            case PatAlternating(ps):
-                pzs = PSeq.mk(wrapper(env, p) for p in ps)
-                return fn(env, PatAlternating(pzs))
-            case PatReplicate(p, count):
-                pz = wrapper(env, p)
-                return fn(env, PatReplicate(pz, count))
-            case PatPolymetric(ps, subdivision):
-                pzs = PSeq.mk(wrapper(env, p) for p in ps)
-                return fn(env, PatPolymetric(pzs, subdivision))
+            case PatRand(pats):
+                czs = PSeq.mk(wrapper(env, c) for c in pats)
+                return fn(env, PatRand(czs))
+            case PatEuc(pat, hits, steps, rotation):
+                pat_z = wrapper(env, pat)
+                return fn(env, PatEuc(pat_z, hits, steps, rotation))
+            case PatPoly(pats, None):
+                pzs = PSeq.mk(wrapper(env, p) for p in pats)
+                return fn(env, PatPoly(pzs, None))
+            case PatSpeed(pat, op, factor):
+                pz = wrapper(env, pat)
+                return fn(env, PatSpeed(pz, op, factor))
+            case PatStretch(pat, count):
+                pz = wrapper(env, pat)
+                return fn(env, PatStretch(pz, count))
+            case PatProb(pat, prob):
+                pz = wrapper(env, pat)
+                return fn(env, PatProb(pz, prob))
+            case PatAlt(pats):
+                pzs = PSeq.mk(wrapper(env, p) for p in pats)
+                return fn(env, PatAlt(pzs))
+            case PatRepeat(pat, count):
+                pz = wrapper(env, pat)
+                return fn(env, PatRepeat(pz, count))
+            case PatPoly(pats, subdiv):
+                pzs = PSeq.mk(wrapper(env, p) for p in pats)
+                return fn(env, PatPoly(pzs, subdiv))
             case _:
                 raise PartialMatchException(pf)
 
@@ -544,32 +542,32 @@ def pat_map[T, U](fn: Callable[[T], U]) -> Callable[[Pat[T]], Pat[U]]:
 
     def elim(pf: PatF[T, Pat[U]]) -> Pat[U]:
         match pf:
-            case PatSilence():
-                return Pat.silence()
+            case PatSilent():
+                return Pat.silent()
             case PatPure(val):
                 return Pat(PatPure(fn(val)))
-            case PatSeq(cs):
-                return Pat(PatSeq(cs))
-            case PatPar(cs):
-                return Pat(PatPar(cs))
-            case PatChoice(cs):
-                return Pat(PatChoice(cs))
-            case PatEuclidean(atom, hits, steps, rotation):
-                return Pat(PatEuclidean(atom, hits, steps, rotation))
-            case PatPolymetric(ps, None):
-                return Pat(PatPolymetric(ps, None))
-            case PatRepetition(p, op, count):
-                return Pat(PatRepetition(p, op, count))
-            case PatElongation(p, count):
-                return Pat(PatElongation(p, count))
-            case PatProbability(p, prob):
-                return Pat(PatProbability(p, prob))
-            case PatAlternating(ps):
-                return Pat(PatAlternating(ps))
-            case PatReplicate(p, count):
-                return Pat(PatReplicate(p, count))
-            case PatPolymetric(ps, subdivision):
-                return Pat(PatPolymetric(ps, subdivision))
+            case PatSeq(pats):
+                return Pat(PatSeq(pats))
+            case PatPar(pats):
+                return Pat(PatPar(pats))
+            case PatRand(pats):
+                return Pat(PatRand(pats))
+            case PatEuc(pat, hits, steps, rotation):
+                return Pat(PatEuc(pat, hits, steps, rotation))
+            case PatPoly(pats, None):
+                return Pat(PatPoly(pats, None))
+            case PatSpeed(pat, op, factor):
+                return Pat(PatSpeed(pat, op, factor))
+            case PatStretch(pat, count):
+                return Pat(PatStretch(pat, count))
+            case PatProb(pat, prob):
+                return Pat(PatProb(pat, prob))
+            case PatAlt(pats):
+                return Pat(PatAlt(pats))
+            case PatRepeat(pat, count):
+                return Pat(PatRepeat(pat, count))
+            case PatPoly(pats, subdiv):
+                return Pat(PatPoly(pats, subdiv))
             case _:
                 raise PartialMatchException(pf)
 

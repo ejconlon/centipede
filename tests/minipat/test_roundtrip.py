@@ -173,7 +173,7 @@ def test_patpar_now_printable() -> None:
 def test_custom_probability_printable() -> None:
     """Test that custom probability values are printable."""
 
-    pat = Pat.probability(Pat.pure("bd"), Fraction(3, 4))
+    pat = Pat.prob(Pat.pure("bd"), Fraction(3, 4))
     result = print_pattern(pat)
     assert result == "bd?(3/4)"
 

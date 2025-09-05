@@ -14,19 +14,19 @@ from minipat.common import CycleDelta, CycleTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
 from minipat.pat import (
     Pat,
-    PatAlternating,
-    PatChoice,
-    PatElongation,
-    PatEuclidean,
+    PatAlt,
+    PatEuc,
     PatPar,
-    PatPolymetric,
-    PatProbability,
+    PatPoly,
+    PatProb,
     PatPure,
-    PatRepetition,
-    PatReplicate,
+    PatRand,
+    PatRepeat,
     PatSeq,
-    PatSilence,
-    RepetitionOp,
+    PatSilent,
+    PatSpeed,
+    PatStretch,
+    SpeedOp,
 )
 from spiny import PSeq
 from spiny.heapmap import PHeapMap
@@ -156,21 +156,21 @@ class Stream[T](metaclass=ABCMeta):
 
     @staticmethod
     def polymetric(
-        patterns: PSeq[Stream[T]], subdivision: Optional[int] = None
+        patterns: PSeq[Stream[T]], subdiv: Optional[int] = None
     ) -> Stream[T]:
         """Create a polymetric stream.
 
         Args:
             patterns: The streams to play polymetrically
-            subdivision: Optional subdivision factor
+            subdiv: Optional subdivision factor
 
         Returns:
             A polymetric stream with or without subdivision
         """
-        return PolymetricStream(patterns, subdivision)
+        return PolymetricStream(patterns, subdiv)
 
     @staticmethod
-    def repetition(stream: Stream[T], operator: RepetitionOp, count: int) -> Stream[T]:
+    def repetition(stream: Stream[T], operator: SpeedOp, count: int) -> Stream[T]:
         """Create a repetition stream.
 
         Args:
@@ -487,7 +487,7 @@ class PolymetricStream[T](Stream[T]):
     """Specialized stream for polymetric patterns."""
 
     patterns: PSeq[Stream[T]]
-    subdivision: Optional[int]
+    subdiv: Optional[int]
 
     @override
     def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
@@ -496,7 +496,7 @@ class PolymetricStream[T](Stream[T]):
 
         polymetric_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
-        if self.subdivision is None:
+        if self.subdiv is None:
             # All patterns play simultaneously
             for pattern in self.patterns:
                 pattern_events = pattern.unstream(arc)
@@ -504,13 +504,13 @@ class PolymetricStream[T](Stream[T]):
                     polymetric_result = ev_heap_push(ev, polymetric_result)
         else:
             # With subdivision
-            if self.subdivision <= 0:
+            if self.subdiv <= 0:
                 return ev_heap_empty()
-            sub_arc = arc.scale(Fraction(1, self.subdivision))
+            sub_arc = arc.scale(Fraction(1, self.subdiv))
             for pattern in self.patterns:
                 pattern_events = pattern.unstream(sub_arc)
                 for _, ev in pattern_events:
-                    scaled_ev = ev.scale(Fraction(self.subdivision))
+                    scaled_ev = ev.scale(Fraction(self.subdiv))
                     span = _create_span(scaled_ev.span.active, arc)
                     if span is not None:
                         # Preserve the whole information from scaling
@@ -529,7 +529,7 @@ class RepetitionStream[T](Stream[T]):
     """Specialized stream for repetition patterns."""
 
     pattern: Stream[T]
-    operator: RepetitionOp
+    operator: SpeedOp
     count: int
 
     @override
@@ -540,7 +540,7 @@ class RepetitionStream[T](Stream[T]):
         rep_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
         match self.operator:
-            case RepetitionOp.Fast:
+            case SpeedOp.Fast:
                 if hasattr(self.count, "denominator") and self.count.denominator != 1:
                     scaled_arc = arc.scale(Fraction(1) / Fraction(self.count))
                     pattern_events = self.pattern.unstream(scaled_arc)
@@ -591,7 +591,7 @@ class RepetitionStream[T](Stream[T]):
                                         new_ev = Ev(span, ev.val)
                                         rep_result = ev_heap_push(new_ev, rep_result)
 
-            case RepetitionOp.Slow:
+            case SpeedOp.Slow:
                 stretched_arc = arc.scale(Fraction(self.count))
                 pattern_events = self.pattern.unstream(stretched_arc)
                 for _, ev in pattern_events:
@@ -1039,39 +1039,39 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
         A specialized stream optimized for the pattern's constructor
     """
     match pat.unwrap:
-        case PatSilence():
+        case PatSilent():
             return SilenceStream()
         case PatPure(val):
             return PureStream(val)
         case PatSeq(children):
             child_streams = PSeq.mk(pat_stream(child) for child in children)
             return SeqStream(child_streams)
-        case PatPar(children):
-            child_streams = PSeq.mk(pat_stream(child) for child in children)
+        case PatPar(pats):
+            child_streams = PSeq.mk(pat_stream(child) for child in pats)
             return ParStream(child_streams)
-        case PatChoice(choices):
-            choice_streams = PSeq.mk(pat_stream(choice) for choice in choices)
+        case PatRand(pats):
+            choice_streams = PSeq.mk(pat_stream(choice) for choice in pats)
             return ChoiceStream(choice_streams)
-        case PatEuclidean(atom, hits, steps, rotation):
-            atom_stream = pat_stream(atom)
+        case PatEuc(pat, hits, steps, rotation):
+            atom_stream = pat_stream(pat)
             return EuclideanStream.create(atom_stream, hits, steps, rotation)
-        case PatPolymetric(patterns, subdivision):
-            pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in patterns)
-            return PolymetricStream(pattern_streams, subdivision)
-        case PatRepetition(pattern, operator, count):
-            pattern_stream = pat_stream(pattern)
-            return RepetitionStream(pattern_stream, operator, count)
-        case PatElongation(pattern, count):
-            pattern_stream = pat_stream(pattern)
+        case PatPoly(pats, subdiv):
+            pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in pats)
+            return PolymetricStream(pattern_streams, subdiv)
+        case PatSpeed(pat, op, factor):
+            pattern_stream = pat_stream(pat)
+            return RepetitionStream(pattern_stream, op, factor)
+        case PatStretch(pat, count):
+            pattern_stream = pat_stream(pat)
             return ElongationStream(pattern_stream, count)
-        case PatProbability(pattern, prob):
-            pattern_stream = pat_stream(pattern)
-            return ProbabilityStream(pattern_stream, prob)
-        case PatAlternating(patterns):
-            pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in patterns)
+        case PatProb(pat, chance):
+            pattern_stream = pat_stream(pat)
+            return ProbabilityStream(pattern_stream, chance)
+        case PatAlt(pats):
+            pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in pats)
             return AlternatingStream(pattern_streams)
-        case PatReplicate(pattern, count):
-            pattern_stream = pat_stream(pattern)
+        case PatRepeat(pat, count):
+            pattern_stream = pat_stream(pat)
             return ReplicateStream(pattern_stream, count)
         case _:
             # This should never happen if all pattern types are handled above

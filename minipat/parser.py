@@ -7,7 +7,7 @@ from typing import Any, List, cast
 
 from lark import Lark, Transformer
 
-from minipat.pat import Pat, PatElongation, PatSeq, RepetitionOp
+from minipat.pat import Pat, PatSeq, PatStretch, SpeedOp
 
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
@@ -102,14 +102,14 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
             item = items[i]
             if isinstance(item, str) and item == "_":
                 # This is an underscore token - elongate the current element
-                if isinstance(current_element.unwrap, PatElongation):
+                if isinstance(current_element.unwrap, PatStretch):
                     # Already elongated, add to count
-                    base_element = current_element.unwrap.pattern
+                    base_element = current_element.unwrap.pat
                     total_count = current_element.unwrap.count + 1
-                    current_element = Pat.elongation(base_element, total_count)
+                    current_element = Pat.stretch(base_element, total_count)
                 else:
                     # Create new elongation
-                    current_element = Pat.elongation(current_element, 1)
+                    current_element = Pat.stretch(current_element, 1)
             else:
                 # This is another element
                 result.append(current_element)
@@ -154,7 +154,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
 
     def silence(self, _items: List[Any]) -> Pat[Any]:
         """Transform silence into empty pattern."""
-        return Pat.silence()
+        return Pat.silent()
 
     def seq(self, items: List[Any]) -> Pat[Any]:
         """Transform grouping [...] or .pattern."""
@@ -169,7 +169,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
     def choice(self, items: List[Any]) -> Pat[Any]:
         """Transform choice patterns [a|b|c]."""
         choices = items[0]
-        return Pat.choice(choices)
+        return Pat.rand(choices)
 
     def choice_list(self, items: List[Any]) -> List[Any]:
         """Transform choice list a|b|c."""
@@ -188,10 +188,10 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform alternating patterns <a b c>."""
         # If we get a single item that's a sequence, extract its children
         if len(items) == 1 and isinstance(items[0].unwrap, PatSeq):
-            patterns = list(items[0].unwrap.patterns)
-            return Pat.alternating(patterns)
+            patterns = list(items[0].unwrap.pats)
+            return Pat.alt(patterns)
         else:
-            return Pat.alternating(items)
+            return Pat.alt(items)
 
     # Euclidean rhythms
     def euclidean(self, items: List[Any]) -> Pat[Any]:
@@ -201,7 +201,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         hits = int(items[1])
         steps = int(items[2])
         rotation = int(items[3]) if len(items) > 3 else 0
-        return Pat.euclidean(atom, hits, steps, rotation)
+        return Pat.euc(atom, hits, steps, rotation)
 
     # Polymetric sequences
     def pattern_list(self, items: List[Any]) -> List[Any]:
@@ -216,10 +216,10 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
             # Has subdivision: {a,b,c}%4
             # items[1] is PERCENT token, items[2] is subdivision value
             factor = int(items[2])
-            return Pat.polymetric(patterns, factor)
+            return Pat.poly(patterns, factor)
         else:
             # No subdivision: {a,b,c}
-            return Pat.polymetric(patterns)
+            return Pat.poly(patterns)
 
     # Repetition and speed modifiers
     def repetition(self, items: List[Any]) -> Pat[Any]:
@@ -230,13 +230,13 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
 
         # Convert string operator to enum
         if op_str == "*":
-            op = RepetitionOp.Fast
+            op = SpeedOp.Fast
         elif op_str == "/":
-            op = RepetitionOp.Slow
+            op = SpeedOp.Slow
         else:
             raise ValueError(f"Unknown repetition operator: {op_str}")
 
-        return Pat.repetition(element, op, num)
+        return Pat.speed(element, op, num)
 
     def elongation(self, items: List[Any]) -> Pat[Any]:
         """Transform elongation patterns like bd_ or bd@2."""
@@ -253,21 +253,21 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
             current_count = len(elongation_symbols)
 
         # Check if the element is already an elongation and collapse them
-        if isinstance(element.unwrap, PatElongation):
+        if isinstance(element.unwrap, PatStretch):
             # Nested elongation: combine the counts
-            base_element = element.unwrap.pattern
+            base_element = element.unwrap.pat
             total_count = element.unwrap.count + current_count
-            return Pat.elongation(base_element, total_count)
+            return Pat.stretch(base_element, total_count)
         else:
             # Regular elongation
-            return Pat.elongation(element, current_count)
+            return Pat.stretch(element, current_count)
 
     def replicate(self, items: List[Any]) -> Pat[Any]:
         """Transform replicate patterns like bd!3."""
         element = items[0]
         # items[1] is the EXCLAMATION token, items[2] is the count
         count = int(items[2])
-        return Pat.replicate(element, count)
+        return Pat.repeat(element, count)
 
     def dot_group(self, items: List[Any]) -> Pat[Any]:
         """Transform dot grouping patterns like bd sd _ . hh cp _ . oh."""
@@ -288,11 +288,11 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         # Handle different probability formats
         if len(items) == 1:
             # Simple "bd?" case - default 0.5 probability
-            return Pat.probability(element)
+            return Pat.prob(element)
         elif len(items) == 2:
             # "bd?VALUE" case - get probability from probability_value
             prob_value = items[1]
-            return Pat.probability(element, prob_value)
+            return Pat.prob(element, prob_value)
         else:
             raise ValueError(f"Invalid probability pattern with {len(items)} items")
 

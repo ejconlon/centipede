@@ -3,7 +3,7 @@ from fractions import Fraction
 from minipat.arc import Arc
 from minipat.common import CycleTime
 from minipat.parser import parse_pattern
-from minipat.pat import Pat, RepetitionOp
+from minipat.pat import Pat, SpeedOp
 from minipat.stream import pat_stream
 
 
@@ -25,7 +25,7 @@ def test_pure_pattern() -> None:
 
 def test_silence_pattern() -> None:
     """Test silence pattern generates no events."""
-    pattern: Pat[str] = Pat.silence()
+    pattern: Pat[str] = Pat.silent()
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -92,7 +92,7 @@ def test_repetition_fast() -> None:
     """Test fast repetition pattern."""
     # Pattern equivalent to "x!" with count 2
     base_pattern = Pat.pure("x")
-    pattern = Pat.repetition(base_pattern, RepetitionOp.Fast, 2)
+    pattern = Pat.speed(base_pattern, SpeedOp.Fast, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -124,7 +124,7 @@ def test_repetition_slow() -> None:
     """Test slow repetition pattern."""
     # Pattern equivalent to "x" slowed down by factor of 2
     base_pattern = Pat.pure("x")
-    pattern = Pat.repetition(base_pattern, RepetitionOp.Slow, 2)
+    pattern = Pat.speed(base_pattern, SpeedOp.Slow, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -146,7 +146,7 @@ def test_elongation_pattern() -> None:
     """Test elongation pattern."""
     # Pattern equivalent to "x@2"
     base_pattern = Pat.pure("x")
-    pattern = Pat.elongation(base_pattern, 2)
+    pattern = Pat.stretch(base_pattern, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -167,7 +167,7 @@ def test_elongation_pattern() -> None:
 def test_choice_pattern() -> None:
     """Test choice pattern selects based on cycle."""
     # Pattern with two choices
-    pattern = Pat.choice([Pat.pure("x"), Pat.pure("y")])
+    pattern = Pat.rand([Pat.pure("x"), Pat.pure("y")])
     stream = pat_stream(pattern)
 
     # Test cycle 0 (arc starting at 0)
@@ -197,7 +197,7 @@ def test_euclidean_pattern() -> None:
     """Test euclidean rhythm pattern."""
     # Pattern equivalent to "x(3,8)" - 3 hits in 8 steps
     atom = Pat.pure("x")
-    pattern = Pat.euclidean(atom, 3, 8, 0)
+    pattern = Pat.euc(atom, 3, 8, 0)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -230,7 +230,7 @@ def test_polymetric_pattern() -> None:
         Pat.pure("y"),
         Pat.pure("z"),
     ]
-    pattern = Pat.polymetric(patterns)
+    pattern = Pat.poly(patterns)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -256,7 +256,7 @@ def test_alternating_pattern() -> None:
     """Test alternating pattern cycles through choices."""
     # Pattern that alternates between x and y
     patterns = [Pat.pure("x"), Pat.pure("y")]
-    pattern = Pat.alternating(patterns)
+    pattern = Pat.alt(patterns)
     stream = pat_stream(pattern)
 
     # Test different cycles
@@ -284,7 +284,7 @@ def test_alternating_pattern() -> None:
 def test_probability_pattern() -> None:
     """Test probability pattern (deterministic based on arc)."""
     base_pattern = Pat.pure("x")
-    pattern = Pat.probability(base_pattern, Fraction(1))  # Always include
+    pattern = Pat.prob(base_pattern, Fraction(1))  # Always include
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -297,7 +297,7 @@ def test_probability_pattern() -> None:
     assert event.val == "x"
 
     # Test with 0 probability
-    pattern_never = Pat.probability(base_pattern, Fraction(0))
+    pattern_never = Pat.prob(base_pattern, Fraction(0))
     stream_never = pat_stream(pattern_never)
 
     events_never = stream_never.unstream(arc)
@@ -310,7 +310,7 @@ def test_complex_nested_pattern() -> None:
     """Test complex nested pattern combining multiple operations."""
     # Pattern equivalent to "[x y]!2" - sequence replicated twice
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
-    pattern = Pat.replicate(seq, 2)
+    pattern = Pat.repeat(seq, 2)
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -581,7 +581,7 @@ def test_fast_repetition_sub_cycle_splitting() -> None:
     """Test fast repetition patterns across sub-cycles."""
     # Fast repetition: "x!4" - 4 repetitions
     base_pattern = Pat.pure("x")
-    pattern = Pat.repetition(base_pattern, RepetitionOp.Fast, 4)
+    pattern = Pat.speed(base_pattern, SpeedOp.Fast, 4)
     stream = pat_stream(pattern)
 
     # Query an arc that spans across cycle boundary (0.5 to 1.5)
@@ -604,7 +604,7 @@ def test_slow_repetition_sub_cycle_splitting() -> None:
     """Test slow repetition patterns across sub-cycles."""
     # Slow repetition: "x/2" - half speed
     base_pattern = Pat.pure("x")
-    pattern = Pat.repetition(base_pattern, RepetitionOp.Slow, 2)
+    pattern = Pat.speed(base_pattern, SpeedOp.Slow, 2)
     stream = pat_stream(pattern)
 
     # Query an arc spanning multiple cycles to see the slow pattern
@@ -626,7 +626,7 @@ def test_euclidean_sub_cycle_splitting() -> None:
     """Test euclidean patterns across sub-cycles."""
     # Euclidean rhythm: "x(3,8)"
     atom = Pat.pure("x")
-    pattern = Pat.euclidean(atom, 3, 8, 0)
+    pattern = Pat.euc(atom, 3, 8, 0)
     stream = pat_stream(pattern)
 
     # Query across cycle boundary
@@ -647,7 +647,7 @@ def test_euclidean_sub_cycle_splitting() -> None:
 def test_choice_sub_cycle_splitting() -> None:
     """Test choice patterns across different cycles."""
     # Choice pattern with multiple options
-    pattern = Pat.choice(
+    pattern = Pat.rand(
         [
             Pat.pure("x"),
             Pat.pure("y"),
@@ -679,7 +679,7 @@ def test_alternating_sub_cycle_splitting() -> None:
     """Test alternating patterns across sub-cycles."""
     # Alternating pattern
     patterns = [Pat.pure("x"), Pat.pure("y")]
-    pattern = Pat.alternating(patterns)
+    pattern = Pat.alt(patterns)
     stream = pat_stream(pattern)
 
     # Test multiple consecutive cycles
@@ -705,7 +705,7 @@ def test_probability_sub_cycle_splitting() -> None:
     """Test probability patterns across sub-cycles."""
     # Probability pattern with 50% chance
     base_pattern = Pat.pure("x")
-    pattern = Pat.probability(base_pattern, Fraction(1, 2))
+    pattern = Pat.prob(base_pattern, Fraction(1, 2))
     stream = pat_stream(pattern)
 
     # Test multiple cycles to see probabilistic behavior
@@ -733,7 +733,7 @@ def test_elongation_sub_cycle_splitting() -> None:
     """Test elongation patterns across sub-cycles."""
     # Elongation pattern: "x@3"
     base_pattern = Pat.pure("x")
-    pattern = Pat.elongation(base_pattern, 3)
+    pattern = Pat.stretch(base_pattern, 3)
     stream = pat_stream(pattern)
 
     # Query multiple cycles to see the elongated pattern
@@ -758,7 +758,7 @@ def test_polymetric_sub_cycle_splitting() -> None:
         Pat.pure("x"),  # 1 cycle
         Pat.seq([Pat.pure("y"), Pat.pure("z")]),  # 1 cycle, 2 elements
     ]
-    pattern = Pat.polymetric(patterns)
+    pattern = Pat.poly(patterns)
     stream = pat_stream(pattern)
 
     # Query across multiple cycles

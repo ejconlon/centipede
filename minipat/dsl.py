@@ -6,7 +6,7 @@ from typing import Callable, Iterable
 
 from minipat.common import CycleDelta
 from minipat.midi import MidiAttrs, midinote, note, vel
-from minipat.pat import Pat, RepetitionOp
+from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
 
@@ -56,20 +56,20 @@ class Flow:
         return Flow(Stream.polymetric(streams, None))
 
     @staticmethod
-    def poly_sub(patterns: Iterable[Flow], subdivision: int) -> Flow:
+    def poly_sub(patterns: Iterable[Flow], subdiv: int) -> Flow:
         """Create a polymetric flow."""
         streams = PSeq.mk(pattern.stream for pattern in patterns)
-        return Flow(Stream.polymetric(streams, subdivision))
+        return Flow(Stream.polymetric(streams, subdiv))
 
-    def _repetition(self, operator: RepetitionOp, count: int) -> Flow:
+    def _repetition(self, operator: SpeedOp, count: int) -> Flow:
         """Create a repetition flow."""
         return Flow(Stream.repetition(self.stream, operator, count))
 
     def fast(self, count: int) -> Flow:
-        return self._repetition(RepetitionOp.Fast, count)
+        return self._repetition(SpeedOp.Fast, count)
 
     def slow(self, count: int) -> Flow:
-        return self._repetition(RepetitionOp.Slow, count)
+        return self._repetition(SpeedOp.Slow, count)
 
     def stretch(self, count: int) -> Flow:
         """Create an elongated flow."""
