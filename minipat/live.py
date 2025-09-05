@@ -68,6 +68,41 @@ def calculate_sleep_interval(
 
 
 @dataclass(frozen=True)
+class Timing:
+    """Configuration for timing calculations (frozen for immutability)."""
+
+    cps: Fraction
+    """Current cycles per second (tempo)."""
+
+    generations_per_cycle: int
+    """Number of event generations to calculate per cycle."""
+
+    wait_factor: Fraction
+    """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
+
+    @classmethod
+    def default(cls) -> "Timing":
+        """Create a Timing instance with default values."""
+        return cls(
+            cps=DEFAULT_CPS,
+            generations_per_cycle=DEFAULT_GENERATIONS_PER_CYCLE,
+            wait_factor=DEFAULT_WAIT_FACTOR,
+        )
+
+    def get_sleep_interval(self) -> float:
+        """Calculate appropriate sleep interval based on timing configuration.
+
+        Uses the shared calculation function for consistency.
+
+        Returns:
+            Sleep interval in seconds, clamped to reasonable bounds.
+        """
+        return calculate_sleep_interval(
+            self.cps, self.generations_per_cycle, self.wait_factor
+        )
+
+
+@dataclass(frozen=True)
 class Instant:
     """Represents a specific moment in time with cycle and posix timing information."""
 
@@ -294,14 +329,8 @@ class BackendEvents[U](BackendMessage[U]):
 class BackendTiming[U](BackendMessage[U]):
     """Update timing configuration for the backend."""
 
-    cps: Fraction
-    """Cycles per second (tempo)."""
-
-    generations_per_cycle: int
-    """Number of event generations to calculate per cycle."""
-
-    wait_factor: Fraction
-    """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
+    timing: Timing
+    """Timing configuration."""
 
 
 class TimerTask[T](Task):
@@ -622,17 +651,18 @@ class LiveSystem[T, U]:
         logger.info("Live pattern system started")
 
         # Send initial timing configuration to backend
-        initial_timing: BackendTiming[U] = BackendTiming(
+        timing = Timing(
             cps=transport_state.cps,
             generations_per_cycle=env.generations_per_cycle,
             wait_factor=env.wait_factor,
         )
+        initial_timing: BackendTiming[U] = BackendTiming(timing=timing)
         backend_sender.send(initial_timing)
         logger.debug(
             "Sent initial timing configuration - CPS: %s, Gens/Cycle: %d, Wait Factor: %s",
-            transport_state.cps,
-            env.generations_per_cycle,
-            env.wait_factor,
+            timing.cps,
+            timing.generations_per_cycle,
+            timing.wait_factor,
         )
 
         return live_system
@@ -657,11 +687,12 @@ class LiveSystem[T, U]:
         """
         self._transport_sender.send(TransportSetCps(cps))
         # Also send timing update to backend
-        timing_update: BackendTiming[U] = BackendTiming(
+        timing = Timing(
             cps=cps,
             generations_per_cycle=self._env.generations_per_cycle,
             wait_factor=self._env.wait_factor,
         )
+        timing_update: BackendTiming[U] = BackendTiming(timing=timing)
         self._backend_sender.send(timing_update)
 
     def set_cycle(self, cycle: CycleTime) -> None:
