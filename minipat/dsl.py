@@ -108,9 +108,9 @@ class Flow:
         """Slow events down by a factor"""
         return self._speed(SpeedOp.Slow, numeric_frac(factor))
 
-    def stretch(self, count: int) -> Flow:
+    def stretch(self, count: Numeric) -> Flow:
         """Create a stretched flow."""
-        return Flow(Stream.stretch(self.stream, count))
+        return Flow(Stream.stretch(self.stream, numeric_frac(count)))
 
     def prob(self, chance: Numeric) -> Flow:
         """Create a probabilistic flow."""

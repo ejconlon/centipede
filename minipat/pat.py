@@ -159,14 +159,14 @@ class Pat[T]:
         return Pat(PatSpeed(pat, op, factor))
 
     @staticmethod
-    def stretch(pattern: Pat[T], count: int) -> Pat[T]:
-        """Create an stretched pattern.
+    def stretch(pattern: Pat[T], count: Fraction) -> Pat[T]:
+        """Create a stretched pattern.
 
         Textual form: pattern@count
 
         Args:
             pattern: The pattern to stretch
-            count: The stretch count
+            count: The stretch count (can be fractional)
 
         Returns:
             A pattern stretched by the given count
@@ -394,7 +394,7 @@ class PatStretch[T, R](PatF[T, R]):
     """
 
     pat: R
-    count: int
+    count: Fraction
 
 
 @dataclass(frozen=True)

@@ -105,11 +105,11 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
                 if isinstance(current_element.unwrap, PatStretch):
                     # Already stretched, add 1 to count (each _ adds 1)
                     base_element = current_element.unwrap.pat
-                    total_count = current_element.unwrap.count + 1
+                    total_count = current_element.unwrap.count + Fraction(1)
                     current_element = Pat.stretch(base_element, total_count)
                 else:
                     # Create new stretch (1 underscore = stretch by 2)
-                    current_element = Pat.stretch(current_element, 2)
+                    current_element = Pat.stretch(current_element, Fraction(2))
             else:
                 # This is another element
                 result.append(current_element)
@@ -246,13 +246,13 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         if len(items) >= 3 and str(items[1]) == "@":
             # Case: bd@N (@ followed by numeric value)
             # @N means stretch by a factor of N
-            current_count = int(items[2])
+            current_count = Fraction(int(items[2]))
         else:
             # Case: bd_ (underscores)
             # Each underscore adds +1 to the base count of 1
             # So bd_ = count 2, bd__ = count 3, etc.
             stretch_symbols = items[1:]
-            current_count = 1 + len(stretch_symbols)
+            current_count = Fraction(1 + len(stretch_symbols))
 
         # Check if the element is already a stretch and collapse them
         if isinstance(element.unwrap, PatStretch):
@@ -265,7 +265,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
             else:
                 # Underscore case: each _ adds 1 to existing count
                 additional_underscores = len(items) - 1  # -1 for the element itself
-                total_count = element.unwrap.count + additional_underscores
+                total_count = element.unwrap.count + Fraction(additional_underscores)
             return Pat.stretch(base_element, total_count)
         else:
             # Regular stretch

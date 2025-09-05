@@ -146,7 +146,7 @@ def test_elongation_pattern() -> None:
     """Test stretch pattern."""
     # Pattern equivalent to "x@2"
     base_pattern = Pat.pure("x")
-    pattern = Pat.stretch(base_pattern, 2)
+    pattern = Pat.stretch(base_pattern, Fraction(2))
     stream = pat_stream(pattern)
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -733,7 +733,7 @@ def test_elongation_sub_cycle_splitting() -> None:
     """Test stretch patterns across sub-cycles."""
     # Elongation pattern: "x@3"
     base_pattern = Pat.pure("x")
-    pattern = Pat.stretch(base_pattern, 3)
+    pattern = Pat.stretch(base_pattern, Fraction(3))
     stream = pat_stream(pattern)
 
     # Query multiple cycles to see the stretched pattern

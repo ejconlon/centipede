@@ -95,10 +95,8 @@ def print_pattern(pat: Pat[str]) -> str:
 
         case PatStretch(pat, count):
             pattern_str = print_pattern(pat)
-            # Use underscore for stretch (count is the stretch factor, so use count-1 underscores)
-            # x_ has count=2 (stretch by 2), should print as 1 underscore
-            underscore_count = max(1, count - 1)
-            return f"{pattern_str}{'_' * underscore_count}"
+            # Always use @notation for stretch patterns
+            return f"{pattern_str}@{count}"
 
         case PatProb(pat, chance):
             pattern_str = print_pattern(pat)

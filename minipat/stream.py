@@ -182,12 +182,12 @@ class Stream[T](metaclass=ABCMeta):
         return RepetitionStream(stream, op, factor)
 
     @staticmethod
-    def stretch(stream: Stream[T], count: int) -> Stream[T]:
+    def stretch(stream: Stream[T], count: Fraction) -> Stream[T]:
         """Create a stretched stream.
 
         Args:
             stream: The stream to stretch
-            count: The stretch count
+            count: The stretch count (can be fractional)
 
         Returns:
             A stream stretched by the given count
@@ -641,7 +641,7 @@ class ElongationStream[T](Stream[T]):
     """Specialized stream for stretch patterns."""
 
     pattern: Stream[T]
-    count: int
+    count: Fraction
 
     @override
     def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
@@ -1005,7 +1005,7 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
                     weight = Fraction(1)
                 elif isinstance(child.unwrap, PatStretch):
                     # Stretch patterns take up more space (weight = count)
-                    weight = Fraction(child.unwrap.count)
+                    weight = child.unwrap.count
                     # Use the inner pattern, not the stretch wrapper
                     child = child.unwrap.pat
                 weighted_children.append((pat_stream(child), weight))

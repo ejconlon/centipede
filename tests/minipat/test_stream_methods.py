@@ -328,7 +328,7 @@ def test_stream_constructor_repetition() -> None:
 def test_stream_constructor_elongation() -> None:
     """Test Stream.stretch() constructor."""
     base_stream = Stream.pure("x")
-    stream = Stream.stretch(base_stream, 2)
+    stream = Stream.stretch(base_stream, Fraction(2))
 
     arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)

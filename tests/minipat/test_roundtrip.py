@@ -76,9 +76,9 @@ def test_repetition_patterns() -> None:
 
 def test_elongation_patterns() -> None:
     """Test stretch patterns."""
-    round_trip_test("x_")
-    round_trip_test("bd__")
-    round_trip_test("hh___")
+    round_trip_test("x_", "x@2")
+    round_trip_test("bd__", "bd@3")
+    round_trip_test("hh___", "hh@4")
 
 
 def test_probability_patterns() -> None:
@@ -130,7 +130,7 @@ def test_complex_patterns() -> None:
     round_trip_test("bd*3 sd")
     round_trip_test("bd:0*2 sd:1/2")
     round_trip_test("bd(3,8) ~ hh?")
-    round_trip_test("{bd*2, sd_} cp")
+    round_trip_test("{bd*2, sd_} cp", "{bd*2, sd@2} cp")
     round_trip_test("bd? [sd | cp] hh*4")
 
 
