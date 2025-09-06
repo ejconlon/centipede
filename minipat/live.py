@@ -760,6 +760,15 @@ class LiveSystem[T, U]:
         """Stop pattern playback."""
         self.play(False)
 
+    def playing(self) -> bool:
+        """Check if the pattern system is currently playing.
+
+        Returns:
+            True if playback is active, False if paused or stopped.
+        """
+        with self._transport_state_mutex as state:
+            return state.playing
+
     def mute(self, orbit: Orbit, muted: bool = True) -> None:
         """Mute or unmute an orbit.
 

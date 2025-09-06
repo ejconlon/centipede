@@ -28,7 +28,7 @@ __all__ = [
 ]
 
 
-_DEFAULT_VAR_NAME = "x"
+_DEFAULT_VAR_NAME = "n"
 
 
 def _var_name() -> str:

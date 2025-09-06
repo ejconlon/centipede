@@ -348,7 +348,7 @@ class Nucleus:
     ) -> Nucleus:
         log_path = log_path or os.environ.get("MINIPAT_LOG_PATH", "/tmp/minipat.log")
         assert log_path is not None
-        log_level = log_level or os.environ.get("MINIPAT_LOG_LEVEL", "DEBUG")
+        log_level = log_level or os.environ.get("MINIPAT_LOG_LEVEL", "INFO")
         assert log_level is not None
         port_name = port_name or os.environ.get("MINIPAT_PORT", "minipat")
         assert port_name is not None
@@ -391,6 +391,22 @@ class Nucleus:
 
     def clear(self) -> None:
         self.live.clear_orbits()
+
+    def running(self) -> bool:
+        """Check if the actor system is currently running.
+
+        Returns:
+            True if the system is running, False if it has stopped or is stopping.
+        """
+        return self.sys.running()
+
+    def playing(self) -> bool:
+        """Check if the pattern system is currently playing.
+
+        Returns:
+            True if playback is active, False if paused or stopped.
+        """
+        return self.live.playing()
 
     def set_cps(self, cps: Numeric) -> None:
         self.live.set_cps(numeric_frac(cps))

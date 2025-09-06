@@ -1387,6 +1387,20 @@ class System(Control):
                 gs.logger.debug("System shutdown cleanly with no exceptions")
             return saved_excs
 
+    def running(self) -> bool:
+        """Check if the actor system is currently running.
+
+        Returns:
+            True if the system is running, False if it has stopped or is stopping.
+        """
+        # Check if the root thread is alive and not draining
+        if not self._root_thread.is_alive():
+            return False
+
+        # Check if the system is draining (shutting down)
+        with self._global_state as gs:
+            return not gs.draining
+
     def thread_count(self) -> int:
         """Get the number of currently running threads.
 
