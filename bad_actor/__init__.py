@@ -202,7 +202,17 @@ class ActionException(Exception):
     fatal: bool
     action: Action
     exc: Exception
-    saved_exc: Optional[ActionException]
+    saved_exc: Optional[ActionException] = None
+
+    def __post_init__(self) -> None:
+        # Initialize the Exception base class with a descriptive message.
+        # Construct a descriptive message for the exception
+        message = f"Actor {self.name}#{self.uniq_id} failed during {self.action.name}: {self.exc}"
+        if self.fatal:
+            message = f"[FATAL] {message}"
+        # Call the superclass constructor with the message
+        # We need to use object.__setattr__ because the dataclass is frozen
+        object.__setattr__(self, "args", (message,))
 
 
 def is_fatal_exception(exc: BaseException) -> bool:
@@ -455,8 +465,9 @@ def on_report_stop_fatal(env: ActorEnv, exc: Optional[ActionException]) -> None:
         env: The actor environment.
         exc: Optional exception that occurred in the child.
     """
-    if exc is not None:
-        env.control.stop(immediate=exc.fatal)
+    if exc is not None and exc.fatal:
+        env.control.stop(immediate=True)
+        raise exc
 
 
 def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]) -> None:
@@ -466,8 +477,9 @@ def on_report_stop_always(env: ActorEnv, exc: Optional[ActionException]) -> None
         env: The actor environment.
         exc: Optional exception that occurred in the child.
     """
-    fatal = exc is not None and exc.fatal
-    env.control.stop(immediate=fatal)
+    if exc is not None:
+        env.control.stop(immediate=exc.fatal)
+        raise exc
 
 
 # Lifecycle:
@@ -1398,6 +1410,22 @@ class RootActor(Actor[Never]):
             global_state: The global system state.
         """
         self._global_state = global_state
+
+    @override
+    def on_report(
+        self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
+    ) -> None:
+        """Handle child reports by always stopping the system.
+
+        As the root actor, any child failure should stop the system since
+        there's nowhere else to escalate to.
+
+        Args:
+            env: The actor environment.
+            child_id: The unique ID of the child.
+            exc: Optional exception from the child.
+        """
+        on_report_stop_always(env, exc)
 
     @override
     def on_stop(self, logger: Logger) -> None:
