@@ -643,9 +643,6 @@ class LiveSystem[T, U]:
         self._env = env
         self._transport_state_mutex = transport_state_mutex
 
-    def __del__(self) -> None:
-        self.panic()
-
     @staticmethod
     def start(
         system: System,

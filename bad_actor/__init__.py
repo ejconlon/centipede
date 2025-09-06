@@ -1253,9 +1253,6 @@ class System(Control):
         self._root_thread = root_thread
         self._control = control
 
-    def __del__(self) -> None:
-        self.stop()
-
     @override
     def spawn_actor(self, name: str, actor: Actor[T]) -> Sender[T]:
         """Spawn a new actor.

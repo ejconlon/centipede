@@ -70,3 +70,7 @@ docs:
 # Start fluidsynth as midi target
 fluid:
   fluidsynth -qsi
+
+# Start minipat repl
+boot:
+  {{python}} -m minipat.boot

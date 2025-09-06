@@ -355,6 +355,10 @@ class Nucleus:
         live = start_midi_live_system(sys, port_name, init_cps)
         return Nucleus(sys, live)
 
+    def stop(self) -> None:
+        self.live.panic()
+        self.sys.stop()
+
     def play(self) -> None:
         self.live.play()
 
@@ -381,8 +385,11 @@ class Nucleus:
     def orbital(self, num: int) -> Orbital:
         return Orbital(self, Orbit(num))
 
-    def __index__(self, num: int) -> Orbital:
+    def __getitem__(self, num: int) -> Orbital:
         return self.orbital(num)
+
+    def __delitem__(self, num: int) -> None:
+        return self.orbital(num).clear()
 
     def __floordiv__(self, flow: Flow) -> None:
         self.once(flow)
