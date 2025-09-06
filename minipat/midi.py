@@ -6,6 +6,7 @@ MIDI message handling utilities.
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
+from fractions import Fraction
 from functools import partial
 from logging import Logger
 from threading import Event
@@ -33,7 +34,6 @@ from minipat.live import (
     BackendPlay,
     BackendTiming,
     Instant,
-    LiveEnv,
     LiveSystem,
     Orbit,
     Processor,
@@ -1376,7 +1376,7 @@ def echo_system(in_port_name: str, out_port_name: str) -> System:
 
 
 def start_midi_live_system(
-    system: System, out_port_name: str, env: Optional[LiveEnv] = None
+    system: System, out_port_name: str, cps: Optional[Fraction] = None
 ) -> LiveSystem[MidiAttrs, TimedMessage]:
     """Start a LiveSystem with MIDI components.
 
@@ -1405,9 +1405,6 @@ def start_midi_live_system(
         live_system._backend_sender.send(timing_update)
         ```
     """
-    if env is None:
-        env = LiveEnv()
-
     # Create MIDI output port and protect with mutex
     out_port = mido.open_output(name=out_port_name, virtual=True)  # pyright: ignore
     output_mutex = Mutex(out_port)
@@ -1441,4 +1438,4 @@ def start_midi_live_system(
     processor = MidiProcessor()
 
     # Start the live system with MIDI processor and backend
-    return LiveSystem.start(system, processor, backend_sender, env)
+    return LiveSystem.start(system, processor, backend_sender, cps)

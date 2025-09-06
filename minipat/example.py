@@ -9,7 +9,6 @@ from minipat.live import (
     BackendEvents,
     BackendMessage,
     BackendPlay,
-    LiveEnv,
     LiveSystem,
     LogProcessor,
     Orbit,
@@ -55,9 +54,7 @@ def main() -> None:
     backend_actor = LogBackendActor()
     backend_sender = system.spawn_actor("log_backend", backend_actor)
 
-    live: LiveSystem[str, str] = LiveSystem.start(
-        system, processor, backend_sender, LiveEnv(debug=True)
-    )
+    live: LiveSystem[str, str] = LiveSystem.start(system, processor, backend_sender)
 
     try:
         # Create some simple patterns and convert to streams

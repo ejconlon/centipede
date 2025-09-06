@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable
+from typing import Callable, Optional
 
+from bad_actor import System, new_system
 from minipat.common import CycleDelta, Numeric, numeric_frac
+from minipat.live import LiveSystem, Orbit
 from minipat.midi import (
     MidiAttrs,
+    TimedMessage,
     channel_stream,
     combine_all,
     control_stream,
     midinote_stream,
     note_stream,
     program_stream,
+    start_midi_live_system,
     value_stream,
     vel_stream,
 )
@@ -323,3 +328,101 @@ def channel(pat_str: str) -> Flow:
         channel("9*4")            # Repeat Channel 10 (drums) 4 times
     """
     return Flow(channel_stream(pat_str))
+
+
+@dataclass(frozen=True, eq=False)
+class Nucleus:
+    sys: System
+    live: LiveSystem[MidiAttrs, TimedMessage]
+
+    @staticmethod
+    def boot(
+        port_name: Optional[str] = None,
+        sys_name: Optional[str] = None,
+        init_bpm: Optional[int] = None,
+        init_bpc: Optional[int] = None,
+    ) -> Nucleus:
+        port_name = port_name or os.environ.get("MINIPAT_PORT", "minipat")
+        assert port_name is not None
+        sys_name = sys_name or os.environ.get("MINIPAT_SYS", "system")
+        assert sys_name is not None
+        init_bpm = init_bpm or int(os.environ.get("MINIPAT_BPM", "120"))
+        assert init_bpm is not None
+        init_bpc = init_bpc or int(os.environ.get("MINIPAT_BPC", "4"))
+        assert init_bpc is not None
+        init_cps = Fraction(init_bpm, init_bpc * 60)
+        sys = new_system(sys_name)
+        live = start_midi_live_system(sys, port_name, init_cps)
+        return Nucleus(sys, live)
+
+    def play(self) -> None:
+        self.live.play()
+
+    def pause(self) -> None:
+        self.live.pause()
+
+    def panic(self) -> None:
+        self.live.panic()
+
+    def clear(self) -> None:
+        self.live.clear_orbits()
+
+    def set_cps(self, cps: Numeric) -> None:
+        self.live.set_cps(numeric_frac(cps))
+
+    def once(
+        self,
+        flow: Flow,
+        length: Optional[CycleDelta] = None,
+        aligned: Optional[bool] = None,
+    ) -> None:
+        self.live.once(flow.stream, length=length, aligned=aligned, orbit=None)
+
+    def orbital(self, num: int) -> Orbital:
+        return Orbital(self, Orbit(num))
+
+    def __index__(self, num: int) -> Orbital:
+        return self.orbital(num)
+
+    def __floordiv__(self, flow: Flow) -> None:
+        self.once(flow)
+
+
+@dataclass(frozen=True, eq=False)
+class Orbital:
+    nucleus: Nucleus
+    num: Orbit
+
+    def once(
+        self,
+        flow: Flow,
+        length: Optional[CycleDelta] = None,
+        aligned: Optional[bool] = None,
+    ) -> None:
+        self.nucleus.live.once(
+            flow.stream, length=length, aligned=aligned, orbit=self.num
+        )
+
+    def every(self, flow: Flow) -> None:
+        self.nucleus.live.set_orbit(self.num, flow.stream)
+
+    def solo(self) -> None:
+        self.nucleus.live.solo(self.num)
+
+    def unsolo(self) -> None:
+        self.nucleus.live.unsolo(self.num)
+
+    def mute(self) -> None:
+        self.nucleus.live.mute(self.num)
+
+    def unmute(self) -> None:
+        self.nucleus.live.unmute(self.num)
+
+    def clear(self) -> None:
+        self.nucleus.live.set_orbit(self.num, None)
+
+    def __itruediv__(self, flow: Flow) -> None:
+        self.every(flow)
+
+    def __floordiv__(self, flow: Flow) -> None:
+        self.once(flow)

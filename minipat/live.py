@@ -131,9 +131,6 @@ class LiveEnv:
     Defines global settings that control pattern playback behavior.
     """
 
-    debug: bool = False
-    """Enable debug logging for pattern playback."""
-
     generations_per_cycle: int = DEFAULT_GENERATIONS_PER_CYCLE
     """Number of event generations to calculate per cycle."""
 
@@ -654,24 +651,29 @@ class LiveSystem[T, U]:
         system: System,
         processor: Processor[T, U],
         backend_sender: Sender[BackendMessage[U]],
-        env: LiveEnv,
+        cps: Optional[Fraction] = None,
+        env: Optional[LiveEnv] = None,
     ) -> LiveSystem[T, U]:
-        """Start the live pattern system.
+        """Create and start the live pattern system.
 
         Args:
             system: The actor system to use.
             processor: Processor for transforming pattern events.
             backend_sender: Sender for backend messages.
-            env: Environment configuration.
+            cps: Starting CPS (optional)
+            env: Environment configuration (optional).
 
         Returns:
             A started LiveSystem instance.
         """
+        cps = cps if cps is not None else DEFAULT_CPS
+        env = env if env is not None else LiveEnv()
+
         logger = logging.getLogger("minipat")
         logger.info("Starting live pattern system")
 
         # Create state objects for actors
-        transport_state = TransportState()
+        transport_state = TransportState(cps=cps)
         transport_state_mutex = Mutex(transport_state)
         pattern_state = PatternState[T]()
 
@@ -798,8 +800,8 @@ class LiveSystem[T, U]:
     def once(
         self,
         stream: Stream[T],
-        length: CycleDelta = CycleDelta(ONE),
-        aligned: bool = False,
+        length: Optional[CycleDelta] = None,
+        aligned: Optional[bool] = None,
         orbit: Optional[Orbit] = None,
     ) -> None:
         """Generate and immediately send events for a stream over a specified duration.
@@ -810,6 +812,9 @@ class LiveSystem[T, U]:
             aligned: If True, start at the next cycle boundary; if False, start immediately.
             orbit: Optional orbit to use for event processing.
         """
+        length = length if length is not None else CycleDelta(ONE)
+        aligned = aligned if aligned is not None else False
+
         # Eagerly evaluate the stream
         with self._transport_state_mutex as state:
             current_cycle = state.current_cycle
