@@ -49,10 +49,13 @@ unit-single-threaded:
   {{python}} -m pytest tests
 
 # Run all tests
-test: typecheck unit
+test: unit
 
 # Run all checks
-check: format lint test
+check: format lint-fix typecheck test
+
+# Run all checks - strict
+check-strict: format lint-fix typecheck-strict test
 
 # Clean most generated files (+ venv)
 clean:

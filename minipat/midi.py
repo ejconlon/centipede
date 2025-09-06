@@ -4,13 +4,25 @@ This module provides both high-level pattern-based MIDI functionality and low-le
 MIDI message handling utilities.
 """
 
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
 from functools import partial
 from logging import Logger
 from threading import Event
-from typing import Any, Iterable, NewType, Optional, Sequence, Tuple, cast, override
+from typing import (
+    Any,
+    Iterable,
+    List,
+    NewType,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+    override,
+)
 
 import mido
 from mido.frozen import FrozenMessage, freeze_message
@@ -309,7 +321,39 @@ class ValueField(MessageField[ControlVal, int]):
 # =============================================================================
 
 
-@dataclass(frozen=True)
+def midi_message_sort_key(msg: FrozenMessage) -> int:
+    """Get sort key for a MIDI message.
+
+    Returns a numeric priority for sorting MIDI messages.
+    Lower values come first in the sort order.
+
+    Sort order: note_off < program_change < control_change < note_on
+
+    This ensures that:
+    - Note offs happen before other events (to clear previous notes)
+    - Program and control changes happen between notes (to set up the next note)
+    - Note ons happen last (to use the new program/control settings)
+
+    Args:
+        msg: The MIDI message to get a sort key for
+
+    Returns:
+        An integer sort key (lower values sort first)
+    """
+    if MsgTypeField.exists(msg):
+        msg_type = MsgTypeField.get(msg)
+        if msg_type == "note_off":
+            return 0
+        elif msg_type == "program_change":
+            return 1
+        elif msg_type == "control_change":
+            return 2
+        elif msg_type == "note_on":
+            return 3
+    return 4
+
+
+@dataclass(frozen=True, order=False)
 class TimedMessage:
     """A timed message with POSIX timestamp."""
 
@@ -318,6 +362,23 @@ class TimedMessage:
 
     message: FrozenMessage
     """The frozen MIDI message."""
+
+    def __lt__(self, other: TimedMessage) -> bool:
+        """Compare timed messages by time first, then by message type priority."""
+        if self.time != other.time:
+            return self.time < other.time
+        return midi_message_sort_key(self.message) < midi_message_sort_key(
+            other.message
+        )
+
+    def __le__(self, other: TimedMessage) -> bool:
+        return self == other or self < other
+
+    def __gt__(self, other: TimedMessage) -> bool:
+        return not (self <= other)
+
+    def __ge__(self, other: TimedMessage) -> bool:
+        return not (self < other)
 
 
 type MsgHeap = PHeapMap[PosixTime, TimedMessage]
@@ -510,23 +571,22 @@ class ControlValKey(MidiKey[ControlVal]):
     pass
 
 
-def parse_message(
+def parse_messages(
     orbit: Optional[Orbit],
     attrs: MidiAttrs,
-    default_velocity: Optional[Velocity] = None,
-) -> FrozenMessage:
-    """Parse MIDI attributes into a FrozenMessage.
+    default_velocity: Velocity,
+) -> List[FrozenMessage]:
+    """Parse MIDI attributes into multiple FrozenMessages.
 
-    Converts a set of MIDI attributes into a specific MIDI message type.
-    The function determines the message type based on which attributes are present
-    and strictly enforces that only one message type's attributes are provided:
+    Converts a set of MIDI attributes into multiple MIDI message types.
+    The function extracts all valid message types present in the attributes:
 
     - If note is present: creates a note_on message (note required, velocity optional)
     - If program is present: creates a program_change message (program required only)
     - If control attributes are present: creates a control_change message (both control_num and control_val required)
 
-    The function is defensive and will reject conflicting combinations of attributes
-    (e.g., having both note and program attributes).
+    This allows mixing different message types in the same attributes, e.g.:
+    note('c4 c5') >> program('0 1') would create both note and program change messages.
 
     Args:
         orbit: The orbit number, used as MIDI channel (must be 0-15), or None if not specified
@@ -534,32 +594,25 @@ def parse_message(
         default_velocity: Default velocity to use when not specified (defaults to DEFAULT_VELOCITY)
 
     Returns:
-        A FrozenMessage representing the parsed MIDI message
+        A list of FrozenMessage objects representing the parsed MIDI messages
 
     Raises:
         ValueError: If the orbit is outside valid MIDI channel range (0-15),
                    or if neither orbit nor channel attribute is provided,
-                   or if conflicting attributes from different message types are present,
-                   or if the attributes don't contain sufficient information to
-                   create any supported message type, or if required attributes
-                   are missing for the determined message type
+                   or if incomplete control change attributes are present
 
     Examples:
         >>> # Create note-on message
         >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(VelocityKey(), Velocity(100))
-        >>> msg = parse_message(Orbit(0), attrs)
-        >>> msg.type == "note_on"
+        >>> msgs = parse_messages(Orbit(0), attrs)
+        >>> len(msgs) == 1 and msgs[0].type == "note_on"
         True
 
-        >>> # Create program change message
-        >>> attrs = DMap.empty(MidiDom).put(ProgramKey(), Program(42))
-        >>> msg = parse_message(Orbit(1), attrs)
-        >>> msg.type == "program_change"
-        True
-
-        >>> # This would raise ValueError due to conflicting attributes
+        >>> # Create both note and program change messages
         >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(ProgramKey(), Program(42))
-        >>> parse_message(Orbit(0), attrs)  # Raises ValueError
+        >>> msgs = parse_messages(Orbit(1), attrs)
+        >>> len(msgs) == 2
+        True
     """
     # Extract attributes
     note = attrs.lookup(NoteKey())
@@ -586,75 +639,36 @@ def parse_message(
             "Either channel attribute or orbit must be provided for MIDI message"
         )
 
-    # Check for conflicting attribute combinations
-    has_note = note is not None
-    has_velocity = velocity is not None
-    has_program = program is not None
-    has_control_num = control_num is not None
-    has_control_val = control_val is not None
+    messages: List[FrozenMessage] = []
 
-    # Count how many different message types are implied
-    message_type_count = 0
-    if has_note or has_velocity:  # velocity implies note message type
-        message_type_count += 1
-    if has_program:
-        message_type_count += 1
-    if has_control_num or has_control_val:
-        message_type_count += 1
-
-    if message_type_count > 1:
-        # Conflicting attributes found
-        present_attrs = []
-        if has_note or has_velocity:
-            present_attrs.append("note/velocity")
-        if has_program:
-            present_attrs.append("program")
-        if has_control_num or has_control_val:
-            present_attrs.append("control")
-        raise ValueError(
-            f"Conflicting MIDI attributes found: {', '.join(present_attrs)}. "
-            "Expected exactly one message type: (note+velocity), (program), or (control_num+control_val)"
-        )
-
-    # Determine message type based on available attributes
-    if has_note:
+    # Check for note message
+    if note is not None:
         # Create note_on message (velocity is allowed with note)
-        assert note is not None  # Type checker hint
-        vel = (
-            velocity
-            if velocity is not None
-            else (
-                default_velocity if default_velocity is not None else DEFAULT_VELOCITY
-            )
-        )
-        return msg_note_on(channel=channel, note=note, velocity=vel)
-    elif has_velocity:
+        vel = velocity if velocity is not None else default_velocity
+        messages.append(msg_note_on(channel=channel, note=note, velocity=vel))
+    elif velocity is not None:
         # Velocity without note - this is an error case
         raise ValueError(
             "Velocity attribute found without note. "
             "Velocity can only be used with note attributes for note_on messages"
         )
-    elif has_program:
-        # Create program_change message
-        assert program is not None  # Type checker hint
-        return msg_pc(channel=channel, program=program)
-    elif has_control_num and has_control_val:
-        # Create control_change message (both control_num and control_val required)
-        assert control_num is not None and control_val is not None  # Type checker hint
-        return msg_cc(channel=channel, control=control_num, value=control_val)
-    elif has_control_num or has_control_val:
+
+    # Check for program change message
+    if program is not None:
+        messages.append(msg_pc(channel=channel, program=program))
+
+    # Check for control change message
+    if control_num is not None and control_val is not None:
+        messages.append(msg_cc(channel=channel, control=control_num, value=control_val))
+    elif control_num is not None or control_val is not None:
         # Incomplete control change attributes
-        missing = "control_val" if has_control_num else "control_num"
+        missing = "control_val" if control_num is not None else "control_num"
         raise ValueError(
             f"Incomplete control change attributes: missing {missing}. "
             "Both control_num and control_val are required for control_change messages"
         )
-    else:
-        # No valid combination of attributes found
-        raise ValueError(
-            "Insufficient MIDI attributes to create message. "
-            "Expected one of: (note), (program), or (control_num + control_val)"
-        )
+
+    return messages
 
 
 # =============================================================================
@@ -1205,11 +1219,9 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
         timed_messages = []
 
         for span, ev in events:
-            # Parse message using parse_message (no orbit clamping)
+            # Parse messages using parse_messages (supports multiple message types)
             try:
-                msg = parse_message(
-                    orbit, ev.val, default_velocity=self._default_velocity
-                )
+                msgs = parse_messages(orbit, ev.val, self._default_velocity)
             except ValueError as e:
                 # Log the error and skip this event
                 import logging
@@ -1226,39 +1238,41 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
             event_start = span.whole is None or span.active.start == span.whole.start
             event_end = span.whole is None or span.active.end == span.whole.end
 
-            # Handle different message types
-            if MsgTypeField.get(msg) == "note_on":
-                # For note messages, we need to handle timing for note_on/note_off pairs
-                note = NoteField.get(msg)
-                channel = ChannelField.get(msg)
+            # Process each message
+            for msg in msgs:
+                # Handle different message types
+                if MsgTypeField.get(msg) == "note_on":
+                    # For note messages, we need to handle timing for note_on/note_off pairs
+                    note = NoteField.get(msg)
+                    channel = ChannelField.get(msg)
 
-                if event_start:
-                    # Calculate timestamp for the start of the event
-                    timestamp = PosixTime(
-                        instant.posix_start
-                        + (float(span.active.start) / float(instant.cps))
-                    )
-                    timed_messages.append(TimedMessage(timestamp, msg))
+                    if event_start:
+                        # Calculate timestamp for the start of the event
+                        timestamp = PosixTime(
+                            instant.posix_start
+                            + (float(span.active.start) / float(instant.cps))
+                        )
+                        timed_messages.append(TimedMessage(timestamp, msg))
 
-                if event_end:
-                    # Create note off message (at end of span)
-                    note_off_timestamp = PosixTime(
-                        instant.posix_start
-                        + (float(span.active.end) / float(instant.cps))
-                    )
-                    note_off_msg = msg_note_off(channel=channel, note=note)
-                    timed_messages.append(
-                        TimedMessage(note_off_timestamp, note_off_msg)
-                    )
+                    if event_end:
+                        # Create note off message (at end of span)
+                        note_off_timestamp = PosixTime(
+                            instant.posix_start
+                            + (float(span.active.end) / float(instant.cps))
+                        )
+                        note_off_msg = msg_note_off(channel=channel, note=note)
+                        timed_messages.append(
+                            TimedMessage(note_off_timestamp, note_off_msg)
+                        )
 
-            else:
-                # For non-note messages (program_change, control_change), send only at event start
-                if event_start:
-                    timestamp = PosixTime(
-                        instant.posix_start
-                        + (float(span.active.start) / float(instant.cps))
-                    )
-                    timed_messages.append(TimedMessage(timestamp, msg))
+                else:
+                    # For non-note messages (program_change, control_change), send only at event start
+                    if event_start:
+                        timestamp = PosixTime(
+                            instant.posix_start
+                            + (float(span.active.start) / float(instant.cps))
+                        )
+                        timed_messages.append(TimedMessage(timestamp, msg))
 
         return PSeq.mk(timed_messages)
 

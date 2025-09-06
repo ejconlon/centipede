@@ -37,7 +37,7 @@ def _var_name() -> str:
 
 def _init() -> None:
     name = _var_name()
-    print(f'Exit with {name}.exit() or <C-d><C-c>')
+    print(f"Exit with {name}.exit() or <C-d><C-c>")
     n = Nucleus.boot()
     globals()[name] = n
     n.play()

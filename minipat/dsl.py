@@ -425,13 +425,17 @@ class Nucleus:
     def __getitem__(self, num: int) -> Orbital:
         return self.orbital(num)
 
-    def __setitem__(self, num: int, flow: Flow) -> None:
-        self.orbital(num).every(flow)
+    def __setitem__(self, num: int, flow: Optional[Flow]) -> None:
+        o = self.orbital(num)
+        if flow is None:
+            o.clear()
+        else:
+            o.every(flow)
 
     def __delitem__(self, num: int) -> None:
         return self.orbital(num).clear()
 
-    def __floordiv__(self, flow: Flow) -> None:
+    def __or__(self, flow: Flow) -> None:
         self.once(flow)
 
 
@@ -468,5 +472,8 @@ class Orbital:
     def clear(self) -> None:
         self.nucleus.live.set_orbit(self.num, None)
 
-    def __floordiv__(self, flow: Flow) -> None:
+    def __matmul__(self, flow: Flow) -> None:
+        self.once(flow)
+
+    def __or__(self, flow: Flow) -> None:
         self.once(flow)
