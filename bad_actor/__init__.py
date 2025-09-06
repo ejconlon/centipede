@@ -757,7 +757,15 @@ class ActorLoop[T]:
     def _except(
         self, action: Action, exc: Exception, saved_exc: Optional[ActionException]
     ) -> ActionException:
-        fatal = is_fatal_exception(exc) or (saved_exc is not None and saved_exc.fatal)
+        # Mark as fatal if:
+        # 1. The exception itself is inherently fatal (SystemExit, KeyboardInterrupt)
+        # 2. There's already a fatal exception saved
+        # 3. The parent fails to handle a child report (supervision failure)
+        fatal = (
+            is_fatal_exception(exc)
+            or (saved_exc is not None and saved_exc.fatal)
+            or action == Action.Report
+        )
         return ActionException(
             name=self._node.name,
             uniq_id=self._node.uniq_id,

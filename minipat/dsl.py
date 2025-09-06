@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -342,7 +343,13 @@ class Nucleus:
         sys_name: Optional[str] = None,
         init_bpm: Optional[int] = None,
         init_bpc: Optional[int] = None,
+        log_path: Optional[str] = None,
+        log_level: Optional[str] = None,
     ) -> Nucleus:
+        log_path = log_path or os.environ.get("MINIPAT_LOG_PATH", "/tmp/minipat.log")
+        assert log_path is not None
+        log_level = log_level or os.environ.get("MINIPAT_LOG_LEVEL", "DEBUG")
+        assert log_level is not None
         port_name = port_name or os.environ.get("MINIPAT_PORT", "minipat")
         assert port_name is not None
         sys_name = sys_name or os.environ.get("MINIPAT_SYS", "system")
@@ -352,17 +359,24 @@ class Nucleus:
         init_bpc = init_bpc or int(os.environ.get("MINIPAT_BPC", "4"))
         assert init_bpc is not None
         init_cps = Fraction(init_bpm, init_bpc * 60)
+        logging.basicConfig(filename=log_path, level=getattr(logging, log_level))
         sys = new_system(sys_name)
         live = start_midi_live_system(sys, port_name, init_cps)
         return Nucleus(sys, live)
 
-    def stop(self) -> None:
+    def stop(self) -> int:
         self.live.panic()
         self.sys.stop()
+        saved_excs = self.sys.wait()
+        if len(saved_excs) > 0:
+            sys.stderr.write(f"System exceptions ({len(saved_excs)})\n")
+            for exc in saved_excs:
+                sys.stderr.write(f"{exc}\n")
+        return len(saved_excs)
 
     def exit(self) -> NoReturn:
-        self.stop()
-        sys.exit()
+        ret = self.stop()
+        sys.exit(ret)
 
     def play(self) -> None:
         self.live.play()

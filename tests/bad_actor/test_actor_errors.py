@@ -52,6 +52,26 @@ class ReportingActor(Actor[str]):
         env.logger.info("Child %s reported: %s", child_id, exc)
 
 
+class FailingReportActor(Actor[str]):
+    """Actor that fails when handling child reports."""
+
+    def __init__(self) -> None:
+        self.child_spawned = False
+
+    def on_start(self, env: ActorEnv) -> None:
+        # Spawn a child that will fail
+        child = ErrorActor()
+        sender = env.control.spawn_actor("child", child)
+        sender.send("fail")
+        self.child_spawned = True
+
+    def on_report(
+        self, env: ActorEnv, child_id: UniqId, exc: Optional[ActionException]
+    ) -> None:
+        # Fail when trying to handle the child report
+        raise RuntimeError("Parent failed to handle child report")
+
+
 class FatalErrorActor(Actor[str]):
     """Actor that generates fatal errors."""
 
@@ -121,6 +141,39 @@ def test_child_error_reporting() -> None:
 
     sys.stop(immediate=False)
     sys.wait(timeout=1.0)
+
+
+def test_parent_report_handling_failure() -> None:
+    """Test that parent failures during report handling are marked as fatal."""
+    sys = new_system()
+
+    # Create a parent that will fail when handling child reports
+    parent = FailingReportActor()
+    sys.spawn_actor("failing-parent", parent)
+
+    # Give time for child to spawn, fail, and report to parent
+    time.sleep(0.2)
+
+    # The system should have shut down due to the fatal error
+    # (parent failing to handle child report)
+    exceptions = sys.wait(timeout=2.0)
+
+    # Should have at least one fatal exception
+    assert len(exceptions) > 0
+
+    # Find the exception related to report handling failure
+    report_failures = [
+        exc
+        for exc in exceptions
+        if "Parent failed to handle child report" in str(exc.exc)
+    ]
+
+    # Should have found the parent's report handling failure
+    assert len(report_failures) > 0
+
+    # The exception should be marked as fatal
+    for exc in report_failures:
+        assert exc.fatal, "Parent report handling failure should be marked as fatal"
 
 
 def test_normal_operation_no_errors() -> None:
