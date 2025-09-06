@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, Optional
+from typing import Callable, NoReturn, Optional
 
 from bad_actor import System, new_system
 from minipat.common import CycleDelta, Numeric, numeric_frac
@@ -359,6 +360,10 @@ class Nucleus:
         self.live.panic()
         self.sys.stop()
 
+    def exit(self) -> NoReturn:
+        self.stop()
+        sys.exit()
+
     def play(self) -> None:
         self.live.play()
 
@@ -387,6 +392,9 @@ class Nucleus:
 
     def __getitem__(self, num: int) -> Orbital:
         return self.orbital(num)
+
+    def __setitem__(self, num: int, flow: Flow) -> None:
+        self.orbital(num).every(flow)
 
     def __delitem__(self, num: int) -> None:
         return self.orbital(num).clear()
@@ -427,9 +435,6 @@ class Orbital:
 
     def clear(self) -> None:
         self.nucleus.live.set_orbit(self.num, None)
-
-    def __itruediv__(self, flow: Flow) -> None:
-        self.every(flow)
 
     def __floordiv__(self, flow: Flow) -> None:
         self.once(flow)

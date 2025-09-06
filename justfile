@@ -73,4 +73,4 @@ fluid:
 
 # Start minipat repl
 boot:
-  {{python}} -m minipat.boot
+  {{python}} -i -m minipat.boot

@@ -1279,17 +1279,20 @@ class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
         self._output_mutex = output_mutex
         self._timing_mutex = timing_mutex
         self._playing = False
+        self._reset = False
 
     @override
     def on_stop(self, logger: Logger) -> None:
         """Reset the MIDI output when stopping."""
         logger.debug("Resetting MIDI output port on stop")
 
-        with self._output_mutex as output_port:
-            output_port.reset()
+        if not self._reset:
+            with self._output_mutex as output_port:
+                output_port.reset()
 
     @override
     def on_message(self, env: ActorEnv, value: BackendMessage[TimedMessage]) -> None:
+        self._reset = False
         match value:
             case BackendPlay(playing):
                 self._playing = playing
@@ -1301,9 +1304,11 @@ class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
                     )
                     # Clear buffer
                     pmh_clear(self._heap)
-
+                    # Reset to send "Reset All Controllers" and "All Notes Off"
                     with self._output_mutex as output_port:
                         output_port.reset()
+                    # Track that the last thing we did was reset
+                    self._reset = True
             case BackendEvents(messages):
                 if self._playing:
                     env.logger.debug("MIDI: Pushing %d messages", len(messages))

@@ -1,4 +1,4 @@
-import code
+import os
 
 from minipat.dsl import (
     Flow,
@@ -22,26 +22,32 @@ __all__ = [
     "control",
     "value",
     "Nucleus",
+    "_var_name",
+    "_init",
+    "_cleanup",
 ]
 
 
-_NUCLEUS_NAME = "n"
+_DEFAULT_VAR_NAME = "x"
+
+
+def _var_name() -> str:
+    return os.environ.get("MINIPAT_VAR", _DEFAULT_VAR_NAME)
 
 
 def _init() -> None:
+    name = _var_name()
     n = Nucleus.boot()
-    globals()[_NUCLEUS_NAME] = n
+    globals()[name] = n
+    n.play()
 
 
 def _cleanup() -> None:
-    n = globals().get(_NUCLEUS_NAME)
+    name = _var_name()
+    n = globals().get(name)
     if n is not None:
         n.stop()
 
 
 if __name__ == "__main__":
     _init()
-    try:
-        code.interact(local=locals())
-    finally:
-        _cleanup()
