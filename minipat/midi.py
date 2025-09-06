@@ -1206,7 +1206,21 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
 
         for span, ev in events:
             # Parse message using parse_message (no orbit clamping)
-            msg = parse_message(orbit, ev.val, default_velocity=self._default_velocity)
+            try:
+                msg = parse_message(
+                    orbit, ev.val, default_velocity=self._default_velocity
+                )
+            except ValueError as e:
+                # Log the error and skip this event
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "Skipping MIDI event due to parse error at cycle %s: %s",
+                    instant.cycle_time,
+                    e,
+                )
+                continue
 
             # Determine event timing
             event_start = span.whole is None or span.active.start == span.whole.start

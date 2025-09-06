@@ -359,7 +359,9 @@ class Nucleus:
         init_bpc = init_bpc or int(os.environ.get("MINIPAT_BPC", "4"))
         assert init_bpc is not None
         init_cps = Fraction(init_bpm, init_bpc * 60)
-        logging.basicConfig(filename=log_path, level=getattr(logging, log_level))
+        logging.basicConfig(
+            filename=log_path, filemode="w", level=getattr(logging, log_level)
+        )
         sys = new_system(sys_name)
         live = start_midi_live_system(sys, port_name, init_cps)
         return Nucleus(sys, live)

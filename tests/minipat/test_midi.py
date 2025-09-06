@@ -247,7 +247,7 @@ def test_midi_processor_empty_events() -> None:
 
 
 def test_midi_processor_validates_values() -> None:
-    """Test MidiProcessor validates MIDI values and raises ValueError for invalid events."""
+    """Test MidiProcessor logs and skips invalid MIDI values."""
     processor = MidiProcessor()
 
     # Create MIDI attributes with out-of-range values (bypass validation for testing)
@@ -263,12 +263,12 @@ def test_midi_processor_validates_values() -> None:
         cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
     )
 
-    # Should raise ValueError for invalid MIDI values
-    try:
-        processor.process(instant, Orbit(0), event_heap)
-        assert False, "Should have raised ValueError for out-of-range values"
-    except ValueError as e:
-        assert "in range 0" in str(e)  # mido's error message format
+    # Should log and skip invalid MIDI values, returning empty list
+    timed_messages = processor.process(instant, Orbit(0), event_heap)
+    message_list = list(timed_messages)
+
+    # Should have no messages since the invalid event was skipped
+    assert len(message_list) == 0
 
 
 def test_midi_processor_orbit_as_channel() -> None:
@@ -294,12 +294,12 @@ def test_midi_processor_orbit_as_channel() -> None:
         assert len(message_list) == 2  # note_on and note_off
         assert ChannelField.unmk(ChannelField.get(message_list[0].message)) == orbit_num
 
-    # Test invalid orbit (out of range) - should raise ValueError
-    try:
-        processor.process(instant, Orbit(20), event_heap)
-        assert False, "Should have raised ValueError for out-of-range orbit"
-    except ValueError as e:
-        assert "out of valid MIDI channel range" in str(e)
+    # Test invalid orbit (out of range) - should log and skip
+    timed_messages = processor.process(instant, Orbit(20), event_heap)
+    message_list = list(timed_messages)
+
+    # Should have no messages since the invalid orbit event was skipped
+    assert len(message_list) == 0
 
 
 def test_echo_system_integration() -> None:
