@@ -38,6 +38,9 @@ from minipat.midi import (
     combine,
     combine_all,
     echo_system,
+    mh_empty,
+    mh_pop,
+    mh_push,
     midi_message_sort_key,
     note_stream,
     parse_messages,
@@ -920,16 +923,22 @@ def test_timed_message_comparison() -> None:
     expected_order = [tm_note_off, tm_program, tm_control, tm_note_on, tm_note_on_later]
     assert sorted_messages == expected_order
 
-    # Test heap ordering
-    # span1 = Span(Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2))))
-    # span2 = Span(Arc(CycleTime(Fraction(2)), CycleTime(Fraction(3))))
-    # heap: EvHeap[TimedMessage] = ev_heap_empty()
-    # TODO make these evs
-    # tms = [tm_note_on_later, tm_note_on, tm_note_off, tm_program, tm_control]
-    # for tm in tms:
-    #     # TODO push into heap
-    #     pass
-    # TODO check that popping is in order: note_off, program, control, note_on, note_on_later
+    # Test heap ordering with the new PHeap implementation
+    heap = mh_empty()
+    tms = [tm_note_on_later, tm_note_on, tm_note_off, tm_program, tm_control]
+    for tm in tms:
+        heap = mh_push(heap, tm)
+
+    # Pop messages and verify they come out in the correct order
+    popped_messages = []
+    while True:
+        ptm, heap = mh_pop(heap)
+        if ptm is None:
+            break
+        popped_messages.append(ptm)
+
+    # Should be ordered by time first, then by message type priority
+    assert popped_messages == expected_order
 
 
 def test_timed_message_comparison_edge_cases() -> None:

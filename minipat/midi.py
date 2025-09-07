@@ -55,7 +55,7 @@ from minipat.parser import parse_pattern
 from minipat.stream import MergeStrat, Stream, pat_stream
 from spiny.common import Box
 from spiny.dmap import DKey, DMap
-from spiny.heapmap import PHeapMap
+from spiny.heap import PHeap
 from spiny.seq import PSeq
 
 # =============================================================================
@@ -381,17 +381,17 @@ class TimedMessage:
         return not (self < other)
 
 
-type MsgHeap = PHeapMap[PosixTime, TimedMessage]
-"""A priority queue of timed MIDI messages ordered by time."""
+type MsgHeap = PHeap[TimedMessage]
+"""A priority queue of timed MIDI messages ordered by time and message type."""
 
 
 def mh_empty() -> MsgHeap:
     """Create an empty message heap."""
-    return PHeapMap.empty()
+    return PHeap.empty()
 
 
 def mh_push(mh: MsgHeap, tm: TimedMessage) -> MsgHeap:
-    return mh.insert(tm.time, tm)
+    return mh.insert(tm)
 
 
 def mh_pop(mh: MsgHeap) -> Tuple[Optional[TimedMessage], MsgHeap]:
@@ -400,7 +400,7 @@ def mh_pop(mh: MsgHeap) -> Tuple[Optional[TimedMessage], MsgHeap]:
     if x is None:
         return (None, mh)
     else:
-        _, v, mh2 = x
+        v, mh2 = x
         return (v, mh2)
 
 
