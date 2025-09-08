@@ -16,7 +16,7 @@ from minipat.pat import (
     PatStretch,
     SpeedOp,
 )
-from minipat.pat_dag import Find, PatDag, PatNode
+from minipat.pat_dag import PatDag, PatFind, PatNode
 from spiny.seq import PSeq
 
 
@@ -65,13 +65,13 @@ def _collect_denominators[T](seq: PSeq[DeltaVal[T]]) -> List[int]:
 # Pattern Minimization Functions
 # =============================================================================
 
-type DagMinimizer[T] = Callable[[PatDag[T], Find], Optional[Find]]
+type DagMinimizer[T] = Callable[[PatDag[T], PatFind], Optional[PatFind]]
 """Type alias for functions that minimize DAG patterns.
 
 Returns the minimized Find handle if a change was made, None if no change."""
 
 
-def minimize_seq_repetition_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]:
+def minimize_seq_repetition_dag[T](dag: PatDag[T], find: PatFind) -> Optional[PatFind]:
     """Minimize sequences with repeated patterns using PatSpeed in a DAG.
 
     Converts [p p p] -> p*3
@@ -128,7 +128,7 @@ def minimize_seq_repetition_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]
     return None
 
 
-def minimize_single_seq_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]:
+def minimize_single_seq_dag[T](dag: PatDag[T], find: PatFind) -> Optional[PatFind]:
     """Remove unnecessary single-element sequences in DAG.
 
     Converts [p] -> p
@@ -138,7 +138,7 @@ def minimize_single_seq_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]:
     pat_f = dag.get_node(find)
     match pat_f:
         case PatSeq(pats):
-            items = list(pats.iter())
+            items: list[PatFind] = list(pats.iter())
             if len(items) == 1:
                 return items[0]
         case _:
@@ -162,10 +162,10 @@ def run_dag_minimizers[T](
         node_ids = dag.postorder()
 
         for node_id in node_ids:
-            if node_id not in dag.nodes:  # Node might have been removed
+            if not dag.has_node(node_id):  # Node might have been removed
                 continue
 
-            find = dag.nodes[node_id].find
+            find = dag.get_pat_node(node_id).find
 
             # Apply all minimizers to this node
             for minimizer in minimizers:
@@ -174,7 +174,7 @@ def run_dag_minimizers[T](
                     # Replace the current node with the minimized result
                     minimized_content = dag.get_node(result)
                     # Update the PatNode with new content but keep the same Find handle
-                    dag.nodes[node_id] = PatNode(find, minimized_content)
+                    dag.set_pat_node(node_id, PatNode(find, minimized_content))
                     changed = True
                     break  # Only apply one minimizer per iteration per node
 

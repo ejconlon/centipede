@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, NewType, Optional
+from dataclasses import dataclass
+from typing import Dict, List, NewType, Optional, Tuple
 
 from minipat.common import PartialMatchException
 from minipat.pat import (
@@ -22,6 +22,7 @@ from minipat.pat import (
     PatSpeed,
     PatStretch,
 )
+from spiny.common import Box
 from spiny.seq import PSeq
 
 
@@ -71,7 +72,7 @@ class Find[I]:
         """Two Find nodes are equal if they have the same root."""
         if not isinstance(other, Find):
             return False
-        return self.root_node_id() == other.root_node_id()
+        return bool(self.root_node_id() == other.root_node_id())
 
     def __hash__(self) -> int:
         """Hash based on root's node_id for use in sets/dicts."""
@@ -97,18 +98,165 @@ class PatNode[T]:
     patf: PatF[T, PatFind]
 
 
-@dataclass
+def _hash_pattern[T](pat_f: PatF[T, PatFind]) -> PatHash:
+    """Create a canonical tuple representation of a pattern."""
+    canon: tuple[object, ...]
+    match pat_f:
+        case PatSilent():
+            canon = ("silent",)
+        case PatPure(value):
+            canon = ("pure", value)
+        case PatSeq(pats):
+            canon = ("seq", tuple(find.root_node_id() for find in pats.iter()))
+        case PatPar(pats):
+            canon = ("par", tuple(find.root_node_id() for find in pats.iter()))
+        case PatRand(pats):
+            canon = ("rand", tuple(find.root_node_id() for find in pats.iter()))
+        case PatAlt(pats):
+            canon = ("alt", tuple(find.root_node_id() for find in pats.iter()))
+        case PatEuc(child, hits, steps, rotation):
+            canon = ("euc", child.root_node_id(), hits, steps, rotation)
+        case PatPoly(pats, subdiv):
+            canon = (
+                "poly",
+                tuple(find.root_node_id() for find in pats.iter()),
+                subdiv,
+            )
+        case PatSpeed(child, op, factor):
+            canon = ("speed", child.root_node_id(), op, factor)
+        case PatStretch(child, count):
+            canon = ("stretch", child.root_node_id(), count)
+        case PatProb(child, chance):
+            canon = ("prob", child.root_node_id(), chance)
+        case PatRepeat(child, count):
+            canon = ("repeat", child.root_node_id(), count)
+        case _:
+            raise PartialMatchException(f"Unknown pattern type: {type(pat_f)}")
+    return PatHash(hash(canon))
+
+
+def _next_pat_find(
+    id_src: Box[PatId],
+) -> PatFind:
+    """Add a new node to the DAG and return its Find handle."""
+    node_id = id_src.value
+    id_src.value = PatId(node_id + 1)
+    return Find(node_id)
+
+
+def _convert_pat_node[T](
+    id_src: Box[PatId], nodes: Dict[PatId, PatNode[T]], root_pat: Pat[T]
+) -> PatFind:
+    """Convert a Pat tree to DAG representation using iterative approach with stack.
+
+    Creates a new node for every pattern - canonicalization will merge duplicates later.
+    Returns the Find handle for the root of the converted DAG.
+    """
+    # Stack of (pat, find) pairs to process
+    stack: List[Tuple[Pat[T], PatFind]] = []
+
+    # Allocate ID for root and push to stack
+    root_find = _next_pat_find(id_src)
+    stack.append((root_pat, root_find))
+
+    while stack:
+        pat, find = stack.pop()
+
+        patf: PatF[T, PatFind]
+        match pat.unwrap:
+            case PatSilent():
+                patf = PatSilent()
+
+            case PatPure(value):
+                patf = PatPure(value)
+
+            case PatSeq(pats):
+                child_finds = []
+                for child in pats.iter():
+                    child_find = _next_pat_find(id_src)
+                    child_finds.append(child_find)
+                    stack.append((child, child_find))
+                converted_seq = PSeq.mk(child_finds)
+                patf = PatSeq(converted_seq)
+
+            case PatPar(pats):
+                child_finds = []
+                for child in pats.iter():
+                    child_find = _next_pat_find(id_src)
+                    child_finds.append(child_find)
+                    stack.append((child, child_find))
+                converted_seq = PSeq.mk(child_finds)
+                patf = PatPar(converted_seq)
+
+            case PatRand(pats):
+                child_finds = []
+                for child in pats.iter():
+                    child_find = _next_pat_find(id_src)
+                    child_finds.append(child_find)
+                    stack.append((child, child_find))
+                converted_seq = PSeq.mk(child_finds)
+                patf = PatRand(converted_seq)
+
+            case PatAlt(pats):
+                child_finds = []
+                for child in pats.iter():
+                    child_find = _next_pat_find(id_src)
+                    child_finds.append(child_find)
+                    stack.append((child, child_find))
+                converted_seq = PSeq.mk(child_finds)
+                patf = PatAlt(converted_seq)
+
+            case PatPoly(pats, subdiv):
+                child_finds = []
+                for child in pats.iter():
+                    child_find = _next_pat_find(id_src)
+                    child_finds.append(child_find)
+                    stack.append((child, child_find))
+                converted_seq = PSeq.mk(child_finds)
+                patf = PatPoly(converted_seq, subdiv)
+
+            case PatEuc(child, hits, steps, rotation):
+                child_find = _next_pat_find(id_src)
+                stack.append((child, child_find))
+                patf = PatEuc(child_find, hits, steps, rotation)
+
+            case PatSpeed(child, op, factor):
+                child_find = _next_pat_find(id_src)
+                stack.append((child, child_find))
+                patf = PatSpeed(child_find, op, factor)
+
+            case PatStretch(child, count):
+                child_find = _next_pat_find(id_src)
+                stack.append((child, child_find))
+                patf = PatStretch(child_find, count)
+
+            case PatProb(child, chance):
+                child_find = _next_pat_find(id_src)
+                stack.append((child, child_find))
+                patf = PatProb(child_find, chance)
+
+            case PatRepeat(child, count):
+                child_find = _next_pat_find(id_src)
+                stack.append((child, child_find))
+                patf = PatRepeat(child_find, count)
+
+            case _:
+                raise PartialMatchException(f"Unknown pattern type: {type(pat.unwrap)}")
+
+        nodes[find._node_id] = PatNode(find, patf)
+
+    return root_find
+
+
 class PatDag[T]:
     """Pattern DAG representation with union-find for equality."""
 
-    id_src: int = field(default=0)
-    root: PatId = field(default=PatId(0))
-    nodes: Dict[PatId, PatNode[T]] = field(default_factory=dict)
-
-    def _next_id(self) -> PatId:
-        """Generate next unique node ID."""
-        self.id_src += 1
-        return PatId(self.id_src)
+    def __init__(
+        self, id_src: Box[PatId], root_find: PatFind, nodes: Dict[PatId, PatNode[T]]
+    ) -> None:
+        self._id_src = id_src
+        self._root_find = root_find
+        self._nodes = nodes
 
     def postorder(self) -> List[PatId]:
         """Return nodes in postorder (bottom-up) traversal from the root.
@@ -120,12 +268,12 @@ class PatDag[T]:
         result = []
 
         # Stack of (node_id, children_processed)
-        stack = [(self.root, False)]
+        stack = [(self._root_find.root_node_id(), False)]
 
         while stack:
             node_id, children_processed = stack.pop()
 
-            if node_id in visited or node_id not in self.nodes:
+            if node_id in visited or node_id not in self._nodes:
                 continue
 
             if children_processed:
@@ -137,7 +285,7 @@ class PatDag[T]:
                 stack.append((node_id, True))
 
                 # Add children to stack (they'll be processed first due to stack order)
-                pat_node = self.nodes[node_id]
+                pat_node = self._nodes[node_id]
                 match pat_node.patf:
                     case (
                         PatSeq(pats)
@@ -172,23 +320,36 @@ class PatDag[T]:
         reachable = set(self.postorder())
 
         # Remove unreachable nodes from existing dict
-        unreachable = [k for k in self.nodes if k not in reachable]
+        unreachable = [k for k in self._nodes if k not in reachable]
         for k in unreachable:
-            del self.nodes[k]
+            del self._nodes[k]
 
         return len(unreachable) > 0
 
-    def add_node(self, pat: PatF[T, PatFind]) -> PatFind:
-        """Add a new node to the DAG and return its Find handle."""
-        node_id = self._next_id()
-        find = Find(node_id)
-        pat_node = PatNode(find, pat)
-        self.nodes[node_id] = pat_node
-        return find
+    def has_node(self, node_id: PatId) -> bool:
+        """Check if a node exists in the DAG."""
+        return node_id in self._nodes
+
+    def get_pat_node(self, node_id: PatId) -> PatNode[T]:
+        """Get the PatNode for a given node ID."""
+        return self._nodes[node_id]
+
+    def set_pat_node(self, node_id: PatId, pat_node: PatNode[T]) -> None:
+        """Set the PatNode for a given node ID."""
+        self._nodes[node_id] = pat_node
 
     def get_node(self, find: PatFind) -> PatF[T, PatFind]:
         """Get the pattern node associated with a Find handle."""
-        return self.nodes[find.root_node_id()].patf
+        return self._nodes[find.root_node_id()].patf
+
+    def add_node(self, pat: PatF[T, PatFind]) -> PatFind:
+        """Add a new node to the DAG and return its Find handle."""
+        node_id = self._id_src.value
+        self._id_src.value = PatId(node_id + 1)
+        find = Find(node_id)
+        pat_node = PatNode(find, pat)
+        self._nodes[node_id] = pat_node
+        return find
 
     def canonicalize(self, max_iterations: int = 100) -> bool:
         """Canonicalize the DAG by finding and merging equivalent subpatterns.
@@ -219,12 +380,12 @@ class PatDag[T]:
                 if node_id in garbage:
                     continue
 
-                pat_node = self.nodes[node_id]
+                pat_node = self._nodes[node_id]
                 find = pat_node.find
 
                 # Create a canonical hash of the pattern
                 # Since we're processing bottom-up, all children are already canonicalized
-                canon_hash = self._hash_pattern(pat_node.patf)
+                canon_hash = _hash_pattern(pat_node.patf)
 
                 if canon_hash in pattern_map:
                     # Found equivalent pattern, merge them
@@ -254,130 +415,17 @@ class PatDag[T]:
 
         # Clean up garbage nodes at the end
         for node_id in garbage:
-            del self.nodes[node_id]
+            del self._nodes[node_id]
 
         return any_changes
-
-    def _hash_pattern(self, pat_f: PatF[T, PatFind]) -> PatHash:
-        """Create a canonical tuple representation of a pattern."""
-        canon: tuple
-        match pat_f:
-            case PatSilent():
-                canon = ("silent",)
-            case PatPure(value):
-                canon = ("pure", value)
-            case PatSeq(pats):
-                canon = ("seq", tuple(find.root_node_id() for find in pats.iter()))
-            case PatPar(pats):
-                canon = ("par", tuple(find.root_node_id() for find in pats.iter()))
-            case PatRand(pats):
-                canon = ("rand", tuple(find.root_node_id() for find in pats.iter()))
-            case PatAlt(pats):
-                canon = ("alt", tuple(find.root_node_id() for find in pats.iter()))
-            case PatEuc(child, hits, steps, rotation):
-                canon = ("euc", child.root_node_id(), hits, steps, rotation)
-            case PatPoly(pats, subdiv):
-                canon = (
-                    "poly",
-                    tuple(find.root_node_id() for find in pats.iter()),
-                    subdiv,
-                )
-            case PatSpeed(child, op, factor):
-                canon = ("speed", child.root_node_id(), op, factor)
-            case PatStretch(child, count):
-                canon = ("stretch", child.root_node_id(), count)
-            case PatProb(child, chance):
-                canon = ("prob", child.root_node_id(), chance)
-            case PatRepeat(child, count):
-                canon = ("repeat", child.root_node_id(), count)
-            case _:
-                raise PartialMatchException(f"Unknown pattern type: {type(pat_f)}")
-        return PatHash(hash(canon))
-
-    @staticmethod
-    def _convert_pat_node(
-        p: Pat, dag: PatDag[T], node_map: Dict[int, PatFind]
-    ) -> PatFind:
-        """Convert a single Pat node to DAG representation."""
-        # Check if we've already converted this node (for sharing)
-        pat_id = id(p)
-        if pat_id in node_map:
-            return node_map[pat_id]
-
-        match p.unwrap:
-            case PatSilent():
-                find = dag.add_node(PatSilent())
-            case PatPure(value):
-                find = dag.add_node(PatPure(value))
-            case PatSeq(pats):
-                converted = PSeq.mk(
-                    [
-                        PatDag._convert_pat_node(child, dag, node_map)
-                        for child in pats.iter()
-                    ]
-                )
-                find = dag.add_node(PatSeq(converted))
-            case PatPar(pats):
-                converted = PSeq.mk(
-                    [
-                        PatDag._convert_pat_node(child, dag, node_map)
-                        for child in pats.iter()
-                    ]
-                )
-                find = dag.add_node(PatPar(converted))
-            case PatRand(pats):
-                converted = PSeq.mk(
-                    [
-                        PatDag._convert_pat_node(child, dag, node_map)
-                        for child in pats.iter()
-                    ]
-                )
-                find = dag.add_node(PatRand(converted))
-            case PatAlt(pats):
-                converted = PSeq.mk(
-                    [
-                        PatDag._convert_pat_node(child, dag, node_map)
-                        for child in pats.iter()
-                    ]
-                )
-                find = dag.add_node(PatAlt(converted))
-            case PatEuc(child, hits, steps, rotation):
-                converted_child = PatDag._convert_pat_node(child, dag, node_map)
-                find = dag.add_node(PatEuc(converted_child, hits, steps, rotation))
-            case PatPoly(pats, subdiv):
-                converted = PSeq.mk(
-                    [
-                        PatDag._convert_pat_node(child, dag, node_map)
-                        for child in pats.iter()
-                    ]
-                )
-                find = dag.add_node(PatPoly(converted, subdiv))
-            case PatSpeed(child, op, factor):
-                converted_child = PatDag._convert_pat_node(child, dag, node_map)
-                find = dag.add_node(PatSpeed(converted_child, op, factor))
-            case PatStretch(child, count):
-                converted_child = PatDag._convert_pat_node(child, dag, node_map)
-                find = dag.add_node(PatStretch(converted_child, count))
-            case PatProb(child, chance):
-                converted_child = PatDag._convert_pat_node(child, dag, node_map)
-                find = dag.add_node(PatProb(converted_child, chance))
-            case PatRepeat(child, count):
-                converted_child = PatDag._convert_pat_node(child, dag, node_map)
-                find = dag.add_node(PatRepeat(converted_child, count))
-            case _:
-                raise PartialMatchException(f"Unknown pattern type: {type(p.unwrap)}")
-
-        node_map[pat_id] = find
-        return find
 
     @staticmethod
     def from_pat(pat: Pat[T]) -> PatDag[T]:
         """Convert a Pat tree structure to a PatDag."""
-        dag = PatDag[T]()
-        node_map: Dict[int, PatFind] = {}
-        root_find = PatDag._convert_pat_node(pat, dag, node_map)
-        dag.root = root_find._node_id  # This is the actual node ID, not root
-        return dag
+        id_src = Box(PatId(0))
+        nodes: Dict[PatId, PatNode[T]] = {}
+        root_find = _convert_pat_node(id_src, nodes, pat)
+        return PatDag(id_src, root_find, nodes)
 
     def _convert_find_node(self, find: PatFind, cache: Dict[PatId, Pat[T]]) -> Pat[T]:
         """Convert a Find node back to a Pat."""
@@ -386,9 +434,9 @@ class PatDag[T]:
         if root_id in cache:
             return cache[root_id]
 
-        pat_f = self.nodes[root_id].patf
+        patf = self._nodes[root_id].patf
 
-        match pat_f:
+        match patf:
             case PatSilent():
                 result = Pat(PatSilent())
             case PatPure(value):
@@ -434,7 +482,7 @@ class PatDag[T]:
                 converted_child = self._convert_find_node(child, cache)
                 result = Pat(PatRepeat(converted_child, count))
             case _:
-                raise PartialMatchException(f"Unknown pattern type: {type(pat_f)}")
+                raise PartialMatchException(f"Unknown pattern type: {type(patf)}")
 
         cache[root_id] = result
         return result
@@ -442,5 +490,4 @@ class PatDag[T]:
     def to_pat(self) -> Pat[T]:
         """Convert this PatDag back to a Pat tree structure."""
         cache: Dict[PatId, Pat[T]] = {}
-        root_find = Find[PatId](self.root)
-        return self._convert_find_node(root_find, cache)
+        return self._convert_find_node(self._root_find, cache)
