@@ -427,67 +427,57 @@ class PatDag[T]:
         root_find = _convert_pat_node(id_src, nodes, pat)
         return PatDag(id_src, root_find, nodes)
 
-    def _convert_find_node(self, find: PatFind, cache: Dict[PatId, Pat[T]]) -> Pat[T]:
-        """Convert a Find node back to a Pat."""
-        root_id = find.root_node_id()
-
-        if root_id in cache:
-            return cache[root_id]
-
-        patf = self._nodes[root_id].patf
-
-        match patf:
-            case PatSilent():
-                result = Pat(PatSilent())
-            case PatPure(value):
-                result = Pat(PatPure(value))
-            case PatSeq(pats):
-                converted = [
-                    self._convert_find_node(child, cache) for child in pats.iter()
-                ]
-                result = Pat.seq(converted)
-            case PatPar(pats):
-                converted = [
-                    self._convert_find_node(child, cache) for child in pats.iter()
-                ]
-                result = Pat.par(converted)
-            case PatRand(pats):
-                converted = [
-                    self._convert_find_node(child, cache) for child in pats.iter()
-                ]
-                result = Pat.rand(converted)
-            case PatAlt(pats):
-                converted = [
-                    self._convert_find_node(child, cache) for child in pats.iter()
-                ]
-                result = Pat.alt(converted)
-            case PatEuc(child, hits, steps, rotation):
-                converted_child = self._convert_find_node(child, cache)
-                result = Pat(PatEuc(converted_child, hits, steps, rotation))
-            case PatPoly(pats, subdiv):
-                converted = [
-                    self._convert_find_node(child, cache) for child in pats.iter()
-                ]
-                result = Pat.poly(converted, subdiv)
-            case PatSpeed(child, op, factor):
-                converted_child = self._convert_find_node(child, cache)
-                result = Pat(PatSpeed(converted_child, op, factor))
-            case PatStretch(child, count):
-                converted_child = self._convert_find_node(child, cache)
-                result = Pat(PatStretch(converted_child, count))
-            case PatProb(child, chance):
-                converted_child = self._convert_find_node(child, cache)
-                result = Pat(PatProb(converted_child, chance))
-            case PatRepeat(child, count):
-                converted_child = self._convert_find_node(child, cache)
-                result = Pat(PatRepeat(converted_child, count))
-            case _:
-                raise PartialMatchException(f"Unknown pattern type: {type(patf)}")
-
-        cache[root_id] = result
-        return result
-
     def to_pat(self) -> Pat[T]:
-        """Convert this PatDag back to a Pat tree structure."""
+        """Convert this PatDag back to a Pat tree structure.
+
+        Processes nodes in postorder to ensure children are converted before parents.
+        """
         cache: Dict[PatId, Pat[T]] = {}
-        return self._convert_find_node(self._root_find, cache)
+
+        # Process nodes in postorder - children before parents
+        for node_id in self.postorder():
+            patf = self._nodes[node_id].patf
+
+            match patf:
+                case PatSilent():
+                    result = Pat(PatSilent())
+                case PatPure(value):
+                    result = Pat(PatPure(value))
+                case PatSeq(pats):
+                    # All children are guaranteed to be in cache
+                    converted = [cache[child.root_node_id()] for child in pats.iter()]
+                    result = Pat.seq(converted)
+                case PatPar(pats):
+                    converted = [cache[child.root_node_id()] for child in pats.iter()]
+                    result = Pat.par(converted)
+                case PatRand(pats):
+                    converted = [cache[child.root_node_id()] for child in pats.iter()]
+                    result = Pat.rand(converted)
+                case PatAlt(pats):
+                    converted = [cache[child.root_node_id()] for child in pats.iter()]
+                    result = Pat.alt(converted)
+                case PatEuc(child, hits, steps, rotation):
+                    converted_child = cache[child.root_node_id()]
+                    result = Pat(PatEuc(converted_child, hits, steps, rotation))
+                case PatPoly(pats, subdiv):
+                    converted = [cache[child.root_node_id()] for child in pats.iter()]
+                    result = Pat.poly(converted, subdiv)
+                case PatSpeed(child, op, factor):
+                    converted_child = cache[child.root_node_id()]
+                    result = Pat(PatSpeed(converted_child, op, factor))
+                case PatStretch(child, count):
+                    converted_child = cache[child.root_node_id()]
+                    result = Pat(PatStretch(converted_child, count))
+                case PatProb(child, chance):
+                    converted_child = cache[child.root_node_id()]
+                    result = Pat(PatProb(converted_child, chance))
+                case PatRepeat(child, count):
+                    converted_child = cache[child.root_node_id()]
+                    result = Pat(PatRepeat(converted_child, count))
+                case _:
+                    raise PartialMatchException(f"Unknown pattern type: {type(patf)}")
+
+            cache[node_id] = result
+
+        # Return the root pattern
+        return cache[self._root_find.root_node_id()]
