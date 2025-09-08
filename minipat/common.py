@@ -81,6 +81,12 @@ CycleDelta = NewType("CycleDelta", Fraction)
 PosixDelta = NewType("PosixDelta", float)
 """Type for POSIX time deltas represented as floats."""
 
+StepTime = NewType("StepTime", int)
+"""Time measured as step number (increments since start)."""
+
+StepDelta = NewType("StepDelta", int)
+"""Type for step time deltas represented as integers."""
+
 type Factor = Fraction
 """Type alias for scaling factors represented as fractions."""
 
@@ -176,6 +182,25 @@ class PosixTimeOps(TimeOps[PosixTime, PosixDelta]):
     @classmethod
     def negate(cls, delta: PosixDelta) -> PosixDelta:
         return PosixDelta(-delta)
+
+
+class StepTimeOps(TimeOps[StepTime, StepDelta]):
+    """Time operations for StepTime."""
+
+    @override
+    @classmethod
+    def diff(cls, end: StepTime, start: StepTime) -> StepDelta:
+        return StepDelta(end - start)
+
+    @override
+    @classmethod
+    def add(cls, base: StepTime, delta: StepDelta) -> StepTime:
+        return StepTime(base + delta)
+
+    @override
+    @classmethod
+    def negate(cls, delta: StepDelta) -> StepDelta:
+        return StepDelta(-delta)
 
 
 def current_posix_time() -> PosixTime:

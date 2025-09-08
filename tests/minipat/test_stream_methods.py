@@ -2,7 +2,7 @@
 
 from fractions import Fraction
 
-from minipat.arc import Arc
+from minipat.arc import CycleArc
 from minipat.common import CycleDelta, CycleTime
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
@@ -17,7 +17,7 @@ def test_stream_map() -> None:
     # Map to uppercase
     mapped_stream = stream.map(lambda x: x.upper())
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = mapped_stream.unstream(arc)
     event_list = list(events)
 
@@ -34,7 +34,7 @@ def test_stream_map_with_sequence() -> None:
     # Map to double values
     mapped_stream = stream.map(lambda x: x * 2)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = mapped_stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -61,7 +61,7 @@ def test_stream_filter() -> None:
     # Filter to only even numbers
     filtered_stream = stream.filter(lambda x: x % 2 == 0)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = filtered_stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -88,7 +88,7 @@ def test_stream_filter_with_parallel() -> None:
     # Filter to only values starting with 'a'
     filtered_stream = stream.filter(lambda x: x.startswith("a"))
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = filtered_stream.unstream(arc)
     event_list = list(events)
 
@@ -111,7 +111,7 @@ def test_stream_bind() -> None:
 
     bound_stream = stream.bind(MergeStrat.Inner, expand_to_seq)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = bound_stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -132,7 +132,7 @@ def test_stream_apply() -> None:
         MergeStrat.Inner, lambda x, y: x + y, right_stream
     )
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = combined_stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -153,7 +153,7 @@ def test_stream_shift_early() -> None:
     early_stream = stream.shift(CycleDelta(-Fraction(1, 4)))
 
     # Query from 0 to 1
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = early_stream.unstream(arc)
     event_list = list(events)
 
@@ -172,7 +172,7 @@ def test_stream_shift_late() -> None:
     late_stream = stream.shift(CycleDelta(Fraction(1, 4)))
 
     # Query from 0 to 1
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = late_stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -191,7 +191,7 @@ def test_stream_constructor_silence() -> None:
     """Test Stream.silent() constructor."""
     stream: Stream[str] = Stream.silent()
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -202,7 +202,7 @@ def test_stream_constructor_pure() -> None:
     """Test Stream.pure() constructor."""
     stream = Stream.pure("hello")
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -217,7 +217,7 @@ def test_stream_constructor_seq() -> None:
     streams = PSeq.mk([Stream.pure(1), Stream.pure(2), Stream.pure(3)])
     stream = Stream.seq(streams)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -231,7 +231,7 @@ def test_stream_constructor_par() -> None:
     streams = PSeq.mk([Stream.pure("x"), Stream.pure("y"), Stream.pure("z")])
     stream = Stream.par(streams)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -251,7 +251,7 @@ def test_stream_constructor_choice() -> None:
 
     # Test different cycles
     for cycle in range(3):
-        arc = Arc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
+        arc = CycleArc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
         events = stream.unstream(arc)
         event_list = list(events)
 
@@ -267,7 +267,7 @@ def test_stream_constructor_euclidean() -> None:
     atom_stream = Stream.pure("x")
     stream = Stream.euc(atom_stream, 3, 8, 0)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -283,7 +283,7 @@ def test_stream_constructor_polymetric() -> None:
 
     # Without subdivision
     stream = Stream.poly(patterns)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -307,7 +307,7 @@ def test_stream_constructor_repetition() -> None:
 
     # Fast repetition
     fast_stream = Stream.speed(base_stream, SpeedOp.Fast, Fraction(3))
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = fast_stream.unstream(arc)
     event_list = list(events)
 
@@ -330,7 +330,7 @@ def test_stream_constructor_elongation() -> None:
     base_stream = Stream.pure("x")
     stream = Stream.stretch(base_stream, Fraction(2))
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -346,7 +346,7 @@ def test_stream_constructor_probability() -> None:
 
     # 100% probability
     stream_always = Stream.prob(base_stream, Fraction(1))
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream_always.unstream(arc)
     event_list = list(events)
 
@@ -370,7 +370,7 @@ def test_stream_constructor_alternating() -> None:
     # Test alternation over cycles
     values = []
     for cycle in range(4):
-        arc = Arc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
+        arc = CycleArc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
         events = stream.unstream(arc)
         event_list = list(events)
 
@@ -388,7 +388,7 @@ def test_stream_constructor_replicate() -> None:
     base_stream = Stream.pure("x")
     stream = Stream.repeat(base_stream, Fraction(4))
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -419,7 +419,7 @@ def test_stream_constructor_pat() -> None:
     # Convert to stream using Stream.pat()
     stream = Stream.pat(pattern)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -439,7 +439,7 @@ def test_stream_map_chain() -> None:
         .map(lambda x: str(x))
     )  # "13"
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = result_stream.unstream(arc)
     event_list = list(events)
 
@@ -455,7 +455,7 @@ def test_stream_filter_chain() -> None:
     # Filter even numbers, then map to squares
     result_stream = stream.filter(lambda x: x % 2 == 0).map(lambda x: x**2)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = result_stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -472,7 +472,7 @@ def test_stream_complex_transformation() -> None:
     # Transform: filter > 1, map to double
     result_stream = stream.filter(lambda x: x > 1).map(lambda x: x * 2)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     events = result_stream.unstream(arc)
     event_list = list(events)
 
@@ -492,7 +492,7 @@ def test_stream_apply_with_different_patterns() -> None:
     # Concatenate strings
     combined = left.apply(MergeStrat.Inner, lambda x, y: x + y, right)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = combined.unstream(arc)
     event_list = list(events)
 
@@ -511,7 +511,7 @@ def test_stream_timing_precision() -> None:
     # Apply timing transformation (negative delta = earlier)
     result = stream.shift(CycleDelta(-Fraction(1, 6)))
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     events = result.unstream(arc)
     event_list = list(events)
 

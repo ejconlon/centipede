@@ -8,7 +8,7 @@ from typing import List
 import mido
 from mido.frozen import FrozenMessage
 
-from minipat.arc import Arc, Span
+from minipat.arc import CycleArc, Span
 from minipat.common import CycleTime, PosixTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
@@ -57,7 +57,7 @@ def test_note_parsing() -> None:
 
     # Should create a stream that produces MIDI attributes
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = notes.unstream(arc)
     event_list = list(events)
 
@@ -79,7 +79,7 @@ def test_velocity_parsing() -> None:
     """Test parsing velocity values."""
     vels = vel_stream("64 80 100")
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = vels.unstream(arc)
     event_list = list(events)
 
@@ -104,7 +104,7 @@ def test_combine_two_streams() -> None:
 
     combined = combine(notes, vels)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = combined.unstream(arc)
     event_list = list(events)
 
@@ -128,7 +128,7 @@ def test_combine_all_streams() -> None:
     """Test combining multiple streams with combine_all function."""
     # Test with no streams
     empty = combine_all([])
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = list(empty.unstream(arc))
     assert len(events) == 0  # Should be silent
 
@@ -160,7 +160,7 @@ def test_midi_processor() -> None:
     # Create test event heap
 
     span = Span(
-        active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), whole=None
+        active=CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), whole=None
     )
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
@@ -216,7 +216,9 @@ def test_midi_processor_defaults() -> None:
     # Create MIDI attributes with only note (no velocity)
     midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(72))
 
-    span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
+    span = Span(
+        active=CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None
+    )
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -262,7 +264,9 @@ def test_midi_processor_validates_values() -> None:
         DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelocityKey(), Velocity(-10))
     )
 
-    span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
+    span = Span(
+        active=CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None
+    )
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -285,7 +289,9 @@ def test_midi_processor_orbit_as_channel() -> None:
     # Create test MIDI attributes
     midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
 
-    span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
+    span = Span(
+        active=CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None
+    )
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -650,7 +656,9 @@ def test_midi_processor_with_parse_messages() -> None:
         ProgramKey(), ProgramField.mk(42)
     )
 
-    span = Span(active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None)
+    span = Span(
+        active=CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), whole=None
+    )
     event = Ev(span, program_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -778,7 +786,7 @@ def test_midi_processor_with_mixed_messages() -> None:
     )
 
     span = Span(
-        active=Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), whole=None
+        active=CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), whole=None
     )
     event = Ev(span, mixed_attrs)
     event_heap = ev_heap_singleton(event)
@@ -827,7 +835,7 @@ def test_mixed_streams_with_combine() -> None:
 
     combined = combine(notes, programs)
 
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = combined.unstream(arc)
     event_list = list(events)
 

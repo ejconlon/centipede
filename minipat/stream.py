@@ -9,7 +9,7 @@ from enum import Enum, auto
 from fractions import Fraction
 from typing import Callable, List, Optional, Tuple, override
 
-from minipat.arc import Arc, Span
+from minipat.arc import CycleArc, Span
 from minipat.common import CycleDelta, CycleTime, PartialMatchException
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
 from minipat.pat import (
@@ -42,7 +42,7 @@ class MergeStrat(Enum):
     Mixed = auto()
 
 
-def _create_span(original_arc: Arc, query_arc: Arc) -> Optional[Span]:
+def _create_span(original_arc: CycleArc, query_arc: CycleArc) -> Optional[Span]:
     """Create a span for an event within a query arc.
 
     Args:
@@ -71,7 +71,7 @@ class Stream[T](metaclass=ABCMeta):
     """A stream of events in time."""
 
     @abstractmethod
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         """Emit all events that start or end in the given arc.
 
         Args:
@@ -312,7 +312,7 @@ class SilenceStream[T](Stream[T]):
     """Specialized stream for silence patterns."""
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         return ev_heap_empty()
 
 
@@ -323,7 +323,7 @@ class PureStream[T](Stream[T]):
     value: T
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
         span = Span(active=arc, whole=None)
@@ -337,7 +337,7 @@ class WeightedSeqStream[T](Stream[T]):
     weighted_children: List[Tuple[Stream[T], Fraction]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.weighted_children) == 0:
             return ev_heap_empty()
 
@@ -355,7 +355,7 @@ class WeightedSeqStream[T](Stream[T]):
             child_duration = arc.length() * child_proportion
 
             child_start = arc.start + current_offset
-            child_arc = Arc(
+            child_arc = CycleArc(
                 CycleTime(child_start), CycleTime(child_start + child_duration)
             )
 
@@ -386,7 +386,7 @@ class SeqStream[T](Stream[T]):
     children: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.children) == 0:
             return ev_heap_empty()
 
@@ -395,7 +395,7 @@ class SeqStream[T](Stream[T]):
 
         for i, child in enumerate(self.children):
             child_start = arc.start + i * child_duration
-            child_arc = Arc(
+            child_arc = CycleArc(
                 CycleTime(child_start), CycleTime(child_start + child_duration)
             )
 
@@ -424,7 +424,7 @@ class ParStream[T](Stream[T]):
     children: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
 
@@ -443,7 +443,7 @@ class ChoiceStream[T](Stream[T]):
     choices: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.choices) == 0:
             return ev_heap_empty()
 
@@ -470,7 +470,7 @@ class EuclideanStream[T](Stream[T]):
         return cls(atom, hits, steps, rotation, pattern)
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.steps <= 0 or self.hits <= 0:
             return ev_heap_empty()
 
@@ -480,7 +480,7 @@ class EuclideanStream[T](Stream[T]):
         for i, is_hit in enumerate(self.pattern):
             if is_hit:
                 step_start = arc.start + i * step_duration
-                step_arc = Arc(
+                step_arc = CycleArc(
                     CycleTime(step_start), CycleTime(step_start + step_duration)
                 )
 
@@ -504,7 +504,7 @@ class PolymetricStream[T](Stream[T]):
     subdiv: Optional[int]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.patterns) == 0:
             return ev_heap_empty()
 
@@ -547,7 +547,7 @@ class RepetitionStream[T](Stream[T]):
     count: Fraction
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
@@ -568,7 +568,9 @@ class RepetitionStream[T](Stream[T]):
                     )  # Duration of each repetition
 
                     # Unstream once for a single repetition
-                    full_rep_arc = Arc(arc.start, CycleTime(arc.start + rep_duration))
+                    full_rep_arc = CycleArc(
+                        arc.start, CycleTime(arc.start + rep_duration)
+                    )
                     full_pattern_events = self.pattern.unstream(full_rep_arc)
 
                     # Add full repetitions
@@ -578,7 +580,7 @@ class RepetitionStream[T](Stream[T]):
                             # Shift the event to the correct repetition position
                             offset = rep_start - arc.start
                             shifted_span = Span(
-                                active=Arc(
+                                active=CycleArc(
                                     CycleTime(span.active.start + offset),
                                     CycleTime(span.active.end + offset),
                                 ),
@@ -604,7 +606,7 @@ class RepetitionStream[T](Stream[T]):
                     if frac_part > 0:
                         partial_start = arc.start + int_part * rep_duration
                         partial_end = partial_start + frac_part * rep_duration
-                        partial_arc = Arc(
+                        partial_arc = CycleArc(
                             CycleTime(partial_start), CycleTime(partial_end)
                         )
 
@@ -644,7 +646,7 @@ class ElongationStream[T](Stream[T]):
     count: Fraction
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         # Stretch semantics are handled at the sequence level
         # When used outside a sequence, stretch just passes through
         # This maintains backward compatibility with direct Stream.stretch() usage
@@ -663,7 +665,7 @@ class ProbabilityStream[T](Stream[T]):
     chance: Fraction
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
 
@@ -680,7 +682,7 @@ class AlternatingStream[T](Stream[T]):
     patterns: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.patterns) == 0:
             return ev_heap_empty()
 
@@ -697,7 +699,7 @@ class ReplicateStream[T](Stream[T]):
     count: Fraction
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
@@ -710,7 +712,7 @@ class ReplicateStream[T](Stream[T]):
         replicate_result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
         # Unstream once for a single repetition
-        full_rep_arc = Arc(arc.start, CycleTime(arc.start + rep_duration))
+        full_rep_arc = CycleArc(arc.start, CycleTime(arc.start + rep_duration))
         full_pattern_events = self.pattern.unstream(full_rep_arc)
 
         # Add full repetitions
@@ -720,7 +722,7 @@ class ReplicateStream[T](Stream[T]):
                 # Shift the event to the correct repetition position
                 offset = rep_start - arc.start
                 shifted_span = Span(
-                    active=Arc(
+                    active=CycleArc(
                         CycleTime(span.active.start + offset),
                         CycleTime(span.active.end + offset),
                     ),
@@ -744,7 +746,7 @@ class ReplicateStream[T](Stream[T]):
         if frac_part > 0:
             partial_start = arc.start + int_part * rep_duration
             partial_end = partial_start + frac_part * rep_duration
-            partial_arc = Arc(CycleTime(partial_start), CycleTime(partial_end))
+            partial_arc = CycleArc(CycleTime(partial_start), CycleTime(partial_end))
 
             # Unstream the partial repetition
             partial_pattern_events = self.pattern.unstream(partial_arc)
@@ -771,7 +773,7 @@ class FilterStream[T](Stream[T]):
     predicate: Callable[[T], bool]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         source_events = self.source.unstream(arc)
         result: PHeapMap[Span, Ev[T]] = ev_heap_empty()
 
@@ -791,7 +793,7 @@ class BindStream[A, B](Stream[B]):
     func: Callable[[A], Stream[B]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[B]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[B]]:
         source_events = self.source.unstream(arc)
         result: PHeapMap[Span, Ev[B]] = ev_heap_empty()
 
@@ -818,7 +820,7 @@ class ApplyStream[A, B, C](Stream[C]):
     right: Stream[B]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[C]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[C]]:
         left_events = self.left.unstream(arc)
         right_events = self.right.unstream(arc)
         result: PHeapMap[Span, Ev[C]] = ev_heap_empty()
@@ -854,12 +856,12 @@ class ShiftStream[T](Stream[T]):
     delta: CycleDelta
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
 
         # Shift the query arc in the opposite direction to compensate
-        shifted_arc = Arc(
+        shifted_arc = CycleArc(
             CycleTime(arc.start - self.delta), CycleTime(arc.end - self.delta)
         )
         source_events = self.source.unstream(shifted_arc)
@@ -867,13 +869,13 @@ class ShiftStream[T](Stream[T]):
 
         for _, ev in source_events:
             # Shift the event by delta
-            shifted_active = Arc(
+            shifted_active = CycleArc(
                 CycleTime(ev.span.active.start + self.delta),
                 CycleTime(ev.span.active.end + self.delta),
             )
             shifted_whole = None
             if ev.span.whole is not None:
-                shifted_whole = Arc(
+                shifted_whole = CycleArc(
                     CycleTime(ev.span.whole.start + self.delta),
                     CycleTime(ev.span.whole.end + self.delta),
                 )
@@ -898,7 +900,7 @@ class MapStream[T, U](Stream[U]):
     func: Callable[[T], U]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[U]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[U]]:
         source_events = self.source.unstream(arc)
         result: PHeapMap[Span, Ev[U]] = ev_heap_empty()
 
@@ -953,7 +955,7 @@ class RandStream[T](Stream[T]):
     streams: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.streams) == 0:
             return ev_heap_empty()
 
@@ -970,7 +972,7 @@ class AltStream[T](Stream[T]):
     streams: PSeq[Stream[T]]
 
     @override
-    def unstream(self, arc: Arc) -> PHeapMap[Span, Ev[T]]:
+    def unstream(self, arc: CycleArc) -> PHeapMap[Span, Ev[T]]:
         if arc.null() or len(self.streams) == 0:
             return ev_heap_empty()
 

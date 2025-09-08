@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-from minipat.arc import Arc
+from minipat.arc import CycleArc
 from minipat.common import CycleTime
 from minipat.parser import parse_pattern
 from minipat.pat import Pat, SpeedOp
@@ -11,7 +11,7 @@ def test_pure_pattern() -> None:
     """Test pure pattern generates single event spanning arc."""
     pattern = Pat.pure("x")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -27,7 +27,7 @@ def test_silence_pattern() -> None:
     """Test silence pattern generates no events."""
     pattern: Pat[str] = Pat.silent()
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -40,7 +40,7 @@ def test_sequence_pattern() -> None:
     # Pattern equivalent to "x y"
     pattern = Pat.seq([Pat.pure("x"), Pat.pure("y")])
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -67,7 +67,7 @@ def test_parallel_pattern() -> None:
     # Pattern equivalent to "[x,y]"
     pattern = Pat.par([Pat.pure("x"), Pat.pure("y")])
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -94,7 +94,7 @@ def test_repetition_fast() -> None:
     base_pattern = Pat.pure("x")
     pattern = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(2))
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -126,7 +126,7 @@ def test_repetition_slow() -> None:
     base_pattern = Pat.pure("x")
     pattern = Pat.speed(base_pattern, SpeedOp.Slow, Fraction(2))
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -148,7 +148,7 @@ def test_elongation_pattern() -> None:
     base_pattern = Pat.pure("x")
     pattern = Pat.stretch(base_pattern, Fraction(2))
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -171,7 +171,7 @@ def test_choice_pattern() -> None:
     stream = pat_stream(pattern)
 
     # Test cycle 0 (arc starting at 0)
-    arc0 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc0 = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events0 = stream.unstream(arc0)
     event_list0 = list(events0)
 
@@ -182,7 +182,7 @@ def test_choice_pattern() -> None:
     _, event0 = event_list0[0]
 
     # Test cycle 1 (arc starting at 1)
-    arc1 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
+    arc1 = CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     events1 = stream.unstream(arc1)
     event_list1 = list(events1)
 
@@ -199,7 +199,7 @@ def test_euclidean_pattern() -> None:
     atom = Pat.pure("x")
     pattern = Pat.euc(atom, 3, 8, 0)
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -232,7 +232,7 @@ def test_polymetric_pattern() -> None:
     ]
     pattern = Pat.poly(patterns)
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -260,7 +260,7 @@ def test_alternating_pattern() -> None:
     stream = pat_stream(pattern)
 
     # Test different cycles
-    arc0 = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc0 = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events0 = stream.unstream(arc0)
     event_list0 = list(events0)
 
@@ -270,7 +270,7 @@ def test_alternating_pattern() -> None:
     assert event0.val == "x" and len(event_list0) == 1
     _, event0 = event_list0[0]
 
-    arc1 = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
+    arc1 = CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     events1 = stream.unstream(arc1)
     event_list1 = list(events1)
 
@@ -286,7 +286,7 @@ def test_probability_pattern() -> None:
     base_pattern = Pat.pure("x")
     pattern = Pat.prob(base_pattern, Fraction(1))  # Always include
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -312,7 +312,7 @@ def test_complex_nested_pattern() -> None:
     seq = Pat.seq([Pat.pure("x"), Pat.pure("y")])
     pattern = Pat.repeat(seq, Fraction(2))
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -359,7 +359,7 @@ def test_empty_sequence() -> None:
     """Test empty sequence generates no events."""
     pattern: Pat[str] = Pat.seq([])
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -371,7 +371,7 @@ def test_null_arc() -> None:
     """Test null arc generates no events."""
     pattern = Pat.pure("x")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(1)), CycleTime(Fraction(1)))  # null arc
+    arc = CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(1)))  # null arc
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -392,7 +392,7 @@ def test_partial_arc_query() -> None:
     stream = pat_stream(pattern)
 
     # Query only the middle third (should get "y")
-    arc = Arc(CycleTime(Fraction(1, 3)), CycleTime(Fraction(2, 3)))
+    arc = CycleArc(CycleTime(Fraction(1, 3)), CycleTime(Fraction(2, 3)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -421,7 +421,7 @@ def test_replicate_stream() -> None:
 
     pattern = parse_pattern("bd!3")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -447,7 +447,7 @@ def test_ratio_stream() -> None:
 
     pattern = parse_pattern("bd*2%1")  # 2/1 ratio
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -465,7 +465,7 @@ def test_polymetric_subdivision_stream() -> None:
 
     pattern = parse_pattern("{bd, sd}%2")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -484,7 +484,7 @@ def test_dot_grouping_stream() -> None:
 
     pattern = parse_pattern("bd sd . hh cp")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -510,7 +510,7 @@ def test_new_features_stream_integration() -> None:
     for pattern_str in patterns:
         pat = parse_pattern(pattern_str)
         stream = pat_stream(pat)
-        arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+        arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
         # Should not crash
         events = stream.unstream(arc)
         assert events is not None
@@ -526,7 +526,7 @@ def test_complex_new_features_stream() -> None:
     # Complex pattern with multiple new features
     pattern = parse_pattern("{bd!2, sd*3%2}%4")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -556,7 +556,7 @@ def test_sequence_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query an arc that spans 1.5 cycles (from 0.5 to 2.0)
-    arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(2)))
+    arc = CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(2)))
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -585,7 +585,7 @@ def test_fast_repetition_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query an arc that spans across cycle boundary (0.5 to 1.5)
-    arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(3, 2)))
+    arc = CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(3, 2)))
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -608,7 +608,7 @@ def test_slow_repetition_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query an arc spanning multiple cycles to see the slow pattern
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(3)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(3)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -630,7 +630,7 @@ def test_euclidean_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query across cycle boundary
-    arc = Arc(CycleTime(Fraction(3, 4)), CycleTime(Fraction(7, 4)))
+    arc = CycleArc(CycleTime(Fraction(3, 4)), CycleTime(Fraction(7, 4)))
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
 
@@ -661,7 +661,7 @@ def test_choice_sub_cycle_splitting() -> None:
     choice_values = set()
 
     for cycle in cycles_to_test:
-        arc = Arc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
+        arc = CycleArc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
         events = stream.unstream(arc)
         event_list = list(events)
 
@@ -685,7 +685,7 @@ def test_alternating_sub_cycle_splitting() -> None:
     # Test multiple consecutive cycles
     values_by_cycle = []
     for cycle in range(4):
-        arc = Arc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
+        arc = CycleArc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
         events = stream.unstream(arc)
         event_list = list(events)
 
@@ -711,7 +711,7 @@ def test_probability_sub_cycle_splitting() -> None:
     # Test multiple cycles to see probabilistic behavior
     total_events = 0
     for cycle in range(10):
-        arc = Arc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
+        arc = CycleArc(CycleTime(Fraction(cycle)), CycleTime(Fraction(cycle + 1)))
         events = stream.unstream(arc)
         event_list = list(events)
         total_events += len(event_list)
@@ -737,7 +737,7 @@ def test_elongation_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query multiple cycles to see the stretched pattern
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(4)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -762,7 +762,7 @@ def test_polymetric_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query across multiple cycles
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     events = stream.unstream(arc)
     event_list = list(events)
 
@@ -782,7 +782,7 @@ def test_parallel_sub_cycle_splitting() -> None:
     stream = pat_stream(pattern)
 
     # Query across cycle boundary
-    arc = Arc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(3, 2)))
+    arc = CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(3, 2)))
     events = stream.unstream(arc)
     event_list = list(events)
 

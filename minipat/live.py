@@ -16,7 +16,7 @@ from threading import Event
 from typing import List, NewType, Optional, override
 
 from bad_actor import Actor, ActorEnv, Mutex, Sender, System, Task
-from minipat.arc import Arc
+from minipat.arc import CycleArc
 from minipat.common import (
     ONE,
     ONE_HALF,
@@ -502,7 +502,7 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
         cycle_start = instant.cycle_time
         cycle_length = Fraction(1) / self._env.generations_per_cycle
         cycle_end = CycleTime(cycle_start + cycle_length)
-        arc = Arc(cycle_start, cycle_end)
+        arc = CycleArc(cycle_start, cycle_end)
 
         # Check if any orbits are soloed
         has_solo = any(
@@ -847,7 +847,7 @@ class LiveSystem[T, U]:
         end_cycle = CycleTime(start_cycle + length)
 
         # Create arc and instant
-        arc = Arc(start_cycle, end_cycle)
+        arc = CycleArc(start_cycle, end_cycle)
         instant = Instant(
             cycle_time=start_cycle, cps=current_cps, posix_start=posix_start
         )

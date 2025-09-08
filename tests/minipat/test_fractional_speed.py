@@ -2,7 +2,7 @@
 
 from fractions import Fraction
 
-from minipat.arc import Arc
+from minipat.arc import CycleArc
 from minipat.common import CycleTime
 from minipat.parser import parse_pattern
 from minipat.pat import Pat, SpeedOp
@@ -15,7 +15,7 @@ def test_pat_speed_fractional_fast() -> None:
     base_pattern = Pat.pure("x")
     pattern = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(3, 2))
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = sorted(events, key=lambda x: x[0].active.start)
@@ -41,7 +41,7 @@ def test_pat_speed_fractional_slow() -> None:
     base_pattern = Pat.pure("x")
     pattern = Pat.speed(base_pattern, SpeedOp.Slow, Fraction(1, 2))
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -117,7 +117,7 @@ def test_complex_fractional_speed_pattern() -> None:
     # Parse a pattern with sequence and fractional speed
     pattern = parse_pattern("[x y]*3%2")
     stream = pat_stream(pattern)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
     event_list = list(events)
@@ -136,7 +136,7 @@ def test_fractional_repetition_semantics() -> None:
     # Test x*1 = 1 event
     pattern1 = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(1))
     stream1 = pat_stream(pattern1)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events1 = list(stream1.unstream(arc))
     assert len(events1) == 1
 
@@ -160,7 +160,7 @@ def test_fractional_repeat_semantics() -> None:
     # Test x!1 = 1 repetition
     pattern1 = Pat.repeat(base_pattern, Fraction(1))
     stream1 = pat_stream(pattern1)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events1 = list(stream1.unstream(arc))
     assert len(events1) == 1
 
@@ -216,7 +216,7 @@ def test_extreme_fractional_values() -> None:
     # Very small fraction
     pattern_small = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(1, 100))
     stream_small = pat_stream(pattern_small)
-    arc = Arc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events_small = stream_small.unstream(arc)
     event_list_small = list(events_small)
     assert len(event_list_small) >= 0  # Should not crash

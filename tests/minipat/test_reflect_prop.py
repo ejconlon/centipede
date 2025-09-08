@@ -8,7 +8,7 @@ from typing import List
 from hypothesis import given
 from hypothesis import strategies as st
 
-from minipat.arc import Arc
+from minipat.arc import CycleArc
 from minipat.pat import Pat
 from minipat.reflect import minimize_pattern
 from minipat.stream import pat_stream
@@ -79,7 +79,7 @@ def get_cycle_events(pat: Pat[str], cycle: int = 0) -> List[tuple[Fraction, str]
     Returns list of (start_time_within_cycle, value) tuples, sorted by time.
     """
     stream = pat_stream(pat)
-    arc = Arc.cycle(cycle)
+    arc = CycleArc.cycle(cycle)
     events = stream.unstream(arc)
 
     # Convert to list of (time_within_cycle, value) tuples

@@ -8,7 +8,7 @@ from functools import reduce
 from math import gcd
 from typing import Callable, List, Optional, Sequence
 
-from minipat.arc import Arc
+from minipat.arc import CycleArc
 from minipat.common import CycleDelta, CycleTime
 from minipat.pat import (
     Pat,
@@ -54,7 +54,7 @@ type StepSeq[T] = PSeq[StepVal[T]]
 
 Invariants:
 - Root offset is 0 (first event starts at beginning)
-- Root duration is >= max(offset + duration) across all events  
+- Root duration is >= max(offset + duration) across all events
 - Offsets must be non-decreasing (sorted by start time)
 """
 
@@ -438,7 +438,7 @@ def pat_to_deltaseq[T](
 
     # Create arc from start_time to start_time + total_delta
     end_time = CycleTime(start_time + total_delta)
-    arc = Arc(start_time, end_time)
+    arc = CycleArc(start_time, end_time)
 
     # Get events by streaming over the arc
     events = stream.unstream(arc)
