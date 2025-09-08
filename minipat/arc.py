@@ -9,18 +9,41 @@ from fractions import Fraction
 from math import ceil, floor
 from typing import Iterator, Optional, Self, Tuple, Type, override
 
-from minipat.common import ZERO, CycleDelta, CycleTime, CycleTimeOps, Factor, TimeOps
+from minipat.common import (
+    ZERO,
+    CycleDelta,
+    CycleTime,
+    CycleTimeOps,
+    Factor,
+    PosixDelta,
+    PosixTime,
+    PosixTimeOps,
+    StepDelta,
+    StepTime,
+    StepTimeOps,
+    TimeOps,
+)
 
 
 class Arc[T, D](metaclass=ABCMeta):
     @property
     @abstractmethod
     def start(self) -> T:
+        """Get the start time of the arc.
+
+        Returns:
+            The start time of the arc
+        """
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def end(self) -> T:
+        """Get the end time of the arc.
+
+        Returns:
+            The end time of the arc
+        """
         raise NotImplementedError()
 
     @abstractmethod
@@ -80,16 +103,38 @@ class Arc[T, D](metaclass=ABCMeta):
     @classmethod
     @abstractmethod
     def time_ops(cls) -> Type[TimeOps[T, D]]:
+        """Get the time operations class for this arc type.
+
+        Returns:
+            The time operations class
+        """
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
     def normalize(cls, arc: Arc[T, D]) -> Self:
+        """Normalize an arc to the concrete type.
+
+        Args:
+            arc: The arc to normalize
+
+        Returns:
+            The normalized arc
+        """
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
     def mk(cls, start: T, end: T) -> Self:
+        """Create an arc with the given start and end times.
+
+        Args:
+            start: The start time
+            end: The end time
+
+        Returns:
+            A new arc
+        """
         raise NotImplementedError()
 
     @classmethod
@@ -181,14 +226,6 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
                 return CycleArc.empty()
 
     def shift(self, delta: CycleDelta) -> CycleArc:
-        """Shift the arc by a given delta.
-
-        Args:
-            delta: The amount to shift by
-
-        Returns:
-            A new arc shifted by delta
-        """
         if self.null() or delta == 0:
             return CycleArc.normalize(self)
         else:
@@ -216,14 +253,6 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
                 yield (cyc, CycleArc(s, e))
 
     def scale(self, factor: Factor) -> CycleArc:
-        """Scale the arc by a given factor.
-
-        Args:
-            factor: The scaling factor
-
-        Returns:
-            A new arc scaled by the factor
-        """
         if self.null() or factor == 1:
             return CycleArc.normalize(self)
         elif factor <= 0:
@@ -234,14 +263,6 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
             )
 
     def clip(self, factor: Factor) -> CycleArc:
-        """Clip the arc to a fraction of its length.
-
-        Args:
-            factor: The fraction to clip to (0 to 1)
-
-        Returns:
-            A new arc clipped to the given fraction
-        """
         if self.null() or factor == 1:
             return CycleArc.normalize(self)
         elif factor <= 0:
@@ -317,25 +338,312 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
 _EMPTY_CYCLE_ARC = CycleArc(CycleTime(ZERO), CycleTime(ZERO))
 
 
+@dataclass(frozen=True, order=True)
+class PosixArc(Arc[PosixTime, PosixDelta]):
+    _start: PosixTime
+    _end: PosixTime
+
+    @property
+    @override
+    def start(self) -> PosixTime:
+        return self._start
+
+    @property
+    @override
+    def end(self) -> PosixTime:
+        return self._end
+
+    @override
+    def length(self) -> PosixDelta:
+        return PosixTimeOps.diff(self.end, self.start)
+
+    @override
+    def null(self) -> bool:
+        return self.start >= self.end
+
+    @override
+    def union(self, other: Arc[PosixTime, PosixDelta]) -> PosixArc:
+        if self.null():
+            return PosixArc.normalize(other)
+        elif other.null():
+            return self
+        else:
+            start = PosixTime(min(self.start, other.start))
+            end = PosixTime(max(self.end, other.end))
+            if start < end:
+                return PosixArc(start, end)
+            else:
+                return PosixArc.empty()
+
+    @override
+    def intersect(self, other: Arc[PosixTime, PosixDelta]) -> PosixArc:
+        if self.null():
+            return PosixArc.normalize(self)
+        elif other.null():
+            return PosixArc.normalize(other)
+        else:
+            start = PosixTime(max(self.start, other.start))
+            end = PosixTime(min(self.end, other.end))
+            if start < end:
+                return PosixArc(start, end)
+            else:
+                return PosixArc.empty()
+
+    def shift(self, delta: PosixDelta) -> PosixArc:
+        if self.null() or delta == 0.0:
+            return PosixArc.normalize(self)
+        else:
+            return PosixArc(PosixTime(self.start + delta), PosixTime(self.end + delta))
+
+    def scale(self, factor: Factor) -> PosixArc:
+        if self.null() or factor == 1:
+            return PosixArc.normalize(self)
+        elif factor <= 0:
+            return PosixArc.empty()
+        else:
+            return PosixArc(
+                PosixTime(self.start * float(factor)),
+                PosixTime(self.end * float(factor)),
+            )
+
+    def clip(self, factor: Factor) -> PosixArc:
+        if self.null() or factor == 1:
+            return PosixArc.normalize(self)
+        elif factor <= 0:
+            return PosixArc.empty()
+        else:
+            end = PosixTime(self.start + (self.end - self.start) * float(factor))
+            return PosixArc(self.start, end)
+
+    @override
+    @classmethod
+    def time_ops(cls) -> Type[PosixTimeOps]:
+        return PosixTimeOps
+
+    @override
+    @classmethod
+    def normalize(cls, arc: Arc[PosixTime, PosixDelta]) -> PosixArc:
+        if arc.start < arc.end or (arc.start == 0.0 and arc.end == 0.0):
+            if isinstance(arc, PosixArc):
+                return arc
+            else:
+                return PosixArc(arc.start, arc.end)
+        else:
+            return PosixArc.empty()
+
+    @override
+    @classmethod
+    def mk(cls, start: PosixTime, end: PosixTime) -> PosixArc:
+        return cls(start, end)
+
+    @override
+    @classmethod
+    def empty(cls) -> PosixArc:
+        return _EMPTY_POSIX_ARC
+
+    @override
+    @classmethod
+    def union_all(cls, arcs: Iterable[Arc[PosixTime, PosixDelta]]) -> PosixArc:
+        out = PosixArc.empty()
+        for ix, arc in enumerate(arcs):
+            if ix == 0:
+                out = PosixArc.normalize(arc)
+            else:
+                out = out.union(arc)
+        return out
+
+    @override
+    @classmethod
+    def intersect_all(cls, arcs: Iterable[Arc[PosixTime, PosixDelta]]) -> PosixArc:
+        out = PosixArc.empty()
+        for ix, arc in enumerate(arcs):
+            if ix == 0:
+                out = PosixArc.normalize(arc)
+            else:
+                if out.null():
+                    break
+                else:
+                    out = out.intersect(arc)
+        return out
+
+
+_EMPTY_POSIX_ARC = PosixArc(PosixTime(0.0), PosixTime(0.0))
+
+
+@dataclass(frozen=True, order=True)
+class StepArc(Arc[StepTime, StepDelta]):
+    _start: StepTime
+    _end: StepTime
+
+    @property
+    @override
+    def start(self) -> StepTime:
+        return self._start
+
+    @property
+    @override
+    def end(self) -> StepTime:
+        return self._end
+
+    @override
+    def length(self) -> StepDelta:
+        return StepTimeOps.diff(self.end, self.start)
+
+    @override
+    def null(self) -> bool:
+        return self.start >= self.end
+
+    @override
+    def union(self, other: Arc[StepTime, StepDelta]) -> StepArc:
+        if self.null():
+            return StepArc.normalize(other)
+        elif other.null():
+            return self
+        else:
+            start = StepTime(min(self.start, other.start))
+            end = StepTime(max(self.end, other.end))
+            if start < end:
+                return StepArc(start, end)
+            else:
+                return StepArc.empty()
+
+    @override
+    def intersect(self, other: Arc[StepTime, StepDelta]) -> StepArc:
+        if self.null():
+            return StepArc.normalize(self)
+        elif other.null():
+            return StepArc.normalize(other)
+        else:
+            start = StepTime(max(self.start, other.start))
+            end = StepTime(min(self.end, other.end))
+            if start < end:
+                return StepArc(start, end)
+            else:
+                return StepArc.empty()
+
+    def shift(self, delta: StepDelta) -> StepArc:
+        if self.null() or delta == 0:
+            return StepArc.normalize(self)
+        else:
+            return StepArc(StepTime(self.start + delta), StepTime(self.end + delta))
+
+    def scale(self, factor: Factor) -> StepArc:
+        if self.null() or factor == 1:
+            return StepArc.normalize(self)
+        elif factor <= 0:
+            return StepArc.empty()
+        else:
+            return StepArc(
+                StepTime(int(self.start * factor)), StepTime(int(self.end * factor))
+            )
+
+    def clip(self, factor: Factor) -> StepArc:
+        if self.null() or factor == 1:
+            return StepArc.normalize(self)
+        elif factor <= 0:
+            return StepArc.empty()
+        else:
+            end = StepTime(self.start + int((self.end - self.start) * factor))
+            return StepArc(self.start, end)
+
+    @override
+    @classmethod
+    def time_ops(cls) -> Type[StepTimeOps]:
+        return StepTimeOps
+
+    @override
+    @classmethod
+    def normalize(cls, arc: Arc[StepTime, StepDelta]) -> StepArc:
+        if arc.start < arc.end or (arc.start == 0 and arc.end == 0):
+            if isinstance(arc, StepArc):
+                return arc
+            else:
+                return StepArc(arc.start, arc.end)
+        else:
+            return StepArc.empty()
+
+    @override
+    @classmethod
+    def mk(cls, start: StepTime, end: StepTime) -> StepArc:
+        return cls(start, end)
+
+    @override
+    @classmethod
+    def empty(cls) -> StepArc:
+        return _EMPTY_STEP_ARC
+
+    @override
+    @classmethod
+    def union_all(cls, arcs: Iterable[Arc[StepTime, StepDelta]]) -> StepArc:
+        out = StepArc.empty()
+        for ix, arc in enumerate(arcs):
+            if ix == 0:
+                out = StepArc.normalize(arc)
+            else:
+                out = out.union(arc)
+        return out
+
+    @override
+    @classmethod
+    def intersect_all(cls, arcs: Iterable[Arc[StepTime, StepDelta]]) -> StepArc:
+        out = StepArc.empty()
+        for ix, arc in enumerate(arcs):
+            if ix == 0:
+                out = StepArc.normalize(arc)
+            else:
+                if out.null():
+                    break
+                else:
+                    out = out.intersect(arc)
+        return out
+
+
+_EMPTY_STEP_ARC = StepArc(StepTime(0), StepTime(0))
+
+
 class Span[T, D, A](metaclass=ABCMeta):
     @property
     @abstractmethod
     def active(self) -> A:
+        """Get the active arc of the span.
+
+        Returns:
+            The active arc
+        """
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def whole(self) -> Optional[A]:
+        """Get the whole arc of the span, if present.
+
+        Returns:
+            The whole arc, or None if not present
+        """
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
     def time_ops(cls) -> Type[TimeOps[T, D]]:
+        """Get the time operations class for this span type.
+
+        Returns:
+            The time operations class
+        """
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
     def mk(cls, active: A, whole: Optional[A]) -> Span[T, D, A]:
+        """Create a span with the given active and whole arcs.
+
+        Args:
+            active: The active arc
+            whole: The whole arc, or None
+
+        Returns:
+            A new span
+        """
         raise NotImplementedError()
 
     @classmethod
@@ -387,40 +695,16 @@ class CycleSpan(Span[CycleTime, CycleDelta, CycleArc]):
 
     @override
     def shift(self, delta: CycleDelta) -> CycleSpan:
-        """Shift the span by a given delta.
-
-        Args:
-            delta: The amount to shift by
-
-        Returns:
-            A new span shifted by delta
-        """
         new_active = self._active.shift(delta)
         new_whole = self._whole.shift(delta) if self._whole is not None else None
         return CycleSpan(new_active, new_whole)
 
     def scale(self, factor: Factor) -> CycleSpan:
-        """Scale the span by a given factor.
-
-        Args:
-            factor: The scaling factor
-
-        Returns:
-            A new span scaled by the factor
-        """
         new_active = self._active.scale(factor)
         new_whole = self._whole.scale(factor) if self._whole is not None else None
         return CycleSpan(new_active, new_whole)
 
     def clip(self, factor: Factor) -> CycleSpan:
-        """Clip the span to a fraction of its length.
-
-        Args:
-            factor: The fraction to clip to (0 to 1)
-
-        Returns:
-            A new span clipped to the given fraction
-        """
         new_active = self._active.clip(factor)
         new_whole = self._whole.clip(factor) if self._whole is not None else None
         return CycleSpan(new_active, new_whole)
@@ -446,3 +730,129 @@ class CycleSpan(Span[CycleTime, CycleDelta, CycleArc]):
 
 
 _EMPTY_CYCLE_SPAN = CycleSpan(_EMPTY_CYCLE_ARC, None)
+
+
+@dataclass(frozen=True, order=True)
+class PosixSpan(Span[PosixTime, PosixDelta, PosixArc]):
+    """Annotates an Arc optionally contained within a wider Arc.
+    This is useful to communicate that certain intervals belong
+    to larger intervals.
+
+    Args:
+        active: The interval in question
+        whole: If present, a wider interval containing active
+    """
+
+    _active: PosixArc
+    _whole: Optional[PosixArc] = None
+
+    @property
+    @override
+    def active(self) -> PosixArc:
+        return self._active
+
+    @property
+    @override
+    def whole(self) -> Optional[PosixArc]:
+        return self._whole
+
+    @override
+    def shift(self, delta: PosixDelta) -> PosixSpan:
+        new_active = self._active.shift(delta)
+        new_whole = self._whole.shift(delta) if self._whole is not None else None
+        return PosixSpan(new_active, new_whole)
+
+    def scale(self, factor: Factor) -> PosixSpan:
+        new_active = self._active.scale(factor)
+        new_whole = self._whole.scale(factor) if self._whole is not None else None
+        return PosixSpan(new_active, new_whole)
+
+    def clip(self, factor: Factor) -> PosixSpan:
+        new_active = self._active.clip(factor)
+        new_whole = self._whole.clip(factor) if self._whole is not None else None
+        return PosixSpan(new_active, new_whole)
+
+    @override
+    @classmethod
+    def time_ops(cls) -> Type[PosixTimeOps]:
+        return PosixTimeOps
+
+    @override
+    @classmethod
+    def mk(
+        cls,
+        active: PosixArc,
+        whole: Optional[PosixArc],
+    ) -> PosixSpan:
+        return cls(active, whole)
+
+    @override
+    @classmethod
+    def empty(cls) -> PosixSpan:
+        return _EMPTY_POSIX_SPAN
+
+
+_EMPTY_POSIX_SPAN = PosixSpan(_EMPTY_POSIX_ARC, None)
+
+
+@dataclass(frozen=True, order=True)
+class StepSpan(Span[StepTime, StepDelta, StepArc]):
+    """Annotates an Arc optionally contained within a wider Arc.
+    This is useful to communicate that certain intervals belong
+    to larger intervals.
+
+    Args:
+        active: The interval in question
+        whole: If present, a wider interval containing active
+    """
+
+    _active: StepArc
+    _whole: Optional[StepArc] = None
+
+    @property
+    @override
+    def active(self) -> StepArc:
+        return self._active
+
+    @property
+    @override
+    def whole(self) -> Optional[StepArc]:
+        return self._whole
+
+    @override
+    def shift(self, delta: StepDelta) -> StepSpan:
+        new_active = self._active.shift(delta)
+        new_whole = self._whole.shift(delta) if self._whole is not None else None
+        return StepSpan(new_active, new_whole)
+
+    def scale(self, factor: Factor) -> StepSpan:
+        new_active = self._active.scale(factor)
+        new_whole = self._whole.scale(factor) if self._whole is not None else None
+        return StepSpan(new_active, new_whole)
+
+    def clip(self, factor: Factor) -> StepSpan:
+        new_active = self._active.clip(factor)
+        new_whole = self._whole.clip(factor) if self._whole is not None else None
+        return StepSpan(new_active, new_whole)
+
+    @override
+    @classmethod
+    def time_ops(cls) -> Type[StepTimeOps]:
+        return StepTimeOps
+
+    @override
+    @classmethod
+    def mk(
+        cls,
+        active: StepArc,
+        whole: Optional[StepArc],
+    ) -> StepSpan:
+        return cls(active, whole)
+
+    @override
+    @classmethod
+    def empty(cls) -> StepSpan:
+        return _EMPTY_STEP_SPAN
+
+
+_EMPTY_STEP_SPAN = StepSpan(_EMPTY_STEP_ARC, None)
