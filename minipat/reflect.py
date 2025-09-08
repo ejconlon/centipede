@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import reduce
 from math import gcd
+from typing import Callable, List, Optional, Sequence
 
 from minipat.common import CycleDelta
-from minipat.pat import Pat, PatStretch
+from minipat.pat import Pat, PatSeq, PatSpeed, PatStretch, SpeedOp
 from spiny.seq import PSeq
 
 
@@ -45,12 +46,119 @@ def _lcm(a: int, b: int) -> int:
     return abs(a * b) // gcd(a, b) if a and b else 0
 
 
-def _collect_denominators[T](seq: PSeq[DeltaVal[T]]) -> list[int]:
+def _collect_denominators[T](seq: PSeq[DeltaVal[T]]) -> List[int]:
     """Collect all denominators from a sequence of DeltaVals."""
     denoms = []
     for item in seq.iter():
         denoms.append(item.delta.denominator)
     return denoms
+
+
+# =============================================================================
+# Pattern Minimization Functions
+# =============================================================================
+
+type PatMinimizer[T] = Callable[[Pat[T]], Optional[Pat[T]]]
+"""Type alias for functions that minimize patterns.
+
+Returns the minimized pattern if a change was made, None if no change."""
+
+
+def minimize_seq_repetition[T](pat: Pat[T]) -> Optional[Pat[T]]:
+    """Minimize sequences with repeated patterns using PatSpeed.
+
+    Converts [p p p] -> p*3
+    Returns None if no repetition found.
+    """
+    match pat.unwrap:
+        case PatSeq(pats):
+            items = list(pats.iter())
+            if len(items) < 2:
+                return None
+
+            # Check if all patterns are identical
+            first = items[0]
+            if all(p == first for p in items):
+                # All identical - use speed operator
+                return Pat(PatSpeed(first, SpeedOp.Fast, Fraction(len(items))))
+
+            # Check for longer repetitions
+            n = len(items)
+            for period in range(2, n // 2 + 1):
+                if n % period == 0:
+                    repetitions = n // period
+                    base_pattern = items[:period]
+
+                    # Check if pattern repeats
+                    is_repeating = True
+                    for i in range(repetitions):
+                        for j in range(period):
+                            if items[i * period + j] != base_pattern[j]:
+                                is_repeating = False
+                                break
+                        if not is_repeating:
+                            break
+
+                    if is_repeating:
+                        if period == 1:
+                            base = base_pattern[0]
+                        else:
+                            base = Pat.seq(base_pattern)
+                        return Pat(PatSpeed(base, SpeedOp.Fast, Fraction(repetitions)))
+        case _:
+            pass
+
+    return None
+
+
+def minimize_single_seq[T](pat: Pat[T]) -> Optional[Pat[T]]:
+    """Remove unnecessary single-element sequences.
+
+    Converts [p] -> p
+    Returns None if sequence has multiple elements.
+    """
+    match pat.unwrap:
+        case PatSeq(pats):
+            items = list(pats.iter())
+            if len(items) == 1:
+                return items[0]
+        case _:
+            pass
+
+    return None
+
+
+def run_minimizers[T](
+    pat: Pat[T], minimizers: Sequence[PatMinimizer[T]], max_iterations: int = 10
+) -> Pat[T]:
+    """Run minimizers to saturation or until max_iterations reached."""
+    current = pat
+
+    for _ in range(max_iterations):
+        changed = False
+
+        # Apply all minimizers
+        for minimizer in minimizers:
+            result = minimizer(current)
+            if result is not None:
+                current = result
+                changed = True
+
+        # If no change, we've reached saturation
+        if not changed:
+            break
+
+    return current
+
+
+def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
+    """Apply all available minimizers to a pattern until saturation."""
+    minimizers = [
+        minimize_single_seq,
+        minimize_seq_repetition,
+    ]
+
+    return run_minimizers(pat, minimizers)
 
 
 def quantize[T](ds: DeltaSeq[T]) -> StepSeq[T]:
@@ -131,3 +239,12 @@ def reflect[T](ss: StepSeq[T]) -> Pat[T]:
         return pats[0]
     else:
         return Pat.seq(pats)
+
+
+def reflect_minimal[T](ss: StepSeq[T]) -> Pat[T]:
+    """Reflect a StepSeq to a minimized Pat.
+
+    First reflects normally, then applies all available minimizers until saturation.
+    """
+    base_pattern = reflect(ss)
+    return minimize_pattern(base_pattern)

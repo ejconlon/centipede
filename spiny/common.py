@@ -260,12 +260,28 @@ def compare[T](a: T, b: T) -> Ordering:
         Ordering indicating the relationship between a and b.
     """
     # Unsafe eq/lt because generic protocols are half-baked
-    if getattr(a, "__eq__")(b):
+    eq_result = getattr(a, "__eq__")(b)
+    if eq_result is not NotImplemented and eq_result:
         return Ordering.Eq
-    elif getattr(a, "__lt__")(b):
-        return Ordering.Lt
     else:
-        return Ordering.Gt
+        lt_result = getattr(a, "__lt__")(b)
+        if lt_result is not NotImplemented:
+            if lt_result:
+                return Ordering.Lt
+            else:
+                return Ordering.Gt
+        else:
+            # If __lt__ returns NotImplemented, fall back to comparing class names
+            # to provide a consistent ordering for different types
+            type_a_name = type(a).__name__
+            type_b_name = type(b).__name__
+            if type_a_name < type_b_name:
+                return Ordering.Lt
+            elif type_a_name > type_b_name:
+                return Ordering.Gt
+            else:
+                # Same class name - compare by string representation as last resort
+                return Ordering.Lt if str(a) < str(b) else Ordering.Gt
 
 
 def compare_lex[T](agen: Iterator[T], bgen: Iterator[T]) -> Ordering:

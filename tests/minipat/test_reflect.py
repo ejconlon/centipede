@@ -13,6 +13,7 @@ from minipat.reflect import (
     StepVal,
     quantize,
     reflect,
+    reflect_minimal,
     step_delta,
     unquantize,
 )
@@ -270,3 +271,98 @@ class TestRoundTrip:
         for r, o in zip(restored_vals, original_vals):
             assert r.delta == o.delta
             assert r.val == o.val
+
+
+class TestReflectMinimal:
+    """Tests for the reflect_minimal function."""
+
+    def test_no_repetition(self):
+        """Non-repeating patterns should use regular reflect."""
+        items = [
+            StepVal(1, "a"),
+            StepVal(1, "b"),
+            StepVal(1, "c"),
+        ]
+        ss = StepVal(3, PSeq.mk(items))
+        minimal = reflect_minimal(ss)
+        regular = reflect(ss)
+        # Should produce the same result when no repetition
+        assert minimal == regular
+
+    def test_simple_repetition(self):
+        """Repeating pattern should be minimized."""
+        items = [
+            StepVal(1, "a"),
+            StepVal(1, "b"),
+            StepVal(1, "a"),
+            StepVal(1, "b"),
+        ]
+        ss = StepVal(4, PSeq.mk(items))
+        minimal = reflect_minimal(ss)
+        # Should detect the repetition and create a more compact form
+        # The exact representation will use PatSpeed
+        assert minimal != reflect(ss)  # Should be different from non-minimal
+
+    def test_triple_repetition(self):
+        """Triple repetition should be detected."""
+        items = [
+            StepVal(1, "x"),
+            StepVal(1, "x"),
+            StepVal(1, "x"),
+        ]
+        ss = StepVal(3, PSeq.mk(items))
+        minimal = reflect_minimal(ss)
+        # Should detect that 'x' repeats 3 times
+        assert minimal != reflect(ss)
+
+    def test_complex_pattern_repetition(self):
+        """Complex patterns with multiple elements should be detected."""
+        # Pattern: [a(2 steps), b(1 step)] repeated 3 times
+        base = [
+            StepVal(2, "a"),
+            StepVal(1, "b"),
+        ]
+        items = base * 3  # Repeat 3 times
+        ss = StepVal(9, PSeq.mk(items))  # Total: (2+1)*3 = 9 steps
+        minimal = reflect_minimal(ss)
+        assert minimal != reflect(ss)
+
+    def test_no_false_positives(self):
+        """Should not detect false repetitions."""
+        items = [
+            StepVal(1, "a"),
+            StepVal(1, "b"),
+            StepVal(1, "a"),
+            StepVal(1, "c"),  # Different from 'b', so not a repetition
+        ]
+        ss = StepVal(4, PSeq.mk(items))
+        minimal = reflect_minimal(ss)
+        regular = reflect(ss)
+        assert minimal == regular  # Should not detect repetition
+
+    def test_partial_repetition(self):
+        """Partial repetitions should not be detected."""
+        items = [
+            StepVal(1, "a"),
+            StepVal(1, "b"),
+            StepVal(1, "a"),
+            # Missing second 'b', so incomplete repetition
+        ]
+        ss = StepVal(3, PSeq.mk(items))
+        minimal = reflect_minimal(ss)
+        regular = reflect(ss)
+        assert minimal == regular
+
+    def test_single_element_repetition(self):
+        """Single element repeated many times."""
+        items = [StepVal(1, "drum")] * 16
+        ss = StepVal(16, PSeq.mk(items))
+        minimal = reflect_minimal(ss)
+        # Should create a very compact representation
+        assert minimal != reflect(ss)
+
+    def test_empty_sequence(self):
+        """Empty sequence should return silent."""
+        ss: StepSeq[str] = StepVal(0, PSeq.empty())
+        minimal = reflect_minimal(ss)
+        assert minimal == Pat.silent()
