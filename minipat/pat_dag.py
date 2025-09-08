@@ -59,14 +59,36 @@ class Find[I]:
         """Get the node ID of the root of this Find node."""
         return self.root()._node_id
 
-    def union(self, other: Find[I]) -> None:
-        """Union two sets by making one root point to the other."""
-        root1 = self.root()
-        root2 = other.root()
+    def subsume(self, other: Find[I]) -> None:
+        """Make this Find node subsume another by becoming its parent.
 
-        if root1 != root2:
-            # Make root2 the parent of root1
-            root1._parent = root2
+        After this operation, `other` (and all nodes in its set) will have
+        `self` as their root. This is a union operation where `self` becomes
+        the canonical representative of the merged set.
+
+        Performs path compression on other during the operation.
+
+        Args:
+            other: The Find node to subsume into this one
+        """
+        # Get self's root (with path compression via root() method)
+        self_root = self.root()
+
+        # Find other's root with path compression
+        other_path = []
+        other_current = other
+        while other_current._parent is not None:
+            other_path.append(other_current)
+            other_current = other_current._parent
+
+        # If they have different roots, make self's root the parent of other's root
+        if self_root != other_current:
+            # Make self's root the parent of other's root
+            other_current._parent = self_root
+
+            # Compress other's path directly to self's root
+            for node in other_path:
+                node._parent = self_root
 
     def __eq__(self, other: object) -> bool:
         """Two Find nodes are equal if they have the same root."""
@@ -391,18 +413,15 @@ class PatDag[T]:
                     # Found equivalent pattern, merge them
                     existing = pattern_map[canon_hash]
                     if existing.root_node_id() != find.root_node_id():
-                        # Before union, determine which nodes will become non-roots
+                        # Before subsume, record which node will become non-root
                         find_root_id = find.root_node_id()
-                        existing_root_id = existing.root_node_id()
 
-                        find.union(existing)
+                        # Make existing subsume find (existing becomes the parent)
+                        existing.subsume(find)
 
-                        # After union, the node that's no longer the root becomes garbage
-                        new_root_id = find.root_node_id()
-                        if find_root_id != new_root_id:
-                            garbage.add(find_root_id)
-                        if existing_root_id != new_root_id:
-                            garbage.add(existing_root_id)
+                        # After subsume, find's root becomes garbage (it's no longer a root)
+                        # existing remains the root
+                        garbage.add(find_root_id)
 
                         changed = True
                         any_changes = True
