@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from minipat.arc import Span
+from minipat.arc import CycleSpan
 from minipat.common import CycleDelta, Factor
 from spiny import PHeapMap
 
@@ -18,7 +18,7 @@ class Ev[T]:
         val: The value of the event
     """
 
-    span: Span
+    span: CycleSpan
     val: T
 
     def shift(self, delta: CycleDelta) -> Ev[T]:
@@ -55,7 +55,7 @@ class Ev[T]:
         return Ev(self.span.clip(factor), self.val)
 
 
-type EvHeap[T] = PHeapMap[Span, Ev[T]]
+type EvHeap[T] = PHeapMap[CycleSpan, Ev[T]]
 """Type alias for a heap map of events indexed by their arcs."""
 
 

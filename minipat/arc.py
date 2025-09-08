@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from fractions import Fraction
 from math import ceil, floor
-from typing import Iterator, Optional, Tuple, Type, override
+from typing import Iterator, Optional, Self, Tuple, Type, override
 
 from minipat.common import ZERO, CycleDelta, CycleTime, CycleTimeOps, Factor, TimeOps
 
@@ -42,7 +42,7 @@ class Arc[T, D](metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def union(self, other: Arc[T, D]) -> Arc[T, D]:
+    def union(self, other: Arc[T, D]) -> Self:
         """Create the union of this arc with another.
 
         Args:
@@ -54,7 +54,7 @@ class Arc[T, D](metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def intersect(self, other: Arc[T, D]) -> Arc[T, D]:
+    def intersect(self, other: Arc[T, D]) -> Self:
         """Create the intersection of this arc with another.
 
         Args:
@@ -66,7 +66,7 @@ class Arc[T, D](metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def shift(self, delta: D) -> Arc[T, D]:
+    def shift(self, delta: D) -> Self:
         """Shift the arc by a given delta.
 
         Args:
@@ -84,17 +84,17 @@ class Arc[T, D](metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def normalize(cls, arc: Arc[T, D]) -> Arc[T, D]:
+    def normalize(cls, arc: Arc[T, D]) -> Self:
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
-    def mk(cls, start: T, end: T) -> Arc[T, D]:
+    def mk(cls, start: T, end: T) -> Self:
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
-    def empty(cls) -> Arc[T, D]:
+    def empty(cls) -> Self:
         """Create an empty arc (start >= end).
 
         Returns:
@@ -104,7 +104,7 @@ class Arc[T, D](metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def union_all(cls, arcs: Iterable[Arc[T, D]]) -> Arc[T, D]:
+    def union_all(cls, arcs: Iterable[Arc[T, D]]) -> Self:
         """Create the union of all given arcs.
 
         Args:
@@ -117,7 +117,7 @@ class Arc[T, D](metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def intersect_all(cls, arcs: Iterable[Arc[T, D]]) -> Arc[T, D]:
+    def intersect_all(cls, arcs: Iterable[Arc[T, D]]) -> Self:
         """Create the intersection of all given arcs.
 
         Args:
@@ -317,8 +317,52 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
 _EMPTY_CYCLE_ARC = CycleArc(CycleTime(ZERO), CycleTime(ZERO))
 
 
+class Span[T, D, A](metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def active(self) -> A:
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def whole(self) -> Optional[A]:
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def time_ops(cls) -> Type[TimeOps[T, D]]:
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def mk(cls, active: A, whole: Optional[A]) -> Span[T, D, A]:
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def empty(cls) -> Span[T, D, A]:
+        """Create an empty span
+
+        Returns:
+            An empty span
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def shift(self, delta: D) -> Span[T, D, A]:
+        """Shift the span by a given delta.
+
+        Args:
+            delta: The amount to shift by
+
+        Returns:
+            A new span shifted by delta
+        """
+        raise NotImplementedError()
+
+
 @dataclass(frozen=True, order=True)
-class Span:
+class CycleSpan(Span[CycleTime, CycleDelta, CycleArc]):
     """Annotates an Arc optionally contained within a wider Arc.
     This is useful to communicate that certain intervals belong
     to larger intervals.
@@ -328,19 +372,21 @@ class Span:
         whole: If present, a wider interval containing active
     """
 
-    active: CycleArc
-    whole: Optional[CycleArc] = None
+    _active: CycleArc
+    _whole: Optional[CycleArc] = None
 
-    @staticmethod
-    def empty() -> Span:
-        """Create an empty span
+    @property
+    @override
+    def active(self) -> CycleArc:
+        return self._active
 
-        Returns:
-            An empty span
-        """
-        return _EMPTY_SPAN
+    @property
+    @override
+    def whole(self) -> Optional[CycleArc]:
+        return self._whole
 
-    def shift(self, delta: CycleDelta) -> Span:
+    @override
+    def shift(self, delta: CycleDelta) -> CycleSpan:
         """Shift the span by a given delta.
 
         Args:
@@ -349,11 +395,11 @@ class Span:
         Returns:
             A new span shifted by delta
         """
-        new_active = self.active.shift(delta)
-        new_whole = self.whole.shift(delta) if self.whole is not None else None
-        return Span(active=new_active, whole=new_whole)
+        new_active = self._active.shift(delta)
+        new_whole = self._whole.shift(delta) if self._whole is not None else None
+        return CycleSpan(new_active, new_whole)
 
-    def scale(self, factor: Factor) -> Span:
+    def scale(self, factor: Factor) -> CycleSpan:
         """Scale the span by a given factor.
 
         Args:
@@ -362,11 +408,11 @@ class Span:
         Returns:
             A new span scaled by the factor
         """
-        new_active = self.active.scale(factor)
-        new_whole = self.whole.scale(factor) if self.whole is not None else None
-        return Span(active=new_active, whole=new_whole)
+        new_active = self._active.scale(factor)
+        new_whole = self._whole.scale(factor) if self._whole is not None else None
+        return CycleSpan(new_active, new_whole)
 
-    def clip(self, factor: Factor) -> Span:
+    def clip(self, factor: Factor) -> CycleSpan:
         """Clip the span to a fraction of its length.
 
         Args:
@@ -375,9 +421,28 @@ class Span:
         Returns:
             A new span clipped to the given fraction
         """
-        new_active = self.active.clip(factor)
-        new_whole = self.whole.clip(factor) if self.whole is not None else None
-        return Span(active=new_active, whole=new_whole)
+        new_active = self._active.clip(factor)
+        new_whole = self._whole.clip(factor) if self._whole is not None else None
+        return CycleSpan(new_active, new_whole)
+
+    @override
+    @classmethod
+    def time_ops(cls) -> Type[CycleTimeOps]:
+        return CycleTimeOps
+
+    @override
+    @classmethod
+    def mk(
+        cls,
+        active: CycleArc,
+        whole: Optional[CycleArc],
+    ) -> CycleSpan:
+        return cls(active, whole)
+
+    @override
+    @classmethod
+    def empty(cls) -> CycleSpan:
+        return _EMPTY_CYCLE_SPAN
 
 
-_EMPTY_SPAN = Span(active=_EMPTY_CYCLE_ARC, whole=None)
+_EMPTY_CYCLE_SPAN = CycleSpan(_EMPTY_CYCLE_ARC, None)
