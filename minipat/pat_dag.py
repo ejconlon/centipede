@@ -97,8 +97,48 @@ class Find[I]:
         return bool(self.root_node_id() == other.root_node_id())
 
     def __hash__(self) -> int:
-        """Hash based on root's node_id for use in sets/dicts."""
-        return hash(self.root_node_id())
+        """Find nodes are not hashable.
+
+        Since Find nodes use path compression and their root can change,
+        they should not be used as dictionary keys or in sets.
+        """
+        raise TypeError(
+            "Find nodes are not hashable. "
+            "They should not be used as dictionary keys or in sets because "
+            "their identity can change due to path compression and union operations."
+        )
+
+    def __lt__(self, other: object) -> bool:
+        """Ordering comparison is not supported for Find nodes."""
+        raise TypeError(
+            "Find nodes do not support ordering comparisons. "
+            "Only equality comparison is supported to check if two nodes "
+            "belong to the same equivalence class."
+        )
+
+    def __le__(self, other: object) -> bool:
+        """Ordering comparison is not supported for Find nodes."""
+        raise TypeError(
+            "Find nodes do not support ordering comparisons. "
+            "Only equality comparison is supported to check if two nodes "
+            "belong to the same equivalence class."
+        )
+
+    def __gt__(self, other: object) -> bool:
+        """Ordering comparison is not supported for Find nodes."""
+        raise TypeError(
+            "Find nodes do not support ordering comparisons. "
+            "Only equality comparison is supported to check if two nodes "
+            "belong to the same equivalence class."
+        )
+
+    def __ge__(self, other: object) -> bool:
+        """Ordering comparison is not supported for Find nodes."""
+        raise TypeError(
+            "Find nodes do not support ordering comparisons. "
+            "Only equality comparison is supported to check if two nodes "
+            "belong to the same equivalence class."
+        )
 
     def __repr__(self) -> str:
         return f"Find({self._node_id}, root={self.root_node_id()})"
@@ -280,20 +320,24 @@ class PatDag[T]:
         self._root_find = root_find
         self._nodes = nodes
 
-    def postorder(self) -> List[PatId]:
-        """Return nodes in postorder (bottom-up) traversal from the root.
+    def postorder(self) -> List[PatFind]:
+        """Return node handles in postorder (bottom-up) traversal from the root.
 
         Children are visited before their parents, leaves first, root last.
         Only returns reachable nodes. Uses explicit stack to avoid recursion.
+
+        Returns:
+            List of PatFind handles in postorder
         """
         visited = set()
         result = []
 
         # Stack of (node_id, children_processed)
-        stack = [(self._root_find.root_node_id(), False)]
+        stack = [(self._root_find, False)]
 
         while stack:
-            node_id, children_processed = stack.pop()
+            find, children_processed = stack.pop()
+            node_id = find.root_node_id()
 
             if node_id in visited or node_id not in self._nodes:
                 continue
@@ -301,10 +345,10 @@ class PatDag[T]:
             if children_processed:
                 # Children have been processed, now process this node
                 visited.add(node_id)
-                result.append(node_id)
+                result.append(find)
             else:
                 # Mark this node for processing after children
-                stack.append((node_id, True))
+                stack.append((find, True))
 
                 # Add children to stack (they'll be processed first due to stack order)
                 pat_node = self._nodes[node_id]
@@ -317,7 +361,7 @@ class PatDag[T]:
                         | PatPoly(pats, _)
                     ):
                         for child in pats.iter():
-                            stack.append((child.root_node_id(), False))
+                            stack.append((child, False))
                     case (
                         PatEuc(child, _, _, _)
                         | PatSpeed(child, _, _)
@@ -325,7 +369,7 @@ class PatDag[T]:
                         | PatProb(child, _)
                         | PatRepeat(child, _)
                     ):
-                        stack.append((child.root_node_id(), False))
+                        stack.append((child, False))
                     case PatSilent() | PatPure(_):
                         pass
 
@@ -339,7 +383,7 @@ class PatDag[T]:
             True if any nodes were removed, False otherwise.
         """
         # Get all reachable nodes using postorder traversal
-        reachable = set(self.postorder())
+        reachable = set(find.root_node_id() for find in self.postorder())
 
         # Remove unreachable nodes from existing dict
         unreachable = [k for k in self._nodes if k not in reachable]
@@ -348,21 +392,31 @@ class PatDag[T]:
 
         return len(unreachable) > 0
 
-    def has_node(self, node_id: PatId) -> bool:
-        """Check if a node exists in the DAG."""
+    def _has_node_id(self, node_id: PatId) -> bool:
+        """Internal: Check if a node ID exists in the DAG."""
         return node_id in self._nodes
 
-    def get_pat_node(self, node_id: PatId) -> PatNode[T]:
-        """Get the PatNode for a given node ID."""
+    def _get_pat_node_by_id(self, node_id: PatId) -> PatNode[T]:
+        """Internal: Get the PatNode for a given node ID."""
         return self._nodes[node_id]
 
-    def set_pat_node(self, node_id: PatId, pat_node: PatNode[T]) -> None:
-        """Set the PatNode for a given node ID."""
+    def _set_pat_node_by_id(self, node_id: PatId, pat_node: PatNode[T]) -> None:
+        """Internal: Set the PatNode for a given node ID."""
         self._nodes[node_id] = pat_node
 
     def get_node(self, find: PatFind) -> PatF[T, PatFind]:
         """Get the pattern node associated with a Find handle."""
         return self._nodes[find.root_node_id()].patf
+
+    def update_node(self, find: PatFind, new_patf: PatF[T, PatFind]) -> None:
+        """Update the pattern content for a node identified by its Find handle.
+
+        Args:
+            find: The Find handle identifying the node to update
+            new_patf: The new pattern functor content
+        """
+        node_id = find.root_node_id()
+        self._nodes[node_id] = PatNode(find, new_patf)
 
     def add_node(self, pat: PatF[T, PatFind]) -> PatFind:
         """Add a new node to the DAG and return its Find handle."""
@@ -386,7 +440,7 @@ class PatDag[T]:
         any_changes = False
 
         # Calculate postorder once - the topological order doesn't change during canonicalization
-        node_order = self.postorder()
+        node_order = [find.root_node_id() for find in self.postorder()]
 
         # Track nodes that become garbage during canonicalization
         garbage: set[PatId] = set()
@@ -402,7 +456,7 @@ class PatDag[T]:
                 if node_id in garbage:
                     continue
 
-                pat_node = self._nodes[node_id]
+                pat_node = self._get_pat_node_by_id(node_id)
                 find = pat_node.find
 
                 # Create a canonical hash of the pattern
@@ -454,7 +508,8 @@ class PatDag[T]:
         cache: Dict[PatId, Pat[T]] = {}
 
         # Process nodes in postorder - children before parents
-        for node_id in self.postorder():
+        for find in self.postorder():
+            node_id = find.root_node_id()
             patf = self._nodes[node_id].patf
 
             match patf:

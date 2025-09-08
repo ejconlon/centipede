@@ -16,7 +16,7 @@ from minipat.pat import (
     PatStretch,
     SpeedOp,
 )
-from minipat.pat_dag import PatDag, PatFind, PatNode
+from minipat.pat_dag import PatDag, PatFind
 from spiny.seq import PSeq
 
 
@@ -159,22 +159,17 @@ def run_dag_minimizers[T](
         changed = False
 
         # Process nodes in bottom-up postorder
-        node_ids = dag.postorder()
+        finds = dag.postorder()
 
-        for node_id in node_ids:
-            if not dag.has_node(node_id):  # Node might have been removed
-                continue
-
-            find = dag.get_pat_node(node_id).find
-
+        for find in finds:
             # Apply all minimizers to this node
             for minimizer in minimizers:
                 result = minimizer(dag, find)
                 if result is not None:
                     # Replace the current node with the minimized result
                     minimized_content = dag.get_node(result)
-                    # Update the PatNode with new content but keep the same Find handle
-                    dag.set_pat_node(node_id, PatNode(find, minimized_content))
+                    # Update the node's content through its Find handle
+                    dag.update_node(find, minimized_content)
                     changed = True
                     break  # Only apply one minimizer per iteration per node
 
