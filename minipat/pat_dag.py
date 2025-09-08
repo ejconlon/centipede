@@ -190,10 +190,6 @@ class PatDag[T]:
         """Get the pattern node associated with a Find handle."""
         return self.nodes[find.root_node_id()].patf
 
-    def merge_equivalent(self, find1: PatFind, find2: PatFind) -> None:
-        """Merge two equivalent patterns using union-find."""
-        find1.union(find2)
-
     def canonicalize(self, max_iterations: int = 100) -> bool:
         """Canonicalize the DAG by finding and merging equivalent subpatterns.
 
@@ -209,6 +205,9 @@ class PatDag[T]:
         # Calculate postorder once - the topological order doesn't change during canonicalization
         node_order = self.postorder()
 
+        # Track nodes that become garbage during canonicalization
+        garbage: set[PatId] = set()
+
         for _ in range(max_iterations):
             changed = False
             # Build a mapping from pattern hash to Find nodes
@@ -216,6 +215,10 @@ class PatDag[T]:
 
             # Process nodes in postorder - children before parents
             for node_id in node_order:
+                # Skip nodes that have become garbage
+                if node_id in garbage:
+                    continue
+
                 pat_node = self.nodes[node_id]
                 find = pat_node.find
 
@@ -227,7 +230,19 @@ class PatDag[T]:
                     # Found equivalent pattern, merge them
                     existing = pattern_map[canon_hash]
                     if existing.root_node_id() != find.root_node_id():
+                        # Before union, determine which nodes will become non-roots
+                        find_root_id = find.root_node_id()
+                        existing_root_id = existing.root_node_id()
+
                         find.union(existing)
+
+                        # After union, the node that's no longer the root becomes garbage
+                        new_root_id = find.root_node_id()
+                        if find_root_id != new_root_id:
+                            garbage.add(find_root_id)
+                        if existing_root_id != new_root_id:
+                            garbage.add(existing_root_id)
+
                         changed = True
                         any_changes = True
                 else:
@@ -237,9 +252,9 @@ class PatDag[T]:
             if not changed:
                 break
 
-        # Collect garbage once at the end if any changes were made
-        if any_changes:
-            self.collect()
+        # Clean up garbage nodes at the end
+        for node_id in garbage:
+            del self.nodes[node_id]
 
         return any_changes
 
