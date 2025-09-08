@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, NewType, Optional
+from typing import Dict, List, NewType, Optional
 
 from minipat.common import PartialMatchException
 from minipat.pat import (
@@ -110,6 +110,57 @@ class PatDag[T]:
         self.id_src += 1
         return PatId(self.id_src)
 
+    def postorder(self) -> List[PatId]:
+        """Return nodes in postorder (bottom-up) traversal from the root.
+
+        Children are visited before their parents, leaves first, root last.
+        Only returns reachable nodes. Uses explicit stack to avoid recursion.
+        """
+        visited = set()
+        result = []
+
+        # Stack of (node_id, children_processed)
+        stack = [(self.root, False)]
+
+        while stack:
+            node_id, children_processed = stack.pop()
+
+            if node_id in visited or node_id not in self.nodes:
+                continue
+
+            if children_processed:
+                # Children have been processed, now process this node
+                visited.add(node_id)
+                result.append(node_id)
+            else:
+                # Mark this node for processing after children
+                stack.append((node_id, True))
+
+                # Add children to stack (they'll be processed first due to stack order)
+                pat_node = self.nodes[node_id]
+                match pat_node.patf:
+                    case (
+                        PatSeq(pats)
+                        | PatPar(pats)
+                        | PatRand(pats)
+                        | PatAlt(pats)
+                        | PatPoly(pats, _)
+                    ):
+                        for child in pats.iter():
+                            stack.append((child.root_node_id(), False))
+                    case (
+                        PatEuc(child, _, _, _)
+                        | PatSpeed(child, _, _)
+                        | PatStretch(child, _)
+                        | PatProb(child, _)
+                        | PatRepeat(child, _)
+                    ):
+                        stack.append((child.root_node_id(), False))
+                    case PatSilent() | PatPure(_):
+                        pass
+
+        return result
+
     def collect(self) -> bool:
         """Garbage collect unused nodes.
         Leaves only union-find root nodes reachable from the dag root.
@@ -117,41 +168,8 @@ class PatDag[T]:
         Returns:
             True if any nodes were removed, False otherwise.
         """
-        # Find all reachable nodes from root
-        reachable: set[PatId] = set()
-        to_visit = [self.root]
-
-        while to_visit:
-            node_id = to_visit.pop()
-            if node_id in reachable:
-                continue
-            reachable.add(node_id)
-
-            # Add children to visit based on pattern type
-            pat_node = self.nodes.get(node_id)
-            if pat_node is None:
-                continue
-
-            match pat_node.patf:
-                case (
-                    PatSeq(pats)
-                    | PatPar(pats)
-                    | PatRand(pats)
-                    | PatAlt(pats)
-                    | PatPoly(pats, _)
-                ):
-                    for child in pats.iter():
-                        to_visit.append(child.root_node_id())
-                case (
-                    PatEuc(child, _, _, _)
-                    | PatSpeed(child, _, _)
-                    | PatStretch(child, _)
-                    | PatProb(child, _)
-                    | PatRepeat(child, _)
-                ):
-                    to_visit.append(child.root_node_id())
-                case PatSilent() | PatPure(_):
-                    pass
+        # Get all reachable nodes using postorder traversal
+        reachable = set(self.postorder())
 
         # Remove unreachable nodes from existing dict
         unreachable = [k for k in self.nodes if k not in reachable]
@@ -179,23 +197,30 @@ class PatDag[T]:
     def canonicalize(self, max_iterations: int = 100) -> bool:
         """Canonicalize the DAG by finding and merging equivalent subpatterns.
 
-        Runs until fixed point is reached (no new unions) or max_iterations.
-        Collects garbage incrementally after fixed point.
+        Processes nodes in postorder (bottom-up) for most efficient equivalence
+        closure calculation. May iterate multiple times until fixed point.
+        Collects garbage once at the end if any changes were made.
 
         Returns:
             True if any patterns were merged, False otherwise.
         """
         any_changes = False
+
+        # Calculate postorder once - the topological order doesn't change during canonicalization
+        node_order = self.postorder()
+
         for _ in range(max_iterations):
             changed = False
             # Build a mapping from pattern hash to Find nodes
             pattern_map: Dict[PatHash, PatFind] = {}
 
-            # Process all nodes (order doesn't matter for canonicalization)
-            for node_id, pat_node in self.nodes.items():
+            # Process nodes in postorder - children before parents
+            for node_id in node_order:
+                pat_node = self.nodes[node_id]
                 find = pat_node.find
 
                 # Create a canonical hash of the pattern
+                # Since we're processing bottom-up, all children are already canonicalized
                 canon_hash = self._hash_pattern(pat_node.patf)
 
                 if canon_hash in pattern_map:
@@ -212,6 +237,7 @@ class PatDag[T]:
             if not changed:
                 break
 
+        # Collect garbage once at the end if any changes were made
         if any_changes:
             self.collect()
 

@@ -11,21 +11,12 @@ from typing import Callable, List, Optional, Sequence
 from minipat.common import CycleDelta
 from minipat.pat import (
     Pat,
-    PatAlt,
-    PatEuc,
-    PatPar,
-    PatPoly,
-    PatProb,
-    PatPure,
-    PatRand,
-    PatRepeat,
     PatSeq,
-    PatSilent,
     PatSpeed,
     PatStretch,
     SpeedOp,
 )
-from minipat.pat_dag import Find, PatDag, PatId, PatNode
+from minipat.pat_dag import Find, PatDag, PatNode
 from spiny.seq import PSeq
 
 
@@ -156,47 +147,6 @@ def minimize_single_seq_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]:
     return None
 
 
-def _topological_sort_bottom_up[T](dag: PatDag[T]) -> List[PatId]:
-    """Return nodes in bottom-up topological order (leaves first, root last)."""
-    visited = set()
-    result = []
-
-    def visit(node_id: PatId) -> None:
-        if node_id in visited or node_id not in dag.nodes:
-            return
-        visited.add(node_id)
-
-        # Visit children first (bottom-up)
-        pat_node = dag.nodes[node_id]
-        match pat_node.patf:
-            case (
-                PatSeq(pats)
-                | PatPar(pats)
-                | PatRand(pats)
-                | PatAlt(pats)
-                | PatPoly(pats, _)
-            ):
-                for child in pats.iter():
-                    visit(child.root_node_id())
-            case (
-                PatEuc(child, _, _, _)
-                | PatSpeed(child, _, _)
-                | PatStretch(child, _)
-                | PatProb(child, _)
-                | PatRepeat(child, _)
-            ):
-                visit(child.root_node_id())
-            case PatSilent() | PatPure(_):
-                pass
-
-        # Add this node after visiting children
-        result.append(node_id)
-
-    # Start from root
-    visit(dag.root)
-    return result
-
-
 def run_dag_minimizers[T](
     dag: PatDag[T], minimizers: Sequence[DagMinimizer[T]], max_iterations: int = 10
 ) -> None:
@@ -208,8 +158,8 @@ def run_dag_minimizers[T](
     for _ in range(max_iterations):
         changed = False
 
-        # Process nodes in bottom-up topological order
-        node_ids = _topological_sort_bottom_up(dag)
+        # Process nodes in bottom-up postorder
+        node_ids = dag.postorder()
 
         for node_id in node_ids:
             if node_id not in dag.nodes:  # Node might have been removed
