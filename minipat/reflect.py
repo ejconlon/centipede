@@ -9,7 +9,23 @@ from math import gcd
 from typing import Callable, List, Optional, Sequence
 
 from minipat.common import CycleDelta
-from minipat.pat import Pat, PatSeq, PatSpeed, PatStretch, SpeedOp
+from minipat.pat import (
+    Pat,
+    PatAlt,
+    PatEuc,
+    PatPar,
+    PatPoly,
+    PatProb,
+    PatPure,
+    PatRand,
+    PatRepeat,
+    PatSeq,
+    PatSilent,
+    PatSpeed,
+    PatStretch,
+    SpeedOp,
+)
+from minipat.pat_dag import Find, PatDag, PatId, PatNode
 from spiny.seq import PSeq
 
 
@@ -58,29 +74,34 @@ def _collect_denominators[T](seq: PSeq[DeltaVal[T]]) -> List[int]:
 # Pattern Minimization Functions
 # =============================================================================
 
-type PatMinimizer[T] = Callable[[Pat[T]], Optional[Pat[T]]]
-"""Type alias for functions that minimize patterns.
+type DagMinimizer[T] = Callable[[PatDag[T], Find], Optional[Find]]
+"""Type alias for functions that minimize DAG patterns.
 
-Returns the minimized pattern if a change was made, None if no change."""
+Returns the minimized Find handle if a change was made, None if no change."""
 
 
-def minimize_seq_repetition[T](pat: Pat[T]) -> Optional[Pat[T]]:
-    """Minimize sequences with repeated patterns using PatSpeed.
+def minimize_seq_repetition_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]:
+    """Minimize sequences with repeated patterns using PatSpeed in a DAG.
 
     Converts [p p p] -> p*3
     Returns None if no repetition found.
     """
-    match pat.unwrap:
+
+    pat_f = dag.get_node(find)
+    match pat_f:
         case PatSeq(pats):
             items = list(pats.iter())
             if len(items) < 2:
                 return None
 
-            # Check if all patterns are identical
-            first = items[0]
-            if all(p == first for p in items):
+            # Check if all patterns are identical (using root node ID after canonicalization)
+            first_root = items[0].root_node_id()
+            if all(p.root_node_id() == first_root for p in items):
                 # All identical - use speed operator
-                return Pat(PatSpeed(first, SpeedOp.Fast, Fraction(len(items))))
+                speed_node = dag.add_node(
+                    PatSpeed(items[0], SpeedOp.Fast, Fraction(len(items)))
+                )
+                return speed_node
 
             # Check for longer repetitions
             n = len(items)
@@ -89,11 +110,13 @@ def minimize_seq_repetition[T](pat: Pat[T]) -> Optional[Pat[T]]:
                     repetitions = n // period
                     base_pattern = items[:period]
 
-                    # Check if pattern repeats
+                    # Check if pattern repeats (using root node IDs)
                     is_repeating = True
                     for i in range(repetitions):
                         for j in range(period):
-                            if items[i * period + j] != base_pattern[j]:
+                            current_root = items[i * period + j].root_node_id()
+                            base_root = base_pattern[j].root_node_id()
+                            if current_root != base_root:
                                 is_repeating = False
                                 break
                         if not is_repeating:
@@ -103,21 +126,26 @@ def minimize_seq_repetition[T](pat: Pat[T]) -> Optional[Pat[T]]:
                         if period == 1:
                             base = base_pattern[0]
                         else:
-                            base = Pat.seq(base_pattern)
-                        return Pat(PatSpeed(base, SpeedOp.Fast, Fraction(repetitions)))
+                            base = dag.add_node(PatSeq(PSeq.mk(base_pattern)))
+                        speed_node = dag.add_node(
+                            PatSpeed(base, SpeedOp.Fast, Fraction(repetitions))
+                        )
+                        return speed_node
         case _:
             pass
 
     return None
 
 
-def minimize_single_seq[T](pat: Pat[T]) -> Optional[Pat[T]]:
-    """Remove unnecessary single-element sequences.
+def minimize_single_seq_dag[T](dag: PatDag[T], find: Find) -> Optional[Find]:
+    """Remove unnecessary single-element sequences in DAG.
 
     Converts [p] -> p
     Returns None if sequence has multiple elements.
     """
-    match pat.unwrap:
+
+    pat_f = dag.get_node(find)
+    match pat_f:
         case PatSeq(pats):
             items = list(pats.iter())
             if len(items) == 1:
@@ -128,37 +156,121 @@ def minimize_single_seq[T](pat: Pat[T]) -> Optional[Pat[T]]:
     return None
 
 
-def run_minimizers[T](
-    pat: Pat[T], minimizers: Sequence[PatMinimizer[T]], max_iterations: int = 10
-) -> Pat[T]:
-    """Run minimizers to saturation or until max_iterations reached."""
-    current = pat
+def _topological_sort_bottom_up[T](dag: PatDag[T]) -> List[PatId]:
+    """Return nodes in bottom-up topological order (leaves first, root last)."""
+    visited = set()
+    result = []
 
+    def visit(node_id: PatId) -> None:
+        if node_id in visited or node_id not in dag.nodes:
+            return
+        visited.add(node_id)
+
+        # Visit children first (bottom-up)
+        pat_node = dag.nodes[node_id]
+        match pat_node.patf:
+            case (
+                PatSeq(pats)
+                | PatPar(pats)
+                | PatRand(pats)
+                | PatAlt(pats)
+                | PatPoly(pats, _)
+            ):
+                for child in pats.iter():
+                    visit(child.root_node_id())
+            case (
+                PatEuc(child, _, _, _)
+                | PatSpeed(child, _, _)
+                | PatStretch(child, _)
+                | PatProb(child, _)
+                | PatRepeat(child, _)
+            ):
+                visit(child.root_node_id())
+            case PatSilent() | PatPure(_):
+                pass
+
+        # Add this node after visiting children
+        result.append(node_id)
+
+    # Start from root
+    visit(dag.root)
+    return result
+
+
+def run_dag_minimizers[T](
+    dag: PatDag[T], minimizers: Sequence[DagMinimizer[T]], max_iterations: int = 10
+) -> None:
+    """Run DAG minimizers to saturation or until max_iterations reached.
+
+    Processes nodes in bottom-up order to ensure children are minimized before parents.
+    Modifies the DAG in-place by replacing nodes with minimized versions.
+    """
     for _ in range(max_iterations):
         changed = False
 
-        # Apply all minimizers
-        for minimizer in minimizers:
-            result = minimizer(current)
-            if result is not None:
-                current = result
-                changed = True
+        # Process nodes in bottom-up topological order
+        node_ids = _topological_sort_bottom_up(dag)
+
+        for node_id in node_ids:
+            if node_id not in dag.nodes:  # Node might have been removed
+                continue
+
+            find = dag.nodes[node_id].find
+
+            # Apply all minimizers to this node
+            for minimizer in minimizers:
+                result = minimizer(dag, find)
+                if result is not None:
+                    # Replace the current node with the minimized result
+                    minimized_content = dag.get_node(result)
+                    # Update the PatNode with new content but keep the same Find handle
+                    dag.nodes[node_id] = PatNode(find, minimized_content)
+                    changed = True
+                    break  # Only apply one minimizer per iteration per node
 
         # If no change, we've reached saturation
         if not changed:
             break
 
-    return current
+
+def minimize_pattern_dag[T](pat: Pat[T]) -> Pat[T]:
+    """Apply all available minimizers using DAG representation.
+
+    This version operates entirely on DAG nodes for maximum efficiency,
+    only converting to Pat at the very end.
+    """
+    # Convert to DAG
+    dag = PatDag.from_pat(pat)
+
+    # Canonicalize to find and merge equivalent subpatterns
+    # This makes Find equality work properly for minimizers
+    dag.canonicalize()
+
+    # Apply DAG-based minimization rules
+    # These now use root node IDs for equality checks
+    dag_minimizers = [
+        minimize_single_seq_dag,
+        minimize_seq_repetition_dag,
+    ]
+
+    run_dag_minimizers(dag, dag_minimizers)
+
+    # Run canonicalization again after minimization to catch new equivalences
+    dag.canonicalize()
+
+    # Garbage collect unused nodes
+    dag.collect()
+
+    # Convert back to Pat only at the very end
+    return dag.to_pat()
 
 
 def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
-    """Apply all available minimizers to a pattern until saturation."""
-    minimizers = [
-        minimize_single_seq,
-        minimize_seq_repetition,
-    ]
+    """Apply all available minimizers to a pattern until saturation.
 
-    return run_minimizers(pat, minimizers)
+    Uses DAG representation for efficient pattern minimization.
+    """
+    return minimize_pattern_dag(pat)
 
 
 def quantize[T](ds: DeltaSeq[T]) -> StepSeq[T]:
@@ -245,6 +357,7 @@ def reflect_minimal[T](ss: StepSeq[T]) -> Pat[T]:
     """Reflect a StepSeq to a minimized Pat.
 
     First reflects normally, then applies all available minimizers until saturation.
+    Uses DAG representation for efficient equality checking during minimization.
     """
     base_pattern = reflect(ss)
-    return minimize_pattern(base_pattern)
+    return minimize_pattern_dag(base_pattern)
