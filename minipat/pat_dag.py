@@ -392,18 +392,6 @@ class PatDag[T]:
 
         return len(unreachable) > 0
 
-    def _has_node_id(self, node_id: PatId) -> bool:
-        """Internal: Check if a node ID exists in the DAG."""
-        return node_id in self._nodes
-
-    def _get_pat_node_by_id(self, node_id: PatId) -> PatNode[T]:
-        """Internal: Get the PatNode for a given node ID."""
-        return self._nodes[node_id]
-
-    def _set_pat_node_by_id(self, node_id: PatId, pat_node: PatNode[T]) -> None:
-        """Internal: Set the PatNode for a given node ID."""
-        self._nodes[node_id] = pat_node
-
     def get_node(self, find: PatFind) -> PatF[T, PatFind]:
         """Get the pattern node associated with a Find handle."""
         return self._nodes[find.root_node_id()].patf
@@ -415,8 +403,8 @@ class PatDag[T]:
             find: The Find handle identifying the node to update
             new_patf: The new pattern functor content
         """
-        node_id = find.root_node_id()
-        self._nodes[node_id] = PatNode(find, new_patf)
+        new_find = self.add_node(new_patf)
+        new_find.subsume(find)
 
     def add_node(self, pat: PatF[T, PatFind]) -> PatFind:
         """Add a new node to the DAG and return its Find handle."""
@@ -456,7 +444,7 @@ class PatDag[T]:
                 if node_id in garbage:
                     continue
 
-                pat_node = self._get_pat_node_by_id(node_id)
+                pat_node = self._nodes[node_id]
                 find = pat_node.find
 
                 # Create a canonical hash of the pattern

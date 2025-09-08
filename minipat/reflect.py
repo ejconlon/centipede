@@ -8,43 +8,54 @@ from functools import reduce
 from math import gcd
 from typing import Callable, List, Optional, Sequence
 
-from minipat.common import CycleDelta
+from minipat.arc import Arc
+from minipat.common import CycleDelta, CycleTime
 from minipat.pat import (
     Pat,
+    PatRepeat,
     PatSeq,
-    PatSpeed,
     PatStretch,
-    SpeedOp,
 )
 from minipat.pat_dag import PatDag, PatFind
+from minipat.stream import Stream
 from spiny.seq import PSeq
 
 
 @dataclass(frozen=True)
 class DeltaVal[T]:
-    """A value annotated with a fractional length"""
+    """A value annotated with fractional offset and duration"""
 
-    delta: CycleDelta
+    offset: CycleDelta
+    duration: CycleDelta
     val: T
 
 
 @dataclass(frozen=True)
 class StepVal[T]:
-    """A value annotated with an integral length"""
+    """A value annotated with integral offset and duration"""
 
-    steps: int
+    offset: int
+    duration: int
     val: T
 
 
-type DeltaSeq[T] = DeltaVal[PSeq[DeltaVal[T]]]
-"""A sequence of events annotated with total fractional length.
-Invariant: root delta is the sum of all child deltas.
+type DeltaSeq[T] = PSeq[DeltaVal[T]]
+"""A sequence of events with fractional offsets and durations.
+
+Invariants:
+- Root offset is 0 (first event starts at beginning)
+- Root duration is >= max(offset + duration) across all events
+- Offsets must be non-decreasing (sorted by start time)
 """
 
 
-type StepSeq[T] = StepVal[PSeq[StepVal[T]]]
-"""A sequence of events annotated with total fractional length
-Invariant: root steps is the sum of all child steps.
+type StepSeq[T] = PSeq[StepVal[T]]
+"""A sequence of events with integral offsets and durations.
+
+Invariants:
+- Root offset is 0 (first event starts at beginning)
+- Root duration is >= max(offset + duration) across all events  
+- Offsets must be non-decreasing (sorted by start time)
 """
 
 
@@ -53,11 +64,12 @@ def _lcm(a: int, b: int) -> int:
     return abs(a * b) // gcd(a, b) if a and b else 0
 
 
-def _collect_denominators[T](seq: PSeq[DeltaVal[T]]) -> List[int]:
+def _collect_denominators[T](seq: DeltaSeq[T]) -> List[int]:
     """Collect all denominators from a sequence of DeltaVals."""
     denoms = []
     for item in seq.iter():
-        denoms.append(item.delta.denominator)
+        denoms.append(item.offset.denominator)
+        denoms.append(item.duration.denominator)
     return denoms
 
 
@@ -78,8 +90,8 @@ def minimize_seq_repetition_dag[T](dag: PatDag[T], find: PatFind) -> Optional[Pa
     Returns None if no repetition found.
     """
 
-    pat_f = dag.get_node(find)
-    match pat_f:
+    patf = dag.get_node(find)
+    match patf:
         case PatSeq(pats):
             items = list(pats.iter())
             if len(items) < 2:
@@ -88,11 +100,9 @@ def minimize_seq_repetition_dag[T](dag: PatDag[T], find: PatFind) -> Optional[Pa
             # Check if all patterns are identical (using root node ID after canonicalization)
             first_root = items[0].root_node_id()
             if all(p.root_node_id() == first_root for p in items):
-                # All identical - use speed operator
-                speed_node = dag.add_node(
-                    PatSpeed(items[0], SpeedOp.Fast, Fraction(len(items)))
-                )
-                return speed_node
+                # All identical - use repeat operator
+                repeat_node = dag.add_node(PatRepeat(items[0], Fraction(len(items))))
+                return repeat_node
 
             # Check for longer repetitions
             n = len(items)
@@ -118,10 +128,10 @@ def minimize_seq_repetition_dag[T](dag: PatDag[T], find: PatFind) -> Optional[Pa
                             base = base_pattern[0]
                         else:
                             base = dag.add_node(PatSeq(PSeq.mk(base_pattern)))
-                        speed_node = dag.add_node(
-                            PatSpeed(base, SpeedOp.Fast, Fraction(repetitions))
+                        repeat_node = dag.add_node(
+                            PatRepeat(base, Fraction(repetitions))
                         )
-                        return speed_node
+                        return repeat_node
         case _:
             pass
 
@@ -135,12 +145,97 @@ def minimize_single_seq_dag[T](dag: PatDag[T], find: PatFind) -> Optional[PatFin
     Returns None if sequence has multiple elements.
     """
 
-    pat_f = dag.get_node(find)
-    match pat_f:
+    patf = dag.get_node(find)
+    match patf:
         case PatSeq(pats):
-            items: list[PatFind] = list(pats.iter())
+            items: List[PatFind] = list(pats.iter())
             if len(items) == 1:
                 return items[0]
+        case _:
+            pass
+
+    return None
+
+
+def minimize_seq_gcd_dag[T](dag: PatDag[T], find: PatFind) -> Optional[PatFind]:
+    """Minimize sequences by factoring out GCD of child durations.
+
+    Converts [a@4 b@4] -> [a b]@4
+    Converts [a@2 b@4] -> [a b@2]@2
+    Returns None if no GCD can be factored out.
+    """
+    from functools import reduce
+    from math import gcd
+
+    patf = dag.get_node(find)
+    match patf:
+        case PatSeq(pats):
+            items: List[PatFind] = list(pats.iter())
+            if len(items) < 2:
+                return None
+
+            # Collect stretch factors from child patterns
+            stretch_factors = []
+            for child in items:
+                child_patf = dag.get_node(child)
+                match child_patf:
+                    case PatStretch(_, count):
+                        # Convert Fraction to int if it's a whole number
+                        if count.denominator == 1:
+                            stretch_factors.append(count.numerator)
+                        else:
+                            # Can't handle fractional stretches for GCD
+                            return None
+                    case _:
+                        # Non-stretched patterns have implicit stretch of 1
+                        stretch_factors.append(1)
+
+            if not stretch_factors or len(stretch_factors) != len(items):
+                return None
+
+            # Find GCD of all stretch factors
+            common_gcd = reduce(gcd, stretch_factors)
+
+            # Only proceed if GCD > 1 (there's something to factor out)
+            if common_gcd <= 1:
+                return None
+
+            # Create new children with reduced stretch factors
+            new_children = []
+            for child, factor in zip(items, stretch_factors):
+                new_factor = factor // common_gcd
+                child_patf = dag.get_node(child)
+
+                match child_patf:
+                    case PatStretch(inner, _):
+                        if new_factor == 1:
+                            # Stretch factor becomes 1, just use the inner pattern
+                            new_children.append(inner)
+                        else:
+                            # Create new stretch with reduced factor
+                            new_stretch = dag.add_node(
+                                PatStretch(inner, Fraction(new_factor))
+                            )
+                            new_children.append(new_stretch)
+                    case _:
+                        # Was implicitly stretched by 1, now need explicit stretch
+                        if new_factor == 1:
+                            # Still stretch of 1, no change needed
+                            new_children.append(child)
+                        else:
+                            # This shouldn't happen given our logic above, but handle it
+                            new_stretch = dag.add_node(
+                                PatStretch(child, Fraction(new_factor))
+                            )
+                            new_children.append(new_stretch)
+
+            # Create the new sequence
+            new_seq = dag.add_node(PatSeq(PSeq.mk(new_children)))
+
+            # Apply the common GCD as a stretch to the whole sequence
+            result = dag.add_node(PatStretch(new_seq, Fraction(common_gcd)))
+            return result
+
         case _:
             pass
 
@@ -178,11 +273,10 @@ def run_dag_minimizers[T](
             break
 
 
-def minimize_pattern_dag[T](pat: Pat[T]) -> Pat[T]:
-    """Apply all available minimizers using DAG representation.
+def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
+    """Apply all available minimizers to a pattern until saturation.
 
-    This version operates entirely on DAG nodes for maximum efficiency,
-    only converting to Pat at the very end.
+    Uses DAG representation for efficient pattern minimization.
     """
     # Convert to DAG
     dag = PatDag.from_pat(pat)
@@ -196,6 +290,7 @@ def minimize_pattern_dag[T](pat: Pat[T]) -> Pat[T]:
     dag_minimizers = [
         minimize_single_seq_dag,
         minimize_seq_repetition_dag,
+        minimize_seq_gcd_dag,
     ]
 
     run_dag_minimizers(dag, dag_minimizers)
@@ -203,92 +298,103 @@ def minimize_pattern_dag[T](pat: Pat[T]) -> Pat[T]:
     # Run canonicalization again after minimization to catch new equivalences
     dag.canonicalize()
 
-    # Garbage collect unused nodes
-    dag.collect()
-
     # Convert back to Pat only at the very end
     return dag.to_pat()
 
 
-def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
-    """Apply all available minimizers to a pattern until saturation.
-
-    Uses DAG representation for efficient pattern minimization.
-    """
-    return minimize_pattern_dag(pat)
-
-
 def quantize[T](ds: DeltaSeq[T]) -> StepSeq[T]:
-    """Quantizes a sequence of events with fractional lengths into
-    an equivalent sequence with integral lengths.
+    """Quantizes a sequence of events with fractional offsets/durations into
+    an equivalent sequence with integral offsets/durations.
     """
-    if ds.val.null():
-        return StepVal(0, PSeq.empty())
+    if ds.null():
+        return PSeq.empty()
 
-    denoms = _collect_denominators(ds.val)
+    denoms = _collect_denominators(ds)
     if not denoms:
-        return StepVal(0, PSeq.empty())
+        return PSeq.empty()
 
     common_denom = reduce(_lcm, denoms)
 
     quantized_items = []
-    for item in ds.val.iter():
-        steps = int(item.delta * common_denom)
-        quantized_items.append(StepVal(steps, item.val))
+    for item in ds.iter():
+        offset_steps = int(item.offset * common_denom)
+        duration_steps = int(item.duration * common_denom)
+        quantized_items.append(StepVal(offset_steps, duration_steps, item.val))
 
-    total_steps = sum(item.steps for item in quantized_items)
-    return StepVal(total_steps, PSeq.mk(quantized_items))
-
-
-def step_delta[T](ds: DeltaSeq[T], ss: StepSeq[T]) -> CycleDelta:
-    """Returns the fractional length of a single step."""
-    return CycleDelta(ds.delta * Fraction(1, ss.steps))
+    return PSeq.mk(quantized_items)
 
 
-def unquantize[T](ss: StepSeq[T], total_delta: CycleDelta) -> DeltaSeq[T]:
-    """Converts a sequence with integral step lengths back to fractional lengths.
+def get_min_total_duration[T](ds: DeltaSeq[T]) -> CycleDelta:
+    """Returns the minimum total duration of a DeltaSeq (max offset + duration)."""
+    if ds.null():
+        return CycleDelta(Fraction(0))
+
+    max_end = CycleDelta(Fraction(0))
+    for item in ds.iter():
+        end_time = CycleDelta(item.offset + item.duration)
+        if end_time > max_end:
+            max_end = end_time
+
+    return max_end
+
+
+def unquantize[T](ss: StepSeq[T], step_duration: CycleDelta) -> DeltaSeq[T]:
+    """Converts a sequence with integral offsets/durations back to fractional lengths.
 
     Args:
         ss: The step sequence to convert
-        total_delta: The total fractional length to distribute across the steps
+        step_duration: The fractional duration of a single step
 
     Returns:
-        A DeltaSeq with fractional lengths proportional to the step counts
+        A DeltaSeq with fractional offsets/durations scaled by step_duration
     """
-    if ss.val.null() or ss.steps == 0:
-        return DeltaVal(CycleDelta(Fraction(0)), PSeq.empty())
+    if ss.null():
+        return PSeq.empty()
 
-    # Calculate the fractional length per step
-    delta_per_step = Fraction(total_delta) / ss.steps
-
-    # Convert each StepVal to a DeltaVal
+    # Convert each StepVal to a DeltaVal by scaling with step_duration
     delta_items = []
-    for item in ss.val.iter():
-        item_delta = CycleDelta(delta_per_step * item.steps)
-        delta_items.append(DeltaVal(item_delta, item.val))
+    for item in ss.iter():
+        fractional_offset = CycleDelta(step_duration * item.offset)
+        fractional_duration = CycleDelta(step_duration * item.duration)
+        delta_items.append(DeltaVal(fractional_offset, fractional_duration, item.val))
 
-    return DeltaVal(total_delta, PSeq.mk(delta_items))
+    return PSeq.mk(delta_items)
 
 
 def reflect[T](ss: StepSeq[T]) -> Pat[T]:
     """Assembles a compact representation of the quantized sequence
     as a pattern."""
-    if ss.val.null():
+    if ss.null():
         return Pat.silent()
 
+    # Sort events by offset to ensure proper temporal order
+    sorted_items = sorted(ss.iter(), key=lambda item: item.offset)
+
     pats = []
-    for item in ss.val.iter():
-        if item.steps == 0:
+    current_offset = 0
+
+    for item in sorted_items:
+        # Add silence for any gap before this event
+        if item.offset > current_offset:
+            gap_duration = item.offset - current_offset
+            if gap_duration > 0:
+                # For now, we'll skip gaps - this needs to be handled properly
+                # when we support silences
+                pass
+
+        # Create pattern for this event
+        if item.duration == 0:
             continue
-        elif item.steps == 1:
+        elif item.duration == 1:
             pats.append(Pat.pure(item.val))
         else:
             # For items taking multiple steps, we need to stretch them
-            # We'll use Pat.stretch to make a pattern take up more space
             base_pat = Pat.pure(item.val)
             # Stretch by the number of steps
-            stretched = Pat(PatStretch(base_pat, Fraction(item.steps)))
+            stretched = Pat(PatStretch(base_pat, Fraction(item.duration)))
             pats.append(stretched)
+
+        current_offset = item.offset + item.duration
 
     if len(pats) == 0:
         return Pat.silent()
@@ -298,6 +404,80 @@ def reflect[T](ss: StepSeq[T]) -> Pat[T]:
         return Pat.seq(pats)
 
 
+def pat_to_deltaseq[T](
+    pat: Pat[T], total_delta: CycleDelta, start_time: Optional[CycleTime] = None
+) -> DeltaSeq[T]:
+    """Convert a Pat back to a DeltaSeq by evaluating it over the given time arc.
+
+    This streams the pattern from start_time to start_time + total_delta and collects the events.
+    Used for semantic equivalence testing of minimized patterns.
+
+    The pattern must produce a monophonic stream (no overlapping events).
+    If overlaps are detected, a ValueError will be raised.
+
+    Args:
+        pat: The pattern to evaluate (must be monophonic)
+        total_delta: The total time duration to evaluate over
+        start_time: The start time of the evaluation (defaults to None, which means cycle 0)
+
+    Returns:
+        A DeltaSeq representing the events produced by the pattern
+
+    Raises:
+        ValueError: If the pattern produces overlapping events
+    """
+    if total_delta == 0:
+        return PSeq.empty()
+
+    # Convert pattern to stream
+    stream = Stream.pat(pat)
+
+    # Use cycle 0 if start_time is None
+    if start_time is None:
+        start_time = CycleTime(Fraction(0))
+
+    # Create arc from start_time to start_time + total_delta
+    end_time = CycleTime(start_time + total_delta)
+    arc = Arc(start_time, end_time)
+
+    # Get events by streaming over the arc
+    events = stream.unstream(arc)
+
+    # Convert events back to DeltaSeq format, sorting by start time
+    event_list = []
+    for _, ev in events:
+        event_list.append(ev)
+
+    # Sort events by start time to maintain temporal order
+    sorted_events = sorted(event_list, key=lambda ev: ev.span.active.start)
+
+    if not sorted_events:
+        return PSeq.empty()
+
+    # Process events to ensure monophonic stream (no overlaps)
+    delta_items = []
+    current_time = start_time
+
+    for i, ev in enumerate(sorted_events):
+        event_start = ev.span.active.start
+        event_end = ev.span.active.end
+
+        # Check for overlaps
+        if event_start < current_time:
+            overlap_amount = CycleDelta(current_time - event_start)
+            raise ValueError(
+                f"Overlap detected in monophonic stream at time {event_start}: overlap of {overlap_amount}"
+            )
+
+        # Calculate offset from start_time and duration
+        offset = CycleDelta(event_start - start_time)
+        duration = CycleDelta(event_end - event_start)
+        delta_items.append(DeltaVal(offset, duration, ev.val))
+        current_time = event_end
+
+    return PSeq.mk(delta_items)
+
+
 def reflect_minimal[T](ss: StepSeq[T]) -> Pat[T]:
     """Reflect a StepSeq to a minimized Pat.
 
@@ -305,4 +485,4 @@ def reflect_minimal[T](ss: StepSeq[T]) -> Pat[T]:
     Uses DAG representation for efficient equality checking during minimization.
     """
     base_pattern = reflect(ss)
-    return minimize_pattern_dag(base_pattern)
+    return minimize_pattern(base_pattern)
