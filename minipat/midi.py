@@ -1439,7 +1439,9 @@ def start_midi_live_system(
         ```
     """
     # Create MIDI output port and protect with mutex
-    out_port = mido.open_output(name=out_port_name, virtual=True)  # pyright: ignore
+    existing = mido.get_output_names()  # pyright: ignore
+    virtual = out_port_name not in existing
+    out_port = mido.open_output(name=out_port_name, virtual=virtual)  # pyright: ignore
     output_mutex = Mutex(out_port)
 
     # Create shared message heap for coordination between actor and task
