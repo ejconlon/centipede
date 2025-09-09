@@ -29,23 +29,29 @@ def assert_semantic_equivalence[T](
 
     This verifies semantic equivalence by converting both to CycleArcSeq format and comparing.
     """
-    # Convert original StepArcSeq to CycleArcSeq (using step duration of 1)
-    original_ds = unquantize(original_ss, CycleDelta(Fraction(1)))
+    if original_ss.size() == 0:
+        return  # Empty sequences are trivially equivalent
 
-    # Convert minimized pattern back to CycleArcSeq by evaluating it
-    # Calculate the actual end time of the last event in original sequence
+    # Calculate the total time span of the original sequence
     max_end_time = 0
     for item in original_ss.iter():
         end_time = int(item.arc.end)
         if end_time > max_end_time:
             max_end_time = end_time
 
-    # Create an arc from 0 to the maximum end time
-    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(max_end_time)))
+    # Choose step count to align with integer boundaries
+    # Step duration = 1/total_time_units so the pattern spans exactly 1 cycle
+    total_time_units = max_end_time
+    step_duration = CycleDelta(Fraction(1, total_time_units))
+
+    # Convert original StepArcSeq to CycleArcSeq
+    original_ds = unquantize(original_ss, step_duration)
+
+    # Evaluate minimized pattern over arc (0, 1) since we normalized to 1 cycle
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     minimized_ds = pat_to_seq(minimized_pat, arc)
 
     # They should produce equivalent event sequences
-    # For now, we'll convert both back to StepArcSeq for comparison since that's easier
     original_quantized = quantize(original_ds)
     minimized_quantized = quantize(minimized_ds)
 
@@ -413,24 +419,17 @@ class TestReflectMinimal:
 
     def test_simple_repetition(self) -> None:
         """Repeating pattern should be minimized."""
+        # Pattern: [a b a b] using integer step boundaries
+        # This represents the quantized result of [a b]!2 over 2 cycles
         items = [
-            StepArcValue.mk(
-                StepArc(StepTime(0), StepTime(1)), "a"
-            ),  # a at offset 0, duration 1
-            StepArcValue.mk(
-                StepArc(StepTime(1), StepTime(2)), "b"
-            ),  # b at offset 1, duration 1
-            StepArcValue.mk(
-                StepArc(StepTime(2), StepTime(3)), "a"
-            ),  # a at offset 2, duration 1
-            StepArcValue.mk(
-                StepArc(StepTime(3), StepTime(4)), "b"
-            ),  # b at offset 3, duration 1
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(1)), "a"),
+            StepArcValue.mk(StepArc(StepTime(1), StepTime(2)), "b"),
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "a"),
+            StepArcValue.mk(StepArc(StepTime(3), StepTime(4)), "b"),
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
         # Should detect the repetition and create a more compact form
-        # The exact representation will use PatRepeat
         # [a b a b] should become [a b]!2
         expected = Pat.repeat(Pat.seq([Pat.pure("a"), Pat.pure("b")]), Fraction(2))
         assert minimal == expected
@@ -440,16 +439,12 @@ class TestReflectMinimal:
 
     def test_triple_repetition(self) -> None:
         """Triple repetition should be detected."""
+        # Pattern: [x x x] using integer step boundaries
+        # This represents a simple triple repetition
         items = [
-            StepArcValue.mk(
-                StepArc(StepTime(0), StepTime(1)), "x"
-            ),  # x at offset 0, duration 1
-            StepArcValue.mk(
-                StepArc(StepTime(1), StepTime(2)), "x"
-            ),  # x at offset 1, duration 1
-            StepArcValue.mk(
-                StepArc(StepTime(2), StepTime(3)), "x"
-            ),  # x at offset 2, duration 1
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(1)), "x"),
+            StepArcValue.mk(StepArc(StepTime(1), StepTime(2)), "x"),
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "x"),
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -462,34 +457,23 @@ class TestReflectMinimal:
         assert_semantic_equivalence(ss, minimal)
 
     def test_complex_pattern_repetition(self) -> None:
-        """Complex patterns with multiple elements should be detected."""
-        # Pattern: [a(dur 2), b(dur 1)] repeated 3 times
+        """Complex patterns with multiple elements and different durations should be detected."""
+        # Pattern: [a@2 b a@2 b a@2 b] representing 3 repetitions of [a@2 b]
+        # This is more interesting because 'a' has duration 2, 'b' has duration 1
         items = [
             # First repetition: a@2, b@1
-            StepArcValue.mk(
-                StepArc(StepTime(0), StepTime(2)), "a"
-            ),  # a at offset 0, duration 2
-            StepArcValue.mk(
-                StepArc(StepTime(2), StepTime(3)), "b"
-            ),  # b at offset 2, duration 1
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(2)), "a"),  # a spans 0-2
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "b"),  # b spans 2-3
             # Second repetition: a@2, b@1
-            StepArcValue.mk(
-                StepArc(StepTime(3), StepTime(5)), "a"
-            ),  # a at offset 3, duration 2
-            StepArcValue.mk(
-                StepArc(StepTime(5), StepTime(6)), "b"
-            ),  # b at offset 5, duration 1
+            StepArcValue.mk(StepArc(StepTime(3), StepTime(5)), "a"),  # a spans 3-5
+            StepArcValue.mk(StepArc(StepTime(5), StepTime(6)), "b"),  # b spans 5-6
             # Third repetition: a@2, b@1
-            StepArcValue.mk(
-                StepArc(StepTime(6), StepTime(8)), "a"
-            ),  # a at offset 6, duration 2
-            StepArcValue.mk(
-                StepArc(StepTime(8), StepTime(9)), "b"
-            ),  # b at offset 8, duration 1
+            StepArcValue.mk(StepArc(StepTime(6), StepTime(8)), "a"),  # a spans 6-8
+            StepArcValue.mk(StepArc(StepTime(8), StepTime(9)), "b"),  # b spans 8-9
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
-        # [a@2 b a@2 b a@2 b] should become [a@2 b]!3
+        # Should detect [a@2 b]!3 pattern (a stretched by 2, then the whole pattern repeated 3 times)
         base_pattern = Pat.seq([Pat.stretch(Pat.pure("a"), Fraction(2)), Pat.pure("b")])
         expected = Pat.repeat(base_pattern, Fraction(3))
         assert minimal == expected
@@ -539,10 +523,11 @@ class TestReflectMinimal:
 
     def test_single_element_repetition(self) -> None:
         """Single element repeated many times."""
+        # Pattern: [drum drum ... drum] (16 times) using integer step boundaries
         items = [
             StepArcValue.mk(StepArc(StepTime(i), StepTime(i + 1)), "drum")
             for i in range(16)
-        ]  # drum at each offset 0-15, duration 1
+        ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
         # Should create a very compact representation

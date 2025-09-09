@@ -551,89 +551,84 @@ class RepetitionStream[T](Stream[T]):
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        rep_result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
-        match self.operator:
-            case SpeedOp.Fast:
-                # Handle fractional repetitions: x*2.5 = 2 full + 0.5 partial repetition
-                if self.count > 0:
-                    # Get integer and fractional parts
-                    int_part = int(self.count)  # Number of full repetitions
-                    frac_part = (
-                        self.count - int_part
-                    )  # Fractional part for partial repetition
+        # Process each cycle separately to preserve alternation context
+        for cycle_index, cycle_arc in arc.split_cycles():
+            match self.operator:
+                case SpeedOp.Fast:
+                    # Handle fractional repetitions: x*2.5 = 2 full + 0.5 partial repetition
+                    if self.count > 0:
+                        # Get integer and fractional parts
+                        int_part = int(self.count)  # Number of full repetitions
+                        frac_part = (
+                            self.count - int_part
+                        )  # Fractional part for partial repetition
 
-                    rep_duration = (
-                        arc.length() / self.count
-                    )  # Duration of each repetition
+                        rep_duration = (
+                            cycle_arc.length() / self.count
+                        )  # Duration of each repetition
 
-                    # Unstream once for a single repetition
-                    full_rep_arc = CycleArc(
-                        arc.start, CycleTime(arc.start + rep_duration)
-                    )
-                    full_pattern_events = self.pattern.unstream(full_rep_arc)
-
-                    # Add full repetitions
-                    for i in range(int_part):
-                        rep_start = arc.start + i * rep_duration
-                        for span, ev in full_pattern_events:
-                            # Shift the event to the correct repetition position
-                            offset = rep_start - arc.start
-                            shifted_span = CycleSpan(
-                                CycleArc(
-                                    CycleTime(span.active.start + offset),
-                                    CycleTime(span.active.end + offset),
-                                ),
-                                span.whole,
+                        # Add full repetitions - evaluate each separately for proper alternation
+                        for i in range(int_part):
+                            rep_start = cycle_arc.start + i * rep_duration
+                            rep_arc = CycleArc(
+                                CycleTime(rep_start),
+                                CycleTime(rep_start + rep_duration),
                             )
 
-                            clipped_span = _create_span(shifted_span.active, arc)
-                            if clipped_span is not None:
-                                if shifted_span.whole is not None:
-                                    clipped_span = CycleSpan(
-                                        clipped_span.active,
-                                        shifted_span.whole,
-                                    )
-                                elif shifted_span.active != clipped_span.active:
-                                    clipped_span = CycleSpan(
-                                        clipped_span.active,
-                                        shifted_span.active,
-                                    )
-                                new_ev = Ev(clipped_span, ev.val)
-                                rep_result = ev_heap_push(new_ev, rep_result)
+                            # Evaluate each repetition separately to preserve alternation context
+                            rep_events = self.pattern.unstream(rep_arc)
+                            for span, ev in rep_events:
+                                clipped_span = _create_span(span.active, cycle_arc)
+                                if clipped_span is not None:
+                                    if span.whole is not None:
+                                        clipped_span = CycleSpan(
+                                            clipped_span.active, span.whole
+                                        )
+                                    elif span.active != clipped_span.active:
+                                        clipped_span = CycleSpan(
+                                            clipped_span.active, span.active
+                                        )
+                                    new_ev = Ev(clipped_span, ev.val)
+                                    result = ev_heap_push(new_ev, result)
 
-                    # Add partial repetition if needed
-                    if frac_part > 0:
-                        partial_start = arc.start + int_part * rep_duration
-                        partial_end = partial_start + frac_part * rep_duration
-                        partial_arc = CycleArc(
-                            CycleTime(partial_start), CycleTime(partial_end)
-                        )
+                        # Add partial repetition if needed
+                        if frac_part > 0:
+                            partial_start = cycle_arc.start + int_part * rep_duration
+                            partial_end = partial_start + frac_part * rep_duration
+                            partial_arc = CycleArc(
+                                CycleTime(partial_start), CycleTime(partial_end)
+                            )
 
-                        # Unstream the partial repetition
-                        partial_pattern_events = self.pattern.unstream(partial_arc)
-                        for _, ev in partial_pattern_events:
-                            clipped_span = _create_span(ev.span.active, arc)
-                            if clipped_span is not None:
-                                if ev.span.whole is not None:
-                                    span = CycleSpan(clipped_span.active, ev.span.whole)
-                                elif ev.span.active != clipped_span.active:
-                                    span = CycleSpan(
-                                        clipped_span.active, ev.span.active
-                                    )
-                                else:
-                                    span = clipped_span
-                                new_ev = Ev(span, ev.val)
-                                rep_result = ev_heap_push(new_ev, rep_result)
+                            # Unstream the partial repetition
+                            partial_pattern_events = self.pattern.unstream(partial_arc)
+                            for _, ev in partial_pattern_events:
+                                clipped_span = _create_span(ev.span.active, cycle_arc)
+                                if clipped_span is not None:
+                                    if ev.span.whole is not None:
+                                        span = CycleSpan(
+                                            clipped_span.active, ev.span.whole
+                                        )
+                                    elif ev.span.active != clipped_span.active:
+                                        span = CycleSpan(
+                                            clipped_span.active, ev.span.active
+                                        )
+                                    else:
+                                        span = clipped_span
+                                    new_ev = Ev(span, ev.val)
+                                    result = ev_heap_push(new_ev, result)
 
-            case SpeedOp.Slow:
-                # Slow by factor N is just fast by 1/N
-                fast_stream = RepetitionStream(
-                    self.pattern, SpeedOp.Fast, Fraction(1) / self.count
-                )
-                return fast_stream.unstream(arc)
+                case SpeedOp.Slow:
+                    # Slow by factor N is just fast by 1/N
+                    fast_stream = RepetitionStream(
+                        self.pattern, SpeedOp.Fast, Fraction(1) / self.count
+                    )
+                    cycle_events = fast_stream.unstream(cycle_arc)
+                    for _, ev in cycle_events:
+                        result = ev_heap_push(ev, result)
 
-        return rep_result
+        return result
 
 
 @dataclass(frozen=True)
@@ -684,9 +679,17 @@ class AlternatingStream[T](Stream[T]):
         if arc.null() or len(self.patterns) == 0:
             return ev_heap_empty()
 
-        cycle_index = int(arc.start) % len(self.patterns)
-        chosen_stream = self.patterns[cycle_index]
-        return chosen_stream.unstream(arc)
+        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+
+        # Use split_cycles to handle multi-cycle arcs properly
+        for cycle_index, cycle_arc in arc.split_cycles():
+            pattern_index = cycle_index % len(self.patterns)
+            chosen_stream = self.patterns[pattern_index]
+            cycle_events = chosen_stream.unstream(cycle_arc)
+            for _, ev in cycle_events:
+                result = ev_heap_push(ev, result)
+
+        return result
 
 
 @dataclass(frozen=True)
@@ -701,66 +704,54 @@ class ReplicateStream[T](Stream[T]):
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        # Handle fractional repetitions: x!2.5 = 2 full + 0.5 partial repetition
-        # Get integer and fractional parts
-        int_part = int(self.count)  # Number of full repetitions
-        frac_part = self.count - int_part  # Fractional part for partial repetition
+        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
-        rep_duration = arc.length() / self.count  # Duration of each repetition
-        replicate_result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+        # Process each cycle separately (following Haskell implementation)
+        for cycle_index, cycle_arc in arc.split_cycles():
+            int_part = int(self.count)
+            frac_part = self.count - int_part
+            rep_duration = cycle_arc.length() / self.count
 
-        # Unstream once for a single repetition
-        full_rep_arc = CycleArc(arc.start, CycleTime(arc.start + rep_duration))
-        full_pattern_events = self.pattern.unstream(full_rep_arc)
+            # Full repetitions within this cycle
+            for i in range(int_part):
+                rep_start = cycle_arc.start + i * rep_duration
+                rep_end = rep_start + rep_duration
+                rep_arc = CycleArc(CycleTime(rep_start), CycleTime(rep_end))
 
-        # Add full repetitions
-        for i in range(int_part):
-            rep_start = arc.start + i * rep_duration
-            for span, ev in full_pattern_events:
-                # Shift the event to the correct repetition position
-                offset = rep_start - arc.start
-                shifted_span = CycleSpan(
-                    CycleArc(
-                        CycleTime(span.active.start + offset),
-                        CycleTime(span.active.end + offset),
-                    ),
-                    span.whole,
-                )
+                # Evaluate pattern separately for each repetition to preserve context
+                pattern_events = self.pattern.unstream(rep_arc)
+                for _, ev in pattern_events:
+                    clipped_span = _create_span(ev.span.active, cycle_arc)
+                    if clipped_span is not None:
+                        if ev.span.whole is not None:
+                            clipped_span = CycleSpan(clipped_span.active, ev.span.whole)
+                        elif ev.span.active != clipped_span.active:
+                            clipped_span = CycleSpan(
+                                clipped_span.active, ev.span.active
+                            )
+                        new_ev = Ev(clipped_span, ev.val)
+                        result = ev_heap_push(new_ev, result)
 
-                clipped_span = _create_span(shifted_span.active, arc)
-                if clipped_span is not None:
-                    if shifted_span.whole is not None:
-                        clipped_span = CycleSpan(
-                            clipped_span.active, shifted_span.whole
-                        )
-                    elif shifted_span.active != clipped_span.active:
-                        clipped_span = CycleSpan(
-                            clipped_span.active, shifted_span.active
-                        )
-                    new_ev = Ev(clipped_span, ev.val)
-                    replicate_result = ev_heap_push(new_ev, replicate_result)
+            # Partial repetition within this cycle
+            if frac_part > 0:
+                partial_start = cycle_arc.start + int_part * rep_duration
+                partial_end = partial_start + frac_part * rep_duration
+                partial_arc = CycleArc(CycleTime(partial_start), CycleTime(partial_end))
 
-        # Add partial repetition if needed
-        if frac_part > 0:
-            partial_start = arc.start + int_part * rep_duration
-            partial_end = partial_start + frac_part * rep_duration
-            partial_arc = CycleArc(CycleTime(partial_start), CycleTime(partial_end))
+                pattern_events = self.pattern.unstream(partial_arc)
+                for _, ev in pattern_events:
+                    clipped_span = _create_span(ev.span.active, cycle_arc)
+                    if clipped_span is not None:
+                        if ev.span.whole is not None:
+                            span = CycleSpan(clipped_span.active, ev.span.whole)
+                        elif ev.span.active != clipped_span.active:
+                            span = CycleSpan(clipped_span.active, ev.span.active)
+                        else:
+                            span = clipped_span
+                        new_ev = Ev(span, ev.val)
+                        result = ev_heap_push(new_ev, result)
 
-            # Unstream the partial repetition
-            partial_pattern_events = self.pattern.unstream(partial_arc)
-            for _, ev in partial_pattern_events:
-                clipped_span = _create_span(ev.span.active, arc)
-                if clipped_span is not None:
-                    if ev.span.whole is not None:
-                        span = CycleSpan(clipped_span.active, ev.span.whole)
-                    elif ev.span.active != clipped_span.active:
-                        span = CycleSpan(clipped_span.active, ev.span.active)
-                    else:
-                        span = clipped_span
-                    new_ev = Ev(span, ev.val)
-                    replicate_result = ev_heap_push(new_ev, replicate_result)
-
-        return replicate_result
+        return result
 
 
 @dataclass(frozen=True)

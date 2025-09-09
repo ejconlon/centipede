@@ -1,0 +1,159 @@
+"""Compatibility tests for pat string parsing and event generation."""
+
+from __future__ import annotations
+
+from fractions import Fraction
+
+from minipat.arc import CycleArc, CycleSpan
+from minipat.common import CycleTime
+from minipat.ev import Ev
+from minipat.parser import parse_pattern
+from minipat.stream import pat_stream
+
+
+def _test_pattern_events(
+    pattern_str: str, expected_events: list[tuple[Fraction, Fraction, str]]
+) -> None:
+    """Helper function to test pattern consistency across multiple query strategies."""
+    pattern = parse_pattern(pattern_str)
+    stream = pat_stream(pattern)
+
+    def _events_to_tuples(
+        events: list[tuple[CycleSpan, Ev[str]]],
+    ) -> list[tuple[Fraction, Fraction, str]]:
+        """Convert events to comparable tuples."""
+        return [(ev.span.active.start, ev.span.active.end, ev.val) for _, ev in events]
+
+    # Test strategy 1: (0, 2) in one call - use as golden truth
+    arc_full = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
+    events_full = stream.unstream(arc_full)
+    events_full_sorted = sorted(events_full, key=lambda x: x[0].active.start)
+    full_tuples = _events_to_tuples(events_full_sorted)
+
+    # Verify against expected events
+    assert full_tuples == expected_events, (
+        f"Pattern '{pattern_str}' full arc (0,2): Expected {expected_events}, got {full_tuples}"
+    )
+
+    # Test strategy 2: (0, 1) + (1, 2) in two calls - should match full query
+    arc1 = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    arc2 = CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
+    events1 = stream.unstream(arc1)
+    events2 = stream.unstream(arc2)
+    events_split = sorted(
+        list(events1) + list(events2), key=lambda x: x[0].active.start
+    )
+    split_tuples = _events_to_tuples(events_split)
+
+    assert split_tuples == full_tuples, (
+        f"Pattern '{pattern_str}' split arcs (0,1)+(1,2): Expected {full_tuples}, got {split_tuples}"
+    )
+
+    # Test strategy 3: Partial arcs - just verify they run without error and produce sensible results
+    # We don't check exact values since partial arc queries can have different event boundaries
+    test_arcs = [
+        CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(3, 2))),  # (0.5, 1.5)
+        CycleArc(CycleTime(Fraction(2, 3)), CycleTime(Fraction(4, 3))),  # (2/3, 4/3)
+    ]
+
+    for arc in test_arcs:
+        events = stream.unstream(arc)
+        # Just verify events are within the arc bounds and values are reasonable
+        for _, ev in events:
+            assert ev.span.active.start >= arc.start, (
+                f"Pattern '{pattern_str}' arc {arc}: Event starts before arc ({ev.span.active.start} < {arc.start})"
+            )
+            assert ev.span.active.end <= arc.end, (
+                f"Pattern '{pattern_str}' arc {arc}: Event ends after arc ({ev.span.active.end} > {arc.end})"
+            )
+            assert ev.val in [val for _, _, val in expected_events], (
+                f"Pattern '{pattern_str}' arc {arc}: Unexpected event value '{ev.val}'"
+            )
+
+
+def test_simple_replication() -> None:
+    """Test basic replication without alternation."""
+    # bd!3 should produce 3 bd events per cycle, 6 total over 2 cycles
+    _test_pattern_events(
+        "bd!3",
+        [
+            # Cycle 0
+            (Fraction(0), Fraction(1, 3), "bd"),
+            (Fraction(1, 3), Fraction(2, 3), "bd"),
+            (Fraction(2, 3), Fraction(1), "bd"),
+            # Cycle 1
+            (Fraction(1), Fraction(4, 3), "bd"),
+            (Fraction(4, 3), Fraction(5, 3), "bd"),
+            (Fraction(5, 3), Fraction(2), "bd"),
+        ],
+    )
+
+
+def test_alternation_across_cycles() -> None:
+    """Test alternation behavior changes across cycles."""
+    # <hh oh> should alternate: hh in cycle 0, oh in cycle 1
+    _test_pattern_events(
+        "<hh oh>",
+        [
+            (Fraction(0), Fraction(1), "hh"),  # Cycle 0: hh
+            (Fraction(1), Fraction(2), "oh"),  # Cycle 1: oh (alternation)
+        ],
+    )
+
+
+def test_replication_with_alternation() -> None:
+    """Test replication with alternation across cycles."""
+    # [bd <hh oh>]!2 should produce 2 repetitions per cycle with proper alternation
+    _test_pattern_events(
+        "[bd <hh oh>]!2",
+        [
+            # Cycle 0 (alternation uses "hh")
+            (Fraction(0), Fraction(1, 4), "bd"),
+            (Fraction(1, 4), Fraction(1, 2), "hh"),
+            (Fraction(1, 2), Fraction(3, 4), "bd"),
+            (Fraction(3, 4), Fraction(1), "hh"),
+            # Cycle 1 (alternation switches to "oh")
+            (Fraction(1), Fraction(5, 4), "bd"),
+            (Fraction(5, 4), Fraction(3, 2), "oh"),
+            (Fraction(3, 2), Fraction(7, 4), "bd"),
+            (Fraction(7, 4), Fraction(2), "oh"),
+        ],
+    )
+
+
+def test_fast_alternation() -> None:
+    """Test fast operator with alternation."""
+    # [bd <hh oh>]*2 speeds up pattern by 2x, fitting 2 repetitions per cycle
+    _test_pattern_events(
+        "[bd <hh oh>]*2",
+        [
+            # Cycle 0 (alternation uses "hh")
+            (Fraction(0), Fraction(1, 4), "bd"),
+            (Fraction(1, 4), Fraction(1, 2), "hh"),
+            (Fraction(1, 2), Fraction(3, 4), "bd"),
+            (Fraction(3, 4), Fraction(1), "hh"),
+            # Cycle 1 (alternation switches to "oh")
+            (Fraction(1), Fraction(5, 4), "bd"),
+            (Fraction(5, 4), Fraction(3, 2), "oh"),
+            (Fraction(3, 2), Fraction(7, 4), "bd"),
+            (Fraction(7, 4), Fraction(2), "oh"),
+        ],
+    )
+
+
+def test_slow_alternation() -> None:
+    """Test slow operator with alternation."""
+    # [bd <hh oh>]/2 slows down the pattern by 2x, taking 2 cycles to complete
+    _test_pattern_events(
+        "[bd <hh oh>]/2",
+        [
+            (Fraction(0), Fraction(1, 2), "bd"),  # bd (0, 0.5)
+            (Fraction(1, 2), Fraction(1), "hh"),  # hh (0.5, 1)
+            (Fraction(1), Fraction(3, 2), "bd"),  # bd (1, 1.5)
+            (
+                Fraction(3, 2),
+                Fraction(2),
+                "oh",
+            ),  # oh (1.5, 2) - alternation changes mid-pattern
+        ],
+    )

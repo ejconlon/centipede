@@ -413,9 +413,6 @@ def test_partial_arc_query() -> None:
         )
 
 
-# New TidalCycles features stream tests
-
-
 def test_replicate_stream() -> None:
     """Test replicate patterns work with stream processing."""
 

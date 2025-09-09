@@ -446,9 +446,6 @@ def test_polyrhythmic_pattern() -> None:
     assert isinstance(patterns[1].unwrap, PatSpeed)
 
 
-# New TidalCycles features tests
-
-
 def test_parse_replicate() -> None:
     """Test parsing replicate patterns."""
     result = parse_pattern("bd!3")

@@ -1,7 +1,4 @@
-"""Round-trip tests for parsing and printing mini notation patterns.
-
-Based on test patterns from https://raw.githubusercontent.com/ejconlon/minipat/refs/heads/master/minipat/test/Main.hs
-"""
+"""Round-trip tests for parsing and printing mini notation patterns."""
 
 from fractions import Fraction
 
@@ -263,9 +260,6 @@ def test_complex_compositions() -> None:
 
     for pattern, expected in complex_patterns:
         round_trip_test(pattern, expected)
-
-
-# New TidalCycles features round-trip tests
 
 
 def test_replicate_roundtrip() -> None:
