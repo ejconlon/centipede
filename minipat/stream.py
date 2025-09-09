@@ -89,7 +89,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream representing silence
         """
-        return SilenceStream()
+        return SilentStream()
 
     @staticmethod
     def pure(val: T) -> Stream[T]:
@@ -137,7 +137,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream that cycles through the given choices
         """
-        return ChoiceStream(choices)
+        return RandStream(choices)
 
     @staticmethod
     def euc(stream: Stream[T], hits: int, steps: int, rotation: int = 0) -> Stream[T]:
@@ -152,7 +152,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream with Euclidean rhythm distribution
         """
-        return EuclideanStream.create(stream, hits, steps, rotation)
+        return EucStream.create(stream, hits, steps, rotation)
 
     @staticmethod
     def poly(patterns: PSeq[Stream[T]], subdiv: Optional[int] = None) -> Stream[T]:
@@ -165,7 +165,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A polymetric stream with or without subdivision
         """
-        return PolymetricStream(patterns, subdiv)
+        return PolyStream(patterns, subdiv)
 
     @staticmethod
     def speed(stream: Stream[T], op: SpeedOp, factor: Fraction) -> Stream[T]:
@@ -179,7 +179,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream with the specified speed
         """
-        return RepetitionStream(stream, op, factor)
+        return SpeedStream(stream, op, factor)
 
     @staticmethod
     def stretch(stream: Stream[T], count: Fraction) -> Stream[T]:
@@ -192,7 +192,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream stretched by the given count
         """
-        return ElongationStream(stream, count)
+        return StretchStream(stream, count)
 
     @staticmethod
     def prob(stream: Stream[T], chance: Fraction) -> Stream[T]:
@@ -205,7 +205,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream that plays with the given probability
         """
-        return ProbabilityStream(stream, chance)
+        return ProbStream(stream, chance)
 
     @staticmethod
     def alt(patterns: PSeq[Stream[T]]) -> Stream[T]:
@@ -217,7 +217,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A stream that alternates between the given streams
         """
-        return AlternatingStream(patterns)
+        return AltStream(patterns)
 
     @staticmethod
     def repeat(stream: Stream[T], count: Fraction) -> Stream[T]:
@@ -230,7 +230,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A repeated stream
         """
-        return ReplicateStream(stream, count)
+        return RepeatStream(stream, count)
 
     @staticmethod
     def pat(pattern: Pat[T]) -> Stream[T]:
@@ -308,7 +308,7 @@ class Stream[T](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class SilenceStream[T](Stream[T]):
+class SilentStream[T](Stream[T]):
     """Specialized stream for silence patterns."""
 
     @override
@@ -437,7 +437,7 @@ class ParStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class ChoiceStream[T](Stream[T]):
+class RandStream[T](Stream[T]):
     """Specialized stream for choice patterns."""
 
     choices: PSeq[Stream[T]]
@@ -453,7 +453,7 @@ class ChoiceStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class EuclideanStream[T](Stream[T]):
+class EucStream[T](Stream[T]):
     """Specialized stream for Euclidean patterns."""
 
     atom: Stream[T]
@@ -465,7 +465,7 @@ class EuclideanStream[T](Stream[T]):
     @classmethod
     def create(
         cls, atom: Stream[T], hits: int, steps: int, rotation: int
-    ) -> EuclideanStream[T]:
+    ) -> EucStream[T]:
         pattern = _generate_euclidean(hits, steps, rotation)
         return cls(atom, hits, steps, rotation, pattern)
 
@@ -497,7 +497,7 @@ class EuclideanStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class PolymetricStream[T](Stream[T]):
+class PolyStream[T](Stream[T]):
     """Specialized stream for polymetric patterns."""
 
     patterns: PSeq[Stream[T]]
@@ -539,7 +539,7 @@ class PolymetricStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class RepetitionStream[T](Stream[T]):
+class SpeedStream[T](Stream[T]):
     """Specialized stream for repetition patterns."""
 
     pattern: Stream[T]
@@ -554,7 +554,7 @@ class RepetitionStream[T](Stream[T]):
         result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
         # Process each cycle separately to preserve alternation context
-        for cycle_index, cycle_arc in arc.split_cycles():
+        for _, cycle_arc in arc.split_cycles():
             match self.operator:
                 case SpeedOp.Fast:
                     # Handle fractional repetitions: x*2.5 = 2 full + 0.5 partial repetition
@@ -621,7 +621,7 @@ class RepetitionStream[T](Stream[T]):
 
                 case SpeedOp.Slow:
                     # Slow by factor N is just fast by 1/N
-                    fast_stream = RepetitionStream(
+                    fast_stream = SpeedStream(
                         self.pattern, SpeedOp.Fast, Fraction(1) / self.count
                     )
                     cycle_events = fast_stream.unstream(cycle_arc)
@@ -632,7 +632,7 @@ class RepetitionStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class ElongationStream[T](Stream[T]):
+class StretchStream[T](Stream[T]):
     """Specialized stream for stretch patterns."""
 
     pattern: Stream[T]
@@ -651,7 +651,7 @@ class ElongationStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class ProbabilityStream[T](Stream[T]):
+class ProbStream[T](Stream[T]):
     """Specialized stream for probability patterns."""
 
     pattern: Stream[T]
@@ -669,7 +669,7 @@ class ProbabilityStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class AlternatingStream[T](Stream[T]):
+class AltStream[T](Stream[T]):
     """Specialized stream for alternating patterns."""
 
     patterns: PSeq[Stream[T]]
@@ -693,7 +693,7 @@ class AlternatingStream[T](Stream[T]):
 
 
 @dataclass(frozen=True)
-class ReplicateStream[T](Stream[T]):
+class RepeatStream[T](Stream[T]):
     """Specialized stream for replicate patterns."""
 
     pattern: Stream[T]
@@ -707,7 +707,7 @@ class ReplicateStream[T](Stream[T]):
         result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
         # Process each cycle separately (following Haskell implementation)
-        for cycle_index, cycle_arc in arc.split_cycles():
+        for _, cycle_arc in arc.split_cycles():
             int_part = int(self.count)
             frac_part = self.count - int_part
             rep_duration = cycle_arc.length() / self.count
@@ -901,76 +901,6 @@ class MapStream[T, U](Stream[U]):
         return result
 
 
-def stream_rand[T](streams: PSeq[Stream[T]]) -> Stream[T]:
-    """Randomly select a stream from a sequence.
-
-    Args:
-        streams: Sequence of streams to choose from
-
-    Returns:
-        A stream that randomly selects from the input streams
-    """
-    return RandStream(streams)
-
-
-def stream_alt[T](streams: PSeq[Stream[T]]) -> Stream[T]:
-    """Alternately select streams from a sequence.
-
-    Args:
-        streams: Sequence of streams to cycle through
-
-    Returns:
-        A stream that alternates through the input streams
-    """
-    return AltStream(streams)
-
-
-def stream_par[T](streams: PSeq[Stream[T]]) -> Stream[T]:
-    """Combine multiple streams in parallel.
-
-    Args:
-        streams: Sequence of streams to combine
-
-    Returns:
-        A stream that plays all input streams simultaneously
-    """
-    return ParStream(streams)
-
-
-@dataclass(frozen=True)
-class RandStream[T](Stream[T]):
-    """Stream that randomly selects from a sequence of streams."""
-
-    streams: PSeq[Stream[T]]
-
-    @override
-    def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[T]]:
-        if arc.null() or len(self.streams) == 0:
-            return ev_heap_empty()
-
-        # Use arc start as seed for deterministic randomness
-        random.seed(hash(arc.start))
-        selected_stream = self.streams[random.randint(0, len(self.streams) - 1)]
-        return selected_stream.unstream(arc)
-
-
-@dataclass(frozen=True)
-class AltStream[T](Stream[T]):
-    """Stream that alternates through a sequence of streams."""
-
-    streams: PSeq[Stream[T]]
-
-    @override
-    def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[T]]:
-        if arc.null() or len(self.streams) == 0:
-            return ev_heap_empty()
-
-        # Cycle through streams based on cycle position
-        cycle_index = int(arc.start) % len(self.streams)
-        selected_stream = self.streams[cycle_index]
-        return selected_stream.unstream(arc)
-
-
 def pat_stream[T](pat: Pat[T]) -> Stream[T]:
     """Create a specialized stream for the given pattern.
 
@@ -982,9 +912,9 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
     """
     match pat.unwrap:
         case PatSilent():
-            return SilenceStream()
+            return Stream.silent()
         case PatPure(val):
-            return PureStream(val)
+            return Stream.pure(val)
         case PatSeq(children):
             # Create weighted sequence where each child contributes its weight
             weighted_children = []
@@ -1004,33 +934,31 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
             return WeightedSeqStream(weighted_children)
         case PatPar(pats):
             child_streams = PSeq.mk(pat_stream(child) for child in pats)
-            return ParStream(child_streams)
+            return Stream.par(child_streams)
         case PatRand(pats):
             choice_streams = PSeq.mk(pat_stream(choice) for choice in pats)
-            return ChoiceStream(choice_streams)
+            return Stream.rand(choice_streams)
         case PatEuc(pat, hits, steps, rotation):
             atom_stream = pat_stream(pat)
-            return EuclideanStream.create(atom_stream, hits, steps, rotation)
+            return EucStream.create(atom_stream, hits, steps, rotation)
         case PatPoly(pats, subdiv):
             pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in pats)
-            return PolymetricStream(pattern_streams, subdiv)
+            return Stream.poly(pattern_streams, subdiv)
         case PatSpeed(pat, op, factor):
             pattern_stream = pat_stream(pat)
-            return RepetitionStream(pattern_stream, op, factor)
+            return Stream.speed(pattern_stream, op, factor)
         case PatStretch(pat, count):
-            # When stretch appears outside a sequence, we still create ElongationStream
-            # for backward compatibility, but it just passes through
             pattern_stream = pat_stream(pat)
-            return ElongationStream(pattern_stream, count)
+            return Stream.stretch(pattern_stream, count)
         case PatProb(pat, chance):
             pattern_stream = pat_stream(pat)
-            return ProbabilityStream(pattern_stream, chance)
+            return Stream.prob(pattern_stream, chance)
         case PatAlt(pats):
             pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in pats)
-            return AlternatingStream(pattern_streams)
+            return Stream.alt(pattern_streams)
         case PatRepeat(pat, count):
             pattern_stream = pat_stream(pat)
-            return ReplicateStream(pattern_stream, count)
+            return Stream.repeat(pattern_stream, count)
         case _:
             # This should never happen if all pattern types are handled above
             raise PartialMatchException(pat.unwrap)
