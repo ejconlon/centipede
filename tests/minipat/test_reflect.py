@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from minipat.common import CycleDelta
+from minipat.arc import CycleArc, StepArc
+from minipat.common import CycleDelta, CycleTime, StepTime
 from minipat.pat import Pat
 from minipat.reflect import (
-    DeltaSeq,
-    DeltaVal,
-    StepSeq,
-    StepVal,
+    CycleArcSeq,
+    CycleArcValue,
+    StepArcSeq,
+    StepArcValue,
     minimize_pattern,
-    pat_to_deltaseq,
+    pat_to_seq,
     quantize,
     reflect,
     reflect_minimal,
@@ -22,20 +23,29 @@ from spiny.seq import PSeq
 
 
 def assert_semantic_equivalence[T](
-    original_ss: StepSeq[T], minimized_pat: Pat[T]
+    original_ss: StepArcSeq[T], minimized_pat: Pat[T]
 ) -> None:
-    """Assert that a minimized pattern produces the same events as the original StepSeq.
+    """Assert that a minimized pattern produces the same events as the original StepArcSeq.
 
-    This verifies semantic equivalence by converting both to DeltaSeq format and comparing.
+    This verifies semantic equivalence by converting both to CycleArcSeq format and comparing.
     """
-    # Convert original StepSeq to DeltaSeq (using step duration of 1)
+    # Convert original StepArcSeq to CycleArcSeq (using step duration of 1)
     original_ds = unquantize(original_ss, CycleDelta(Fraction(1)))
 
-    # Convert minimized pattern back to DeltaSeq by evaluating it
-    minimized_ds = pat_to_deltaseq(minimized_pat, CycleDelta(Fraction(1)))
+    # Convert minimized pattern back to CycleArcSeq by evaluating it
+    # Calculate the actual end time of the last event in original sequence
+    max_end_time = 0
+    for item in original_ss.iter():
+        end_time = int(item.arc.end)
+        if end_time > max_end_time:
+            max_end_time = end_time
+
+    # Create an arc from 0 to the maximum end time
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(max_end_time)))
+    minimized_ds = pat_to_seq(minimized_pat, arc)
 
     # They should produce equivalent event sequences
-    # For now, we'll convert both back to StepSeq for comparison since that's easier
+    # For now, we'll convert both back to StepArcSeq for comparison since that's easier
     original_quantized = quantize(original_ds)
     minimized_quantized = quantize(minimized_ds)
 
@@ -52,22 +62,22 @@ class TestQuantize:
 
     def test_empty_sequence(self) -> None:
         """Empty sequence should quantize to empty."""
-        ds: DeltaSeq[str] = PSeq.empty()
+        ds: CycleArcSeq[str] = PSeq.empty()
         ss = quantize(ds)
         assert ss.null()
 
     def test_single_element(self) -> None:
         """Single element with simple fraction."""
-        item = DeltaVal(
-            CycleDelta(Fraction(0)), CycleDelta(Fraction(1, 2)), "a"
-        )  # offset=0, duration=1/2, val="a"
+        # Create CycleArc from start=0 to end=1/2, so duration=1/2
+        arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 2)))
+        item = CycleArcValue.mk(arc, "a")
         ds = PSeq.mk([item])
         ss = quantize(ds)
         assert len(ss) == 1
         first = list(ss.iter())[0]
-        assert first.offset == 0
-        assert first.duration == 1
-        assert first.val == "a"
+        assert first.arc.start == 0  # offset=0
+        assert first.arc.length() == 1  # duration=1 (quantized)
+        assert first.value == "a"
 
     # TODO: Temporarily skipped most quantize tests while fixing constructor calls
     # The new data structure works, but many tests need constructor updates
@@ -136,37 +146,43 @@ class TestQuantizeDetails:
 
     def test_uniform_durations(self) -> None:
         """Test quantize with uniform durations."""
+        # Create arcs: first from 0 to 1/2, second from 1/2 to 1
+        arc1 = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 2)))
+        arc2 = CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(1)))
         items = [
-            DeltaVal(CycleDelta(Fraction(0)), CycleDelta(Fraction(1, 2)), "a"),
-            DeltaVal(CycleDelta(Fraction(1, 2)), CycleDelta(Fraction(1, 2)), "b"),
+            CycleArcValue.mk(arc1, "a"),
+            CycleArcValue.mk(arc2, "b"),
         ]
         ds = PSeq.mk(items)
         ss = quantize(ds)
         assert len(ss) == 2
         vals = list(ss.iter())
-        assert vals[0].offset == 0
-        assert vals[0].duration == 1
-        assert vals[0].val == "a"
-        assert vals[1].offset == 1
-        assert vals[1].duration == 1
-        assert vals[1].val == "b"
+        assert vals[0].arc.start == 0
+        assert vals[0].arc.length() == 1
+        assert vals[0].value == "a"
+        assert vals[1].arc.start == 1
+        assert vals[1].arc.length() == 1
+        assert vals[1].value == "b"
 
     def test_non_uniform_durations(self) -> None:
         """Test quantize with non-uniform durations."""
+        # Create arcs: first from 0 to 1/3, second from 1/3 to 1
+        arc1 = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 3)))
+        arc2 = CycleArc(CycleTime(Fraction(1, 3)), CycleTime(Fraction(1)))
         items = [
-            DeltaVal(CycleDelta(Fraction(0)), CycleDelta(Fraction(1, 3)), "a"),
-            DeltaVal(CycleDelta(Fraction(1, 3)), CycleDelta(Fraction(2, 3)), "b"),
+            CycleArcValue.mk(arc1, "a"),
+            CycleArcValue.mk(arc2, "b"),
         ]
         ds = PSeq.mk(items)
         ss = quantize(ds)
         assert len(ss) == 2
         vals = list(ss.iter())
-        assert vals[0].offset == 0
-        assert vals[0].duration == 1  # 1/3 of total, scaled to LCM
-        assert vals[0].val == "a"
-        assert vals[1].offset == 1
-        assert vals[1].duration == 2  # 2/3 of total, scaled to LCM
-        assert vals[1].val == "b"
+        assert vals[0].arc.start == 0
+        assert vals[0].arc.length() == 1  # 1/3 of total, scaled to LCM
+        assert vals[0].value == "a"
+        assert vals[1].arc.start == 1
+        assert vals[1].arc.length() == 2  # 2/3 of total, scaled to LCM
+        assert vals[1].value == "b"
 
 
 class TestReflect:
@@ -174,13 +190,14 @@ class TestReflect:
 
     def test_empty_sequence(self) -> None:
         """Empty sequence should reflect to silent pattern."""
-        ss: StepSeq[str] = PSeq.empty()
+        ss: StepArcSeq[str] = PSeq.empty()
         pat = reflect(ss)
         assert pat == Pat.silent()
 
     def test_single_element(self) -> None:
         """Single element should reflect to pure pattern."""
-        inner = StepVal(0, 1, "a")  # offset=0, duration=1, val="a"
+        step_arc = StepArc(StepTime(0), StepTime(1))
+        inner = StepArcValue.mk(step_arc, "a")
         ss = PSeq.mk([inner])
         pat = reflect(ss)
         assert pat == Pat.pure("a")
@@ -188,9 +205,9 @@ class TestReflect:
     def test_sequence_of_elements(self) -> None:
         """Sequence should reflect to seq pattern."""
         items = [
-            StepVal(0, 1, "a"),  # offset=0, duration=1, val="a"
-            StepVal(1, 1, "b"),  # offset=1, duration=1, val="b"
-            StepVal(2, 1, "c"),  # offset=2, duration=1, val="c"
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(1)), "a"),
+            StepArcValue.mk(StepArc(StepTime(1), StepTime(2)), "b"),
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "c"),
         ]
         ss = PSeq.mk(items)
         pat = reflect(ss)
@@ -200,8 +217,8 @@ class TestReflect:
     def test_non_uniform_steps(self) -> None:
         """Non-uniform steps should create stretched patterns."""
         items = [
-            StepVal(0, 2, "a"),  # offset=0, duration=2, val="a" (takes 2 steps)
-            StepVal(2, 1, "b"),  # offset=2, duration=1, val="b" (takes 1 step)
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(2)), "a"),  # duration=2
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "b"),  # duration=1
         ]
         ss = PSeq.mk(items)
         pat = reflect(ss)
@@ -216,85 +233,87 @@ class TestUnquantize:
 
     def test_empty_sequence(self) -> None:
         """Empty sequence should unquantize to empty."""
-        ss: StepSeq[str] = PSeq.empty()
+        ss: StepArcSeq[str] = PSeq.empty()
         ds = unquantize(ss, CycleDelta(Fraction(1)))
         assert ds.null()
 
     def test_single_element(self) -> None:
         """Single element should preserve its duration."""
-        inner = StepVal(0, 2, "a")  # offset=0, duration=2, val="a"
+        # Create StepArc from 0 to 2, so duration=2
+        step_arc = StepArc(StepTime(0), StepTime(2))
+        inner = StepArcValue.mk(step_arc, "a")
         ss = PSeq.mk([inner])
         ds = unquantize(ss, CycleDelta(Fraction(1)))
         assert len(ds) == 1
         first = list(ds.iter())[0]
-        assert first.offset == CycleDelta(Fraction(0))
-        assert first.duration == CycleDelta(Fraction(2))  # Duration preserved
-        assert first.val == "a"
+        assert first.arc.start == CycleTime(Fraction(0))
+        assert first.arc.length() == CycleDelta(Fraction(2))  # Duration preserved
+        assert first.value == "a"
 
     def test_uniform_steps(self) -> None:
         """Uniform steps should preserve durations and scale with total_delta."""
         items = [
-            StepVal(0, 1, "a"),  # offset=0, duration=1, val="a"
-            StepVal(1, 1, "b"),  # offset=1, duration=1, val="b"
-            StepVal(2, 1, "c"),  # offset=2, duration=1, val="c"
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(1)), "a"),
+            StepArcValue.mk(StepArc(StepTime(1), StepTime(2)), "b"),
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "c"),
         ]
         ss = PSeq.mk(items)
         ds = unquantize(ss, CycleDelta(Fraction(1)))
         assert len(ds) == 3
         vals = list(ds.iter())
         # Offsets are preserved exactly, durations are scaled by total_delta
-        assert vals[0].offset == CycleDelta(Fraction(0))
-        assert vals[0].duration == CycleDelta(Fraction(1))
-        assert vals[1].offset == CycleDelta(Fraction(1))
-        assert vals[1].duration == CycleDelta(Fraction(1))
-        assert vals[2].offset == CycleDelta(Fraction(2))
-        assert vals[2].duration == CycleDelta(Fraction(1))
+        assert vals[0].arc.start == CycleTime(Fraction(0))
+        assert vals[0].arc.length() == CycleDelta(Fraction(1))
+        assert vals[1].arc.start == CycleTime(Fraction(1))
+        assert vals[1].arc.length() == CycleDelta(Fraction(1))
+        assert vals[2].arc.start == CycleTime(Fraction(2))
+        assert vals[2].arc.length() == CycleDelta(Fraction(1))
 
     def test_non_uniform_steps(self) -> None:
         """Non-uniform steps should preserve offsets and durations exactly."""
         items = [
-            StepVal(0, 2, "a"),  # offset=0, duration=2, val="a"
-            StepVal(2, 1, "b"),  # offset=2, duration=1, val="b"
-            StepVal(3, 1, "c"),  # offset=3, duration=1, val="c"
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(2)), "a"),  # duration=2
+            StepArcValue.mk(StepArc(StepTime(2), StepTime(3)), "b"),  # duration=1
+            StepArcValue.mk(StepArc(StepTime(3), StepTime(4)), "c"),  # duration=1
         ]
         ss = PSeq.mk(items)
         ds = unquantize(ss, CycleDelta(Fraction(1)))
         assert len(ds) == 3
         vals = list(ds.iter())
         # Offsets and durations are preserved exactly, scaled by total_delta
-        assert vals[0].offset == CycleDelta(Fraction(0))
-        assert vals[0].duration == CycleDelta(
+        assert vals[0].arc.start == CycleTime(Fraction(0))
+        assert vals[0].arc.length() == CycleDelta(
             Fraction(2)
         )  # Duration scaled by total_delta
-        assert vals[0].val == "a"
-        assert vals[1].offset == CycleDelta(Fraction(2))  # Offset preserved exactly
-        assert vals[1].duration == CycleDelta(
+        assert vals[0].value == "a"
+        assert vals[1].arc.start == CycleTime(Fraction(2))  # Offset preserved exactly
+        assert vals[1].arc.length() == CycleDelta(
             Fraction(1)
         )  # Duration scaled by total_delta
-        assert vals[1].val == "b"
-        assert vals[2].offset == CycleDelta(Fraction(3))  # Offset preserved exactly
-        assert vals[2].duration == CycleDelta(
+        assert vals[1].value == "b"
+        assert vals[2].arc.start == CycleTime(Fraction(3))  # Offset preserved exactly
+        assert vals[2].arc.length() == CycleDelta(
             Fraction(1)
         )  # Duration scaled by total_delta
-        assert vals[2].val == "c"
+        assert vals[2].value == "c"
 
     def test_custom_total_delta(self) -> None:
         """Should scale durations by total_delta, preserve offsets exactly."""
         items = [
-            StepVal(0, 1, "a"),  # offset=0, duration=1, val="a"
-            StepVal(1, 2, "b"),  # offset=1, duration=2, val="b"
+            StepArcValue.mk(StepArc(StepTime(0), StepTime(1)), "a"),  # duration=1
+            StepArcValue.mk(StepArc(StepTime(1), StepTime(3)), "b"),  # duration=2
         ]
         ss = PSeq.mk(items)
         ds = unquantize(ss, CycleDelta(Fraction(3, 2)))
         assert len(ds) == 2
         vals = list(ds.iter())
         # Offsets are preserved exactly, durations are scaled by total_delta
-        assert vals[0].offset == CycleDelta(Fraction(0))
-        assert vals[0].duration == CycleDelta(Fraction(3, 2))  # 1 * (3/2)
-        assert vals[1].offset == CycleDelta(
+        assert vals[0].arc.start == CycleTime(Fraction(0))
+        assert vals[0].arc.length() == CycleDelta(Fraction(3, 2))  # 1 * (3/2)
+        assert vals[1].arc.start == CycleTime(
             Fraction(3, 2)
         )  # 1 * (3/2) - offset scaled by total_delta
-        assert vals[1].duration == CycleDelta(Fraction(3))  # 2 * (3/2)
+        assert vals[1].arc.length() == CycleDelta(Fraction(3))  # 2 * (3/2)
 
 
 class TestRoundTrip:
@@ -302,10 +321,12 @@ class TestRoundTrip:
 
     def test_simple_round_trip(self) -> None:
         """Quantize then unquantize should preserve structure."""
-        # Create original DeltaSeq with simple fractions
+        # Create original CycleArcSeq with simple fractions
+        arc1 = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 2)))
+        arc2 = CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(1)))
         items = [
-            DeltaVal(CycleDelta(Fraction(0)), CycleDelta(Fraction(1, 2)), "a"),
-            DeltaVal(CycleDelta(Fraction(1, 2)), CycleDelta(Fraction(1, 2)), "b"),
+            CycleArcValue.mk(arc1, "a"),
+            CycleArcValue.mk(arc2, "b"),
         ]
         original = PSeq.mk(items)
 
@@ -320,25 +341,28 @@ class TestRoundTrip:
 
         # Values should be the same
         for r, o in zip(restored_vals, original_vals):
-            assert r.val == o.val
+            assert r.value == o.value
 
         # Check that the relative proportions are correct
         # Both items had duration 1/2, so after quantization they should have equal durations
-        assert restored_vals[0].duration == restored_vals[1].duration
+        assert restored_vals[0].arc.length() == restored_vals[1].arc.length()
 
     def test_complex_round_trip(self) -> None:
         """Round trip with complex fractions."""
         # Use fractions that have a nice LCM for cleaner testing
+        arc1 = CycleArc(
+            CycleTime(Fraction(0)), CycleTime(Fraction(1, 3))
+        )  # duration 1/3
+        arc2 = CycleArc(
+            CycleTime(Fraction(1, 3)), CycleTime(Fraction(1, 2))
+        )  # duration 1/6
+        arc3 = CycleArc(
+            CycleTime(Fraction(1, 2)), CycleTime(Fraction(1))
+        )  # duration 1/2
         items = [
-            DeltaVal(
-                CycleDelta(Fraction(0)), CycleDelta(Fraction(1, 3)), "x"
-            ),  # duration 1/3
-            DeltaVal(
-                CycleDelta(Fraction(1, 3)), CycleDelta(Fraction(1, 6)), "y"
-            ),  # duration 1/6
-            DeltaVal(
-                CycleDelta(Fraction(1, 2)), CycleDelta(Fraction(1, 2)), "z"
-            ),  # duration 1/2
+            CycleArcValue.mk(arc1, "x"),
+            CycleArcValue.mk(arc2, "y"),
+            CycleArcValue.mk(arc3, "z"),
         ]
         original = PSeq.mk(items)
 
@@ -352,16 +376,16 @@ class TestRoundTrip:
 
         # Values should be preserved
         for r, o in zip(restored_vals, original_vals):
-            assert r.val == o.val
+            assert r.value == o.value
 
         # Check that duration ratios are preserved
         # Original ratios: 1/3 : 1/6 : 1/2 = 2 : 1 : 3
         # So restored durations should maintain these ratios
         assert (
-            restored_vals[0].duration * 3 == restored_vals[1].duration * 6
+            restored_vals[0].arc.length() * 3 == restored_vals[1].arc.length() * 6
         )  # 1/3 vs 1/6 ratio
         assert (
-            restored_vals[2].duration * 2 == restored_vals[0].duration * 3
+            restored_vals[2].arc.length() * 2 == restored_vals[0].arc.length() * 3
         )  # 1/2 vs 1/3 ratio
 
 
@@ -371,9 +395,15 @@ class TestReflectMinimal:
     def test_no_repetition(self) -> None:
         """Non-repeating patterns should use regular reflect."""
         items = [
-            StepVal(0, 1, "a"),  # offset=0, duration=1, val="a"
-            StepVal(1, 1, "b"),  # offset=1, duration=1, val="b"
-            StepVal(2, 1, "c"),  # offset=2, duration=1, val="c"
+            StepArcValue.mk(
+                StepArc(StepTime(0), StepTime(1)), "a"
+            ),  # offset=0, duration=1, val="a"
+            StepArcValue.mk(
+                StepArc(StepTime(1), StepTime(2)), "b"
+            ),  # offset=1, duration=1, val="b"
+            StepArcValue.mk(
+                StepArc(StepTime(2), StepTime(3)), "c"
+            ),  # offset=2, duration=1, val="c"
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -384,10 +414,18 @@ class TestReflectMinimal:
     def test_simple_repetition(self) -> None:
         """Repeating pattern should be minimized."""
         items = [
-            StepVal(0, 1, "a"),  # a at offset 0, duration 1
-            StepVal(1, 1, "b"),  # b at offset 1, duration 1
-            StepVal(2, 1, "a"),  # a at offset 2, duration 1
-            StepVal(3, 1, "b"),  # b at offset 3, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(0), StepTime(1)), "a"
+            ),  # a at offset 0, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(1), StepTime(2)), "b"
+            ),  # b at offset 1, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(2), StepTime(3)), "a"
+            ),  # a at offset 2, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(3), StepTime(4)), "b"
+            ),  # b at offset 3, duration 1
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -403,9 +441,15 @@ class TestReflectMinimal:
     def test_triple_repetition(self) -> None:
         """Triple repetition should be detected."""
         items = [
-            StepVal(0, 1, "x"),  # x at offset 0, duration 1
-            StepVal(1, 1, "x"),  # x at offset 1, duration 1
-            StepVal(2, 1, "x"),  # x at offset 2, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(0), StepTime(1)), "x"
+            ),  # x at offset 0, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(1), StepTime(2)), "x"
+            ),  # x at offset 1, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(2), StepTime(3)), "x"
+            ),  # x at offset 2, duration 1
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -422,14 +466,26 @@ class TestReflectMinimal:
         # Pattern: [a(dur 2), b(dur 1)] repeated 3 times
         items = [
             # First repetition: a@2, b@1
-            StepVal(0, 2, "a"),  # a at offset 0, duration 2
-            StepVal(2, 1, "b"),  # b at offset 2, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(0), StepTime(2)), "a"
+            ),  # a at offset 0, duration 2
+            StepArcValue.mk(
+                StepArc(StepTime(2), StepTime(3)), "b"
+            ),  # b at offset 2, duration 1
             # Second repetition: a@2, b@1
-            StepVal(3, 2, "a"),  # a at offset 3, duration 2
-            StepVal(5, 1, "b"),  # b at offset 5, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(3), StepTime(5)), "a"
+            ),  # a at offset 3, duration 2
+            StepArcValue.mk(
+                StepArc(StepTime(5), StepTime(6)), "b"
+            ),  # b at offset 5, duration 1
             # Third repetition: a@2, b@1
-            StepVal(6, 2, "a"),  # a at offset 6, duration 2
-            StepVal(8, 1, "b"),  # b at offset 8, duration 1
+            StepArcValue.mk(
+                StepArc(StepTime(6), StepTime(8)), "a"
+            ),  # a at offset 6, duration 2
+            StepArcValue.mk(
+                StepArc(StepTime(8), StepTime(9)), "b"
+            ),  # b at offset 8, duration 1
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -444,10 +500,18 @@ class TestReflectMinimal:
     def test_no_false_positives(self) -> None:
         """Should not detect false repetitions."""
         items = [
-            StepVal(0, 1, "a"),  # offset=0, duration=1, val="a"
-            StepVal(1, 1, "b"),  # offset=1, duration=1, val="b"
-            StepVal(2, 1, "a"),  # offset=2, duration=1, val="a"
-            StepVal(3, 1, "c"),  # Different from 'b', so not a repetition
+            StepArcValue.mk(
+                StepArc(StepTime(0), StepTime(1)), "a"
+            ),  # offset=0, duration=1, val="a"
+            StepArcValue.mk(
+                StepArc(StepTime(1), StepTime(2)), "b"
+            ),  # offset=1, duration=1, val="b"
+            StepArcValue.mk(
+                StepArc(StepTime(2), StepTime(3)), "a"
+            ),  # offset=2, duration=1, val="a"
+            StepArcValue.mk(
+                StepArc(StepTime(3), StepTime(4)), "c"
+            ),  # Different from 'b', so not a repetition
         ]
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -457,9 +521,15 @@ class TestReflectMinimal:
     def test_partial_repetition(self) -> None:
         """Partial repetitions should not be detected."""
         items = [
-            StepVal(0, 1, "a"),  # offset=0, duration=1, val="a"
-            StepVal(1, 1, "b"),  # offset=1, duration=1, val="b"
-            StepVal(2, 1, "a"),  # offset=2, duration=1, val="a"
+            StepArcValue.mk(
+                StepArc(StepTime(0), StepTime(1)), "a"
+            ),  # offset=0, duration=1, val="a"
+            StepArcValue.mk(
+                StepArc(StepTime(1), StepTime(2)), "b"
+            ),  # offset=1, duration=1, val="b"
+            StepArcValue.mk(
+                StepArc(StepTime(2), StepTime(3)), "a"
+            ),  # offset=2, duration=1, val="a"
             # Missing second 'b', so incomplete repetition
         ]
         ss = PSeq.mk(items)
@@ -470,7 +540,8 @@ class TestReflectMinimal:
     def test_single_element_repetition(self) -> None:
         """Single element repeated many times."""
         items = [
-            StepVal(i, 1, "drum") for i in range(16)
+            StepArcValue.mk(StepArc(StepTime(i), StepTime(i + 1)), "drum")
+            for i in range(16)
         ]  # drum at each offset 0-15, duration 1
         ss = PSeq.mk(items)
         minimal = reflect_minimal(ss)
@@ -484,7 +555,7 @@ class TestReflectMinimal:
 
     def test_empty_sequence(self) -> None:
         """Empty sequence should return silent."""
-        ss: StepSeq[str] = PSeq.empty()
+        ss: StepArcSeq[str] = PSeq.empty()
         minimal = reflect_minimal(ss)
         assert minimal == Pat.silent()
 

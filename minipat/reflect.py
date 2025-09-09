@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
 from functools import reduce
 from math import gcd
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, override
 
-from minipat.arc import CycleArc
-from minipat.common import CycleDelta, CycleTime
+from minipat.arc import Arc, CycleArc, StepArc
+from minipat.common import CycleDelta, CycleTime, StepDelta, StepTime
 from minipat.pat import (
     Pat,
     PatRepeat,
@@ -21,42 +22,75 @@ from minipat.stream import Stream
 from spiny.seq import PSeq
 
 
+class ArcValue[T, D, V](metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def arc(self) -> Arc[T, D]:
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def value(self) -> V:
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def mk(cls, arc: Arc[T, D], value: V) -> ArcValue[T, D, V]:
+        raise NotImplementedError()
+
+
 @dataclass(frozen=True)
-class DeltaVal[T]:
-    """A value annotated with fractional offset and duration"""
+class CycleArcValue[V](ArcValue[CycleTime, CycleDelta, V]):
+    _arc: CycleArc
+    _value: V
 
-    offset: CycleDelta
-    duration: CycleDelta
-    val: T
+    @property
+    @override
+    def arc(self) -> CycleArc:
+        return self._arc
+
+    @property
+    @override
+    def value(self) -> V:
+        return self._value
+
+    @override
+    @classmethod
+    def mk(cls, arc: Arc[CycleTime, CycleDelta], value: V) -> CycleArcValue[V]:
+        return CycleArcValue(CycleArc.normalize(arc), value)
 
 
 @dataclass(frozen=True)
-class StepVal[T]:
-    """A value annotated with integral offset and duration"""
+class StepArcValue[V](ArcValue[StepTime, StepDelta, V]):
+    _arc: StepArc
+    _value: V
 
-    offset: int
-    duration: int
-    val: T
+    @property
+    @override
+    def arc(self) -> StepArc:
+        return self._arc
+
+    @property
+    @override
+    def value(self) -> V:
+        return self._value
+
+    @override
+    @classmethod
+    def mk(cls, arc: Arc[StepTime, StepDelta], value: V) -> StepArcValue[V]:
+        return StepArcValue(StepArc.normalize(arc), value)
 
 
-type DeltaSeq[T] = PSeq[DeltaVal[T]]
+type ArcSeq[T, D, V] = PSeq[ArcValue[T, D, V]]
 """A sequence of events with fractional offsets and durations.
-
 Invariants:
 - Root offset is 0 (first event starts at beginning)
 - Root duration is >= max(offset + duration) across all events
 - Offsets must be non-decreasing (sorted by start time)
 """
 
-
-type StepSeq[T] = PSeq[StepVal[T]]
-"""A sequence of events with integral offsets and durations.
-
-Invariants:
-- Root offset is 0 (first event starts at beginning)
-- Root duration is >= max(offset + duration) across all events
-- Offsets must be non-decreasing (sorted by start time)
-"""
+type CycleArcSeq[V] = PSeq[CycleArcValue[V]]
+type StepArcSeq[V] = PSeq[StepArcValue[V]]
 
 
 def _lcm(a: int, b: int) -> int:
@@ -64,12 +98,18 @@ def _lcm(a: int, b: int) -> int:
     return abs(a * b) // gcd(a, b) if a and b else 0
 
 
-def _collect_denominators[T](seq: DeltaSeq[T]) -> List[int]:
-    """Collect all denominators from a sequence of DeltaVals."""
+def _collect_denominators[T](seq: CycleArcSeq[T]) -> List[int]:
+    """Collect all denominators from a sequence of CycleArcValues."""
     denoms = []
     for item in seq.iter():
-        denoms.append(item.offset.denominator)
-        denoms.append(item.duration.denominator)
+        arc = item.arc
+        start_frac = Fraction(arc.start)
+        end_frac = Fraction(arc.end)
+        denoms.append(start_frac.denominator)
+        denoms.append(end_frac.denominator)
+        # Also collect the length denominator
+        length_frac = Fraction(arc.length())
+        denoms.append(length_frac.denominator)
     return denoms
 
 
@@ -302,7 +342,7 @@ def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
     return dag.to_pat()
 
 
-def quantize[T](ds: DeltaSeq[T]) -> StepSeq[T]:
+def quantize[T](ds: CycleArcSeq[T]) -> StepArcSeq[T]:
     """Quantizes a sequence of events with fractional offsets/durations into
     an equivalent sequence with integral offsets/durations.
     """
@@ -317,28 +357,34 @@ def quantize[T](ds: DeltaSeq[T]) -> StepSeq[T]:
 
     quantized_items = []
     for item in ds.iter():
-        offset_steps = int(item.offset * common_denom)
-        duration_steps = int(item.duration * common_denom)
-        quantized_items.append(StepVal(offset_steps, duration_steps, item.val))
+        arc = item.arc
+        offset_steps = int(Fraction(arc.start) * common_denom)
+        duration_steps = int(Fraction(arc.length()) * common_denom)
+
+        # Create StepArc with the quantized values
+        step_arc = StepArc(
+            StepTime(offset_steps), StepTime(offset_steps + duration_steps)
+        )
+        quantized_items.append(StepArcValue.mk(step_arc, item.value))
 
     return PSeq.mk(quantized_items)
 
 
-def get_min_total_duration[T](ds: DeltaSeq[T]) -> CycleDelta:
-    """Returns the minimum total duration of a DeltaSeq (max offset + duration)."""
+def get_min_total_duration[T](ds: CycleArcSeq[T]) -> CycleDelta:
+    """Returns the minimum total duration of a CycleArcSeq (max arc end time)."""
     if ds.null():
         return CycleDelta(Fraction(0))
 
     max_end = CycleDelta(Fraction(0))
     for item in ds.iter():
-        end_time = CycleDelta(item.offset + item.duration)
+        end_time = CycleDelta(item.arc.end)
         if end_time > max_end:
             max_end = end_time
 
     return max_end
 
 
-def unquantize[T](ss: StepSeq[T], step_duration: CycleDelta) -> DeltaSeq[T]:
+def unquantize[T](ss: StepArcSeq[T], step_duration: CycleDelta) -> CycleArcSeq[T]:
     """Converts a sequence with integral offsets/durations back to fractional lengths.
 
     Args:
@@ -346,55 +392,62 @@ def unquantize[T](ss: StepSeq[T], step_duration: CycleDelta) -> DeltaSeq[T]:
         step_duration: The fractional duration of a single step
 
     Returns:
-        A DeltaSeq with fractional offsets/durations scaled by step_duration
+        A CycleArcSeq with fractional offsets/durations scaled by step_duration
     """
     if ss.null():
         return PSeq.empty()
 
-    # Convert each StepVal to a DeltaVal by scaling with step_duration
-    delta_items = []
+    # Convert each StepArcValue to a CycleArcValue by scaling with step_duration
+    cycle_items = []
     for item in ss.iter():
-        fractional_offset = CycleDelta(step_duration * item.offset)
-        fractional_duration = CycleDelta(step_duration * item.duration)
-        delta_items.append(DeltaVal(fractional_offset, fractional_duration, item.val))
+        step_arc = item.arc
+        fractional_start = CycleTime(step_duration * step_arc.start)
+        fractional_end = CycleTime(step_duration * step_arc.end)
 
-    return PSeq.mk(delta_items)
+        cycle_arc = CycleArc(fractional_start, fractional_end)
+        cycle_items.append(CycleArcValue.mk(cycle_arc, item.value))
+
+    return PSeq.mk(cycle_items)
 
 
-def reflect[T](ss: StepSeq[T]) -> Pat[T]:
+def reflect[T](ss: StepArcSeq[T]) -> Pat[T]:
     """Assembles a compact representation of the quantized sequence
     as a pattern."""
     if ss.null():
         return Pat.silent()
 
-    # Sort events by offset to ensure proper temporal order
-    sorted_items = sorted(ss.iter(), key=lambda item: item.offset)
+    # Sort events by start time to ensure proper temporal order
+    sorted_items = sorted(ss.iter(), key=lambda item: item.arc.start)
 
     pats = []
     current_offset = 0
 
     for item in sorted_items:
+        arc = item.arc
+        offset = int(arc.start)
+        duration = int(arc.length())
+
         # Add silence for any gap before this event
-        if item.offset > current_offset:
-            gap_duration = item.offset - current_offset
+        if offset > current_offset:
+            gap_duration = offset - current_offset
             if gap_duration > 0:
                 # For now, we'll skip gaps - this needs to be handled properly
                 # when we support silences
                 pass
 
         # Create pattern for this event
-        if item.duration == 0:
+        if duration == 0:
             continue
-        elif item.duration == 1:
-            pats.append(Pat.pure(item.val))
+        elif duration == 1:
+            pats.append(Pat.pure(item.value))
         else:
             # For items taking multiple steps, we need to stretch them
-            base_pat = Pat.pure(item.val)
+            base_pat = Pat.pure(item.value)
             # Stretch by the number of steps
-            stretched = Pat(PatStretch(base_pat, Fraction(item.duration)))
+            stretched = Pat(PatStretch(base_pat, Fraction(duration)))
             pats.append(stretched)
 
-        current_offset = item.offset + item.duration
+        current_offset = offset + duration
 
     if len(pats) == 0:
         return Pat.silent()
@@ -404,10 +457,8 @@ def reflect[T](ss: StepSeq[T]) -> Pat[T]:
         return Pat.seq(pats)
 
 
-def pat_to_deltaseq[T](
-    pat: Pat[T], total_delta: CycleDelta, start_time: Optional[CycleTime] = None
-) -> DeltaSeq[T]:
-    """Convert a Pat back to a DeltaSeq by evaluating it over the given time arc.
+def pat_to_seq[T](pat: Pat[T], arc: CycleArc) -> CycleArcSeq[T]:
+    """Convert a Pat back to a CycleArcSeq by evaluating it over the given time arc.
 
     This streams the pattern from start_time to start_time + total_delta and collects the events.
     Used for semantic equivalence testing of minimized patterns.
@@ -421,29 +472,21 @@ def pat_to_deltaseq[T](
         start_time: The start time of the evaluation (defaults to None, which means cycle 0)
 
     Returns:
-        A DeltaSeq representing the events produced by the pattern
+        A CycleArcSeq representing the events produced by the pattern
 
     Raises:
         ValueError: If the pattern produces overlapping events
     """
-    if total_delta == 0:
+    if arc.null():
         return PSeq.empty()
 
     # Convert pattern to stream
     stream = Stream.pat(pat)
 
-    # Use cycle 0 if start_time is None
-    if start_time is None:
-        start_time = CycleTime(Fraction(0))
-
-    # Create arc from start_time to start_time + total_delta
-    end_time = CycleTime(start_time + total_delta)
-    arc = CycleArc(start_time, end_time)
-
     # Get events by streaming over the arc
     events = stream.unstream(arc)
 
-    # Convert events back to DeltaSeq format, sorting by start time
+    # Convert events back to CycleArcSeq format, sorting by start time
     event_list = []
     for _, ev in events:
         event_list.append(ev)
@@ -455,10 +498,10 @@ def pat_to_deltaseq[T](
         return PSeq.empty()
 
     # Process events to ensure monophonic stream (no overlaps)
-    delta_items = []
-    current_time = start_time
+    cycle_items = []
+    current_time = arc.start
 
-    for i, ev in enumerate(sorted_events):
+    for _, ev in enumerate(sorted_events):
         event_start = ev.span.active.start
         event_end = ev.span.active.end
 
@@ -469,17 +512,16 @@ def pat_to_deltaseq[T](
                 f"Overlap detected in monophonic stream at time {event_start}: overlap of {overlap_amount}"
             )
 
-        # Calculate offset from start_time and duration
-        offset = CycleDelta(event_start - start_time)
-        duration = CycleDelta(event_end - event_start)
-        delta_items.append(DeltaVal(offset, duration, ev.val))
+        # Create CycleArc for this event
+        cycle_arc = CycleArc(event_start, event_end)
+        cycle_items.append(CycleArcValue.mk(cycle_arc, ev.val))
         current_time = event_end
 
-    return PSeq.mk(delta_items)
+    return PSeq.mk(cycle_items)
 
 
-def reflect_minimal[T](ss: StepSeq[T]) -> Pat[T]:
-    """Reflect a StepSeq to a minimized Pat.
+def reflect_minimal[T](ss: StepArcSeq[T]) -> Pat[T]:
+    """Reflect a StepArcSeq to a minimized Pat.
 
     First reflects normally, then applies all available minimizers until saturation.
     Uses DAG representation for efficient equality checking during minimization.
