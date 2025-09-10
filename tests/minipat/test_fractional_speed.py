@@ -7,14 +7,14 @@ from minipat.common import CycleTime
 from minipat.parser import parse_pattern
 from minipat.pat import Pat, SpeedOp
 from minipat.printer import print_pattern
-from minipat.stream import pat_stream
+from minipat.stream import Stream
 
 
 def test_pat_speed_fractional_fast() -> None:
     """Test Pat.speed with fractional fast factor like 3/2."""
     base_pattern = Pat.pure("x")
     pattern = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(3, 2))
-    stream = pat_stream(pattern)
+    stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
@@ -40,7 +40,7 @@ def test_pat_speed_fractional_slow() -> None:
     """Test Pat.speed with fractional slow factor like 1/2."""
     base_pattern = Pat.pure("x")
     pattern = Pat.speed(base_pattern, SpeedOp.Slow, Fraction(1, 2))
-    stream = pat_stream(pattern)
+    stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
@@ -116,7 +116,7 @@ def test_complex_fractional_speed_pattern() -> None:
     """Test complex pattern with fractional speeds."""
     # Parse a pattern with sequence and fractional speed
     pattern = parse_pattern("[x y]*3%2")
-    stream = pat_stream(pattern)
+    stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
@@ -135,20 +135,20 @@ def test_fractional_repetition_semantics() -> None:
 
     # Test x*1 = 1 event
     pattern1 = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(1))
-    stream1 = pat_stream(pattern1)
+    stream1 = Stream.pat(pattern1)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events1 = list(stream1.unstream(arc))
     assert len(events1) == 1
 
     # Test x*2 = 2 events
     pattern2 = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(2))
-    stream2 = pat_stream(pattern2)
+    stream2 = Stream.pat(pattern2)
     events2 = list(stream2.unstream(arc))
     assert len(events2) == 2
 
     # Test x*2.5 = 3 events (2 full + 0.5 partial)
     pattern25 = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(5, 2))
-    stream25 = pat_stream(pattern25)
+    stream25 = Stream.pat(pattern25)
     events25 = list(stream25.unstream(arc))
     assert len(events25) == 3  # 2 full + 1 partial
 
@@ -159,20 +159,20 @@ def test_fractional_repeat_semantics() -> None:
 
     # Test x!1 = 1 repetition
     pattern1 = Pat.repeat(base_pattern, Fraction(1))
-    stream1 = pat_stream(pattern1)
+    stream1 = Stream.pat(pattern1)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events1 = list(stream1.unstream(arc))
     assert len(events1) == 1
 
     # Test x!2 = 2 repetitions
     pattern2 = Pat.repeat(base_pattern, Fraction(2))
-    stream2 = pat_stream(pattern2)
+    stream2 = Stream.pat(pattern2)
     events2 = list(stream2.unstream(arc))
     assert len(events2) == 2
 
     # Test x!1.5 = 1.5 repetitions (1 full + 0.5 partial)
     pattern15 = Pat.repeat(base_pattern, Fraction(3, 2))
-    stream15 = pat_stream(pattern15)
+    stream15 = Stream.pat(pattern15)
     events15 = list(stream15.unstream(arc))
     assert len(events15) == 2  # 1 full + 1 partial
 
@@ -215,7 +215,7 @@ def test_extreme_fractional_values() -> None:
 
     # Very small fraction
     pattern_small = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(1, 100))
-    stream_small = pat_stream(pattern_small)
+    stream_small = Stream.pat(pattern_small)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events_small = stream_small.unstream(arc)
     event_list_small = list(events_small)
@@ -223,7 +223,7 @@ def test_extreme_fractional_values() -> None:
 
     # Very large fraction
     pattern_large = Pat.speed(base_pattern, SpeedOp.Fast, Fraction(100, 1))
-    stream_large = pat_stream(pattern_large)
+    stream_large = Stream.pat(pattern_large)
     events_large = stream_large.unstream(arc)
     event_list_large = list(events_large)
     assert len(event_list_large) >= 0  # Should not crash

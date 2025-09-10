@@ -243,7 +243,20 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A specialized stream for the pattern
         """
-        return pat_stream(pattern)
+        return pat_stream(pattern, IdSubst())
+
+    @staticmethod
+    def pat_subst[U](pattern: Pat[T], subst: Subst[T, U]) -> Stream[U]:
+        """Create a stream from a pattern and substitution
+
+        Args:
+            pattern: The pattern to convert to a stream
+            subst: The substitution to apply at the leaves.
+
+        Returns:
+            A specialized stream for the pattern
+        """
+        return pat_stream(pattern, subst)
 
     def map[U](self, func: Callable[[T], U]) -> Stream[U]:
         """Map a function over the stream values.
@@ -473,46 +486,33 @@ class SeqStream[T](Stream[T]):
                 # Find intersection with the query arc
                 intersection = child_arc.intersect(arc)
                 if not intersection.null():
-                    # For PureStream children, create events directly in their allocated slots
-                    # This bypasses the cycle-start restriction in PureStream
-                    if hasattr(child_stream, "value"):
-                        # This is a PureStream - create the event directly
-                        child_intersection = child_arc.intersect(arc)
-                        if not child_intersection.null():
-                            span = CycleSpan(child_intersection, None)
-                            new_ev = Ev(span, child_stream.value)
-                            seq_result = ev_heap_push(new_ev, seq_result)
-                    else:
-                        # For other stream types, query with full cycle and map events to allocated slots
-                        cycle_arc = CycleArc(
-                            CycleTime(cycle_start), CycleTime(cycle_end)
+                    cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+                    child_events = child_stream.unstream(cycle_arc)
+                    for _, ev in child_events:
+                        # Map the child event's timing to the allocated slot
+                        # The child's event time is relative to the full cycle (0-1)
+                        # We need to map it to the allocated slot (child_start to child_end)
+
+                        # Calculate the relative position within the child's canonical cycle
+                        child_cycle_start = Fraction(floor(ev.span.active.start))
+                        relative_start = ev.span.active.start - child_cycle_start
+                        relative_end = ev.span.active.end - child_cycle_start
+
+                        # Map to allocated slot
+                        mapped_start = child_start + relative_start * child_duration
+                        mapped_end = child_start + relative_end * child_duration
+
+                        # Create arc for the mapped timing
+                        mapped_arc = CycleArc(
+                            CycleTime(mapped_start), CycleTime(mapped_end)
                         )
-                        child_events = child_stream.unstream(cycle_arc)
-                        for _, ev in child_events:
-                            # Map the child event's timing to the allocated slot
-                            # The child's event time is relative to the full cycle (0-1)
-                            # We need to map it to the allocated slot (child_start to child_end)
 
-                            # Calculate the relative position within the child's canonical cycle
-                            child_cycle_start = Fraction(floor(ev.span.active.start))
-                            relative_start = ev.span.active.start - child_cycle_start
-                            relative_end = ev.span.active.end - child_cycle_start
-
-                            # Map to allocated slot
-                            mapped_start = child_start + relative_start * child_duration
-                            mapped_end = child_start + relative_end * child_duration
-
-                            # Create arc for the mapped timing
-                            mapped_arc = CycleArc(
-                                CycleTime(mapped_start), CycleTime(mapped_end)
-                            )
-
-                            # Check if mapped arc intersects with query arc
-                            intersection = mapped_arc.intersect(arc)
-                            if not intersection.null():
-                                span = CycleSpan(intersection, ev.span.whole)
-                                new_ev = Ev(span, ev.val)
-                                seq_result = ev_heap_push(new_ev, seq_result)
+                        # Check if mapped arc intersects with query arc
+                        intersection = mapped_arc.intersect(arc)
+                        if not intersection.null():
+                            span = CycleSpan(intersection, ev.span.whole)
+                            new_ev = Ev(span, ev.val)
+                            seq_result = ev_heap_push(new_ev, seq_result)
 
         return seq_result
 
@@ -1079,7 +1079,37 @@ class MapStream[T, U](Stream[U]):
         return result
 
 
-def pat_stream[T](pat: Pat[T]) -> Stream[T]:
+class Subst[T, U](metaclass=ABCMeta):
+    @abstractmethod
+    def replace(self, value: T) -> Stream[U]:
+        raise NotImplementedError()
+
+
+class IdSubst[T](Subst[T, T]):
+    @override
+    def replace(self, value: T) -> Stream[T]:
+        return Stream.pure(value)
+
+
+class NamedSubst[T](Subst[str, T]):
+    @override
+    def replace(self, value: str) -> Stream[T]:
+        labels = value.split(":")
+        stream = self.replace_base(labels[0])
+        for label in labels[1:]:
+            stream = self.replace_xform(label, stream)
+        return stream
+
+    @abstractmethod
+    def replace_base(self, label: str) -> Stream[T]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def replace_xform(self, label: str, source: Stream[T]) -> Stream[T]:
+        raise NotImplementedError()
+
+
+def pat_stream[T, U](pat: Pat[T], subst: Subst[T, U]) -> Stream[U]:
     """Create a specialized stream for the given pattern.
 
     Args:
@@ -1092,7 +1122,7 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
         case PatSilent():
             return Stream.silent()
         case PatPure(val):
-            return Stream.pure(val)
+            return subst.replace(val)
         case PatSeq(children):
             # Create weighted sequence where each child contributes its weight
             weighted_children = []
@@ -1106,34 +1136,34 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
                     child = child.unwrap.pat
                 else:
                     weight = Fraction(1)
-                weighted_children.append((pat_stream(child), weight))
+                weighted_children.append((pat_stream(child, subst), weight))
             return WeightedSeqStream(weighted_children)
         case PatPar(pats):
-            child_streams = PSeq.mk(pat_stream(child) for child in pats)
+            child_streams = PSeq.mk(pat_stream(child, subst) for child in pats)
             return Stream.par(child_streams)
         case PatRand(pats):
-            choice_streams = PSeq.mk(pat_stream(choice) for choice in pats)
+            choice_streams = PSeq.mk(pat_stream(choice, subst) for choice in pats)
             return Stream.rand(choice_streams)
         case PatEuc(pat, hits, steps, rotation):
-            atom_stream = pat_stream(pat)
+            atom_stream = pat_stream(pat, subst)
             return EucStream.create(atom_stream, hits, steps, rotation)
         case PatPoly(pats, subdiv):
-            pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in pats)
+            pattern_streams = PSeq.mk(pat_stream(pat, subst) for pat in pats)
             return Stream.poly(pattern_streams, subdiv)
         case PatSpeed(pat, op, factor):
-            pattern_stream = pat_stream(pat)
+            pattern_stream = pat_stream(pat, subst)
             return Stream.speed(pattern_stream, op, factor)
         case PatStretch(pat, count):
-            pattern_stream = pat_stream(pat)
+            pattern_stream = pat_stream(pat, subst)
             return Stream.stretch(pattern_stream, count)
         case PatProb(pat, chance):
-            pattern_stream = pat_stream(pat)
+            pattern_stream = pat_stream(pat, subst)
             return Stream.prob(pattern_stream, chance)
         case PatAlt(pats):
-            pattern_streams = PSeq.mk(pat_stream(pattern) for pattern in pats)
+            pattern_streams = PSeq.mk(pat_stream(pat, subst) for pat in pats)
             return Stream.alt(pattern_streams)
         case PatRepeat(pat, count):
-            pattern_stream = pat_stream(pat)
+            pattern_stream = pat_stream(pat, subst)
             return Stream.repeat(pattern_stream, count)
         case _:
             # This should never happen if all pattern types are handled above

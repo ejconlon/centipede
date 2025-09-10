@@ -15,7 +15,7 @@ from minipat.live import (
     Processor,
 )
 from minipat.pat import Pat
-from minipat.stream import pat_stream
+from minipat.stream import Stream
 
 
 class LogBackendActor[T](Actor[BackendMessage[T]]):
@@ -60,8 +60,8 @@ def main() -> None:
         # Create some simple patterns and convert to streams
         pattern1 = Pat.pure("kick")
         pattern2 = Pat.seq([Pat.pure("snare"), Pat.silent()])
-        stream1 = pat_stream(pattern1)
-        stream2 = pat_stream(pattern2)
+        stream1 = Stream.pat(pattern1)
+        stream2 = Stream.pat(pattern2)
 
         # Set streams on orbits
         live.set_orbit(Orbit(0), stream1)

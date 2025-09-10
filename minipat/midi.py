@@ -52,7 +52,7 @@ from minipat.live import (
     Timing,
 )
 from minipat.parser import parse_pattern
-from minipat.stream import MergeStrat, Stream, pat_stream
+from minipat.stream import MergeStrat, Stream
 from spiny.dmap import DKey, DMap
 from spiny.heap import PHeap
 from spiny.seq import PSeq
@@ -1034,7 +1034,7 @@ def midinote_stream(s: str) -> Stream[MidiAttrs]:
         midinote("36 ~ 42")      # Kick, rest, snare pattern
         midinote("[60,64,67]")   # C major chord (simultaneous)
     """
-    return pat_stream(parse_pattern(s).map(_convert_midinote))
+    return Stream.pat(parse_pattern(s).map(_convert_midinote))
 
 
 def note_stream(s: str) -> Stream[MidiAttrs]:
@@ -1049,7 +1049,7 @@ def note_stream(s: str) -> Stream[MidiAttrs]:
         note("[c4,e4,g4]")       # C major chord (simultaneous)
         note("c#4 db5 f4")       # Mixed sharps and flats
     """
-    return pat_stream(parse_pattern(s).map(_convert_note))
+    return Stream.pat(parse_pattern(s).map(_convert_note))
 
 
 def vel_stream(s: str) -> Stream[MidiAttrs]:
@@ -1063,7 +1063,7 @@ def vel_stream(s: str) -> Stream[MidiAttrs]:
         vel_stream("127 0 64")          # Loud, silent, medium
         vel_stream("100*8")             # Repeat loud velocity 8 times
     """
-    return pat_stream(parse_pattern(s).map(_convert_vel))
+    return Stream.pat(parse_pattern(s).map(_convert_vel))
 
 
 def channel_stream(s: str) -> Stream[MidiAttrs]:
@@ -1078,7 +1078,7 @@ def channel_stream(s: str) -> Stream[MidiAttrs]:
         channel_stream("15 ~ 0")         # Channel 16, rest, Channel 1
         channel_stream("9*4")            # Repeat Channel 10 (drums) 4 times
     """
-    return pat_stream(parse_pattern(s).map(_convert_channel))
+    return Stream.pat(parse_pattern(s).map(_convert_channel))
 
 
 def program_stream(s: str) -> Stream[MidiAttrs]:
@@ -1092,7 +1092,7 @@ def program_stream(s: str) -> Stream[MidiAttrs]:
         program_stream("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
         program_stream("1*4")            # Repeat Bright Piano 4 times
     """
-    return pat_stream(parse_pattern(s).map(_convert_program))
+    return Stream.pat(parse_pattern(s).map(_convert_program))
 
 
 def control_stream(s: str) -> Stream[MidiAttrs]:
@@ -1107,7 +1107,7 @@ def control_stream(s: str) -> Stream[MidiAttrs]:
         control_stream("64 ~ 1")         # Sustain, rest, Modulation
         control_stream("7*8")            # Repeat Volume control 8 times
     """
-    return pat_stream(parse_pattern(s).map(_convert_control))
+    return Stream.pat(parse_pattern(s).map(_convert_control))
 
 
 def value_stream(s: str) -> Stream[MidiAttrs]:
@@ -1122,7 +1122,7 @@ def value_stream(s: str) -> Stream[MidiAttrs]:
         value_stream("127 ~ 0")          # Max, rest, min
         value_stream("64*8")             # Repeat center value 8 times
     """
-    return pat_stream(parse_pattern(s).map(_convert_value))
+    return Stream.pat(parse_pattern(s).map(_convert_value))
 
 
 def _merge_attrs(x: MidiAttrs, y: MidiAttrs) -> MidiAttrs:

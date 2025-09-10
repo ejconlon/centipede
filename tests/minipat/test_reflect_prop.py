@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 from minipat.arc import CycleArc
 from minipat.pat import Pat
 from minipat.reflect import minimize_pattern
-from minipat.stream import pat_stream
+from minipat.stream import Stream
 from tests.spiny.hypo import configure_hypo
 
 configure_hypo()
@@ -78,7 +78,7 @@ def get_cycle_events(pat: Pat[str], cycle: int = 0) -> List[tuple[Fraction, str]
 
     Returns list of (start_time_within_cycle, value) tuples, sorted by time.
     """
-    stream = pat_stream(pat)
+    stream = Stream.pat(pat)
     arc = CycleArc.cycle(cycle)
     events = stream.unstream(arc)
 

@@ -8,7 +8,7 @@ from minipat.arc import CycleArc, CycleSpan
 from minipat.common import CycleTime
 from minipat.ev import Ev
 from minipat.parser import parse_pattern
-from minipat.stream import pat_stream
+from minipat.stream import Stream
 
 
 def _test_pattern_events(
@@ -16,7 +16,7 @@ def _test_pattern_events(
 ) -> None:
     """Helper function to test pattern consistency across multiple query strategies."""
     pattern = parse_pattern(pattern_str)
-    stream = pat_stream(pattern)
+    stream = Stream.pat(pattern)
 
     def _events_to_tuples(
         events: list[tuple[CycleSpan, Ev[str]]],
