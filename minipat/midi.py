@@ -405,13 +405,12 @@ def mh_pop(mh: MsgHeap) -> Tuple[Optional[TimedMessage], MsgHeap]:
 
 
 def mh_seek_pop(mh: MsgHeap, time: PosixTime) -> Tuple[Optional[TimedMessage], MsgHeap]:
-    """Pop all messages before the given time, returning the first at or after time."""
-    while True:
-        x = mh_pop(mh)
-        if x[0] is None or x[0].time >= time:
-            return x
-        else:
-            mh = x[1]
+    """Pop head message <= given time"""
+    x = mh_pop(mh)
+    if x[0] is None or x[0].time <= time:
+        return x
+    else:
+        return (None, mh)
 
 
 type ParMsgHeap = Mutex[Box[MsgHeap]]
@@ -506,8 +505,13 @@ class MidiSenderTask(Task):
                 with self._timing_mutex as box:
                     sleep_interval = box.value.get_sleep_interval()
                 # Use halt.wait() instead of sleep() to be responsive to shutdown
-                halt.wait(timeout=sleep_interval)
+                if halt.wait(timeout=sleep_interval):
+                    break
             else:
+                delay = timed_msg.time - current_time
+                # logger.debug("DELAYING %f %s", delay, timed_msg.message)
+                if delay > 0 and halt.wait(timeout=delay):
+                    break
                 with self._output_mutex as output_port:
                     output_port.send(timed_msg.message)
 
@@ -1422,21 +1426,10 @@ def start_midi_live_system(
     Args:
         system: The actor system to use
         out_port_name: Name of the MIDI output port
-        env: Optional LiveEnv configuration (defaults to LiveEnv())
+        cps: Optional initial cycles per second (default ~120 BPM)
 
     Returns:
-        A started LiveSystem configured for MIDI output. Send BackendTiming messages
-        to the backend sender to update timing configuration.
-
-    Example:
-        ```python
-        live_system = start_midi_live_system(system, "my_midi_out")
-
-        # Update timing when CPS changes
-        timing = Timing(cps=Fraction(1, 1), generations_per_cycle=4, wait_factor=Fraction(1, 4))
-        timing_update = BackendTiming(timing=timing)
-        live_system._backend_sender.send(timing_update)
-        ```
+        A started LiveSystem configured for MIDI output.
     """
     # Create MIDI output port and protect with mutex
     existing = mido.get_output_names()  # pyright: ignore
@@ -1457,7 +1450,7 @@ def start_midi_live_system(
 
         def initialize(self, env: ActorEnv) -> Sender[BackendMessage[TimedMessage]]:
             """Initialize MIDI backend actor and sender task."""
-            # Create the timing-aware MIDI backend actor
+            # Create the timing-oblivious MIDI backend actor
             midi_backend = MidiBackendActor(message_heap, output_mutex, timing_mutex)
             backend_sender = env.control.spawn_actor("midi_backend", midi_backend)
 

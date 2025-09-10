@@ -18,7 +18,7 @@ from minipat.pat import Pat
 from minipat.stream import pat_stream
 
 
-class LogBackendActor(Actor[BackendMessage[str]]):
+class LogBackendActor[T](Actor[BackendMessage[T]]):
     """Backend actor that handles processed events by logging them."""
 
     def __init__(self) -> None:
@@ -28,7 +28,7 @@ class LogBackendActor(Actor[BackendMessage[str]]):
     def on_start(self, env: ActorEnv) -> None:
         env.logger.debug("Log backend actor started")
 
-    def on_message(self, env: ActorEnv, value: BackendMessage[str]) -> None:
+    def on_message(self, env: ActorEnv, value: BackendMessage[T]) -> None:
         match value:
             case BackendPlay(playing):
                 self._playing = playing
@@ -51,7 +51,7 @@ def main() -> None:
 
     # Create processor and backend actor
     processor: Processor[str, str] = LogProcessor[str]()
-    backend_actor = LogBackendActor()
+    backend_actor = LogBackendActor[str]()
     backend_sender = system.spawn_actor("log_backend", backend_actor)
 
     live: LiveSystem[str, str] = LiveSystem.start(system, processor, backend_sender)
