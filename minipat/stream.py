@@ -1098,17 +1098,15 @@ def pat_stream[T](pat: Pat[T]) -> Stream[T]:
             weighted_children = []
             for child in children:
                 # Calculate weight based on pattern type
-                weight = Fraction(1)
-                if isinstance(child.unwrap, PatRepeat):
-                    # Repeat patterns don't affect weight, they repeat within their slot
-                    weight = Fraction(1)
-                elif isinstance(child.unwrap, PatStretch):
+                weight: Fraction
+                if isinstance(child.unwrap, PatStretch):
                     # Stretch patterns take up more space (weight = count)
                     weight = child.unwrap.count
                     # Use the inner pattern, not the stretch wrapper
                     child = child.unwrap.pat
+                else:
+                    weight = Fraction(1)
                 weighted_children.append((pat_stream(child), weight))
-
             return WeightedSeqStream(weighted_children)
         case PatPar(pats):
             child_streams = PSeq.mk(pat_stream(child) for child in pats)

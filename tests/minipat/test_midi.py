@@ -38,8 +38,8 @@ from minipat.midi import (
     combine,
     combine_all,
     echo_system,
+    mh_always_pop,
     mh_empty,
-    mh_pop,
     mh_push,
     midi_message_sort_key,
     note_stream,
@@ -928,7 +928,7 @@ def test_timed_message_comparison() -> None:
     # Pop messages and verify they come out in the correct order
     popped_messages = []
     while True:
-        ptm, heap = mh_pop(heap)
+        ptm, heap = mh_always_pop(heap)
         if ptm is None:
             break
         popped_messages.append(ptm)

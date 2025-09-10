@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from fractions import Fraction
 from logging import Logger
 from threading import Event
@@ -23,6 +23,7 @@ from minipat.common import (
     ZERO,
     CycleDelta,
     CycleTime,
+    PosixDelta,
     PosixTime,
     frac_ceil,
 )
@@ -37,21 +38,21 @@ Orbit = NewType("Orbit", int)
 # Timing Constants
 # =============================================================================
 
-DEFAULT_CPS = ONE_HALF
+_DEFAULT_CPS = ONE_HALF
 """Default cycles per second (tempo)."""
 
-DEFAULT_GENERATIONS_PER_CYCLE = 4
+_DEFAULT_GENERATIONS_PER_CYCLE = 4
 """Default number of event generations to calculate per cycle."""
 
-DEFAULT_WAIT_FACTOR = Fraction(1, 4)
+_DEFAULT_WAIT_FACTOR = Fraction(1, 4)
 """Default factor for calculating sleep intervals - use 1/4 of generation interval for responsive polling."""
 
 
-def calculate_sleep_interval(
+def _calculate_sleep_interval(
     cps: Fraction,
     generations_per_cycle: int,
-    wait_factor: Fraction = DEFAULT_WAIT_FACTOR,
-) -> float:
+    wait_factor: Fraction,
+) -> PosixDelta:
     """Calculate appropriate sleep interval based on timing configuration.
 
     Uses the specified wait_factor of the generation interval to ensure responsive timing
@@ -72,7 +73,7 @@ def calculate_sleep_interval(
     sleep_interval = generation_interval * float(wait_factor)
 
     # Clamp to reasonable bounds (0.5ms to 50ms)
-    return max(0.0005, min(0.05, sleep_interval))
+    return PosixDelta(max(0.0005, min(0.05, sleep_interval)))
 
 
 @dataclass(frozen=True)
@@ -88,25 +89,38 @@ class Timing:
     wait_factor: Fraction
     """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
 
-    @classmethod
-    def default(cls) -> "Timing":
+    sleep_interval: PosixDelta
+    """Amount of wall time it's appropriate to sleep when polling."""
+
+    @staticmethod
+    def initial(cps: Optional[Fraction]) -> Timing:
         """Create a Timing instance with default values."""
-        return cls(
-            cps=DEFAULT_CPS,
-            generations_per_cycle=DEFAULT_GENERATIONS_PER_CYCLE,
-            wait_factor=DEFAULT_WAIT_FACTOR,
+        cps = cps if cps is not None else _DEFAULT_CPS
+        generations_per_cycle = _DEFAULT_GENERATIONS_PER_CYCLE
+        wait_factor = _DEFAULT_WAIT_FACTOR
+        sleep_interval = _calculate_sleep_interval(
+            cps=cps,
+            generations_per_cycle=generations_per_cycle,
+            wait_factor=wait_factor,
+        )
+        return Timing(
+            cps=cps,
+            generations_per_cycle=generations_per_cycle,
+            wait_factor=wait_factor,
+            sleep_interval=sleep_interval,
         )
 
-    def get_sleep_interval(self) -> float:
-        """Calculate appropriate sleep interval based on timing configuration.
-
-        Uses the shared calculation function for consistency.
-
-        Returns:
-            Sleep interval in seconds, clamped to reasonable bounds.
-        """
-        return calculate_sleep_interval(
-            self.cps, self.generations_per_cycle, self.wait_factor
+    def set_cps(self, cps: Fraction) -> Timing:
+        sleep_interval = _calculate_sleep_interval(
+            cps=cps,
+            generations_per_cycle=self.generations_per_cycle,
+            wait_factor=self.wait_factor,
+        )
+        return Timing(
+            cps=cps,
+            generations_per_cycle=self.generations_per_cycle,
+            wait_factor=self.wait_factor,
+            sleep_interval=sleep_interval,
         )
 
 
@@ -124,20 +138,6 @@ class Instant:
     """Fixed posix time reference point."""
 
 
-@dataclass(frozen=True)
-class LiveEnv:
-    """Environment configuration for live pattern playback.
-
-    Defines global settings that control pattern playback behavior.
-    """
-
-    generations_per_cycle: int = DEFAULT_GENERATIONS_PER_CYCLE
-    """Number of event generations to calculate per cycle."""
-
-    wait_factor: Fraction = DEFAULT_WAIT_FACTOR
-    """Factor for calculating sleep intervals - fraction of generation interval to use for polling."""
-
-
 @dataclass
 class OrbitState[T]:
     """State for a single orbit (audio channel/stream).
@@ -145,14 +145,18 @@ class OrbitState[T]:
     Each orbit contains a stream and maintains its own playback state.
     """
 
-    stream: Optional[Stream[T]] = None
+    stream: Optional[Stream[T]]
     """Current stream playing on this orbit."""
 
-    muted: bool = False
+    muted: bool
     """Whether this orbit is muted."""
 
-    solo: bool = False
+    solo: bool
     """Whether this orbit is soloed."""
+
+    @staticmethod
+    def initial() -> OrbitState[T]:
+        return OrbitState(stream=None, muted=False, solo=False)
 
 
 @dataclass
@@ -162,20 +166,26 @@ class TransportState:
     Handles tempo, playback state, and timing information.
     """
 
-    playing: bool = False
+    playing: bool
     """Whether pattern playback is currently active."""
 
-    current_cycle: CycleTime = CycleTime(ZERO)
+    current_cycle: CycleTime
     """Current cycle position in the timeline."""
 
-    cps: Fraction = ONE_HALF
-    """Current cycles per second (tempo)."""
+    timing: Timing
+    """Timin configuration."""
 
-    playback_start: PosixTime = PosixTime(0.0)
+    playback_start: PosixTime
     """Wall clock time when playback started (seconds since epoch)."""
 
-
-# Use Mutex[TransportState] directly instead of custom wrapper
+    @staticmethod
+    def initial(timing: Timing) -> TransportState:
+        return TransportState(
+            playing=False,
+            current_cycle=CycleTime(ZERO),
+            timing=timing,
+            playback_start=PosixTime(0.0),
+        )
 
 
 @dataclass
@@ -185,8 +195,12 @@ class PatternState[T]:
     Handles orbits, streams, and pattern-related state.
     """
 
-    orbits: PMap[Orbit, OrbitState[T]] = field(default_factory=PMap.empty)
+    orbits: PMap[Orbit, OrbitState[T]]
     """Map of orbit to orbit state."""
+
+    @staticmethod
+    def initial() -> PatternState[T]:
+        return PatternState(orbits=PMap.empty())
 
 
 class Processor[T, U](metaclass=ABCMeta):
@@ -248,10 +262,10 @@ class TransportMessage[T](metaclass=ABCMeta):
 
 
 @dataclass(frozen=True)
-class TransportSetCps[T](TransportMessage[T]):
+class TransportSetTiming[T](TransportMessage[T]):
     """Set the cycles per second (tempo)."""
 
-    cps: Fraction
+    timing: Timing
 
 
 @dataclass(frozen=True)
@@ -358,19 +372,20 @@ class TimerTask[T](Task):
         self,
         pattern_sender: Sender[PatternMessage[T]],
         transport_sender: Sender[TransportMessage[T]],
-        env: LiveEnv,
         transport_state_mutex: Mutex[TransportState],
     ):
         self._pattern_sender = pattern_sender
         self._transport_sender = transport_sender
-        self._env = env
         self._transport_state_mutex = transport_state_mutex
 
     @override
     def run(self, logger: Logger, halt: Event) -> None:
         logger.debug("Timer task starting")
 
-        frac_cycle_length = Fraction(1) / self._env.generations_per_cycle
+        with self._transport_state_mutex as ts:
+            gpc = ts.timing.generations_per_cycle
+
+        frac_cycle_length = Fraction(1) / gpc
         float_cycle_length = float(frac_cycle_length)
 
         # Debug: Log the actual generations_per_cycle value
@@ -379,25 +394,18 @@ class TimerTask[T](Task):
 
         while not halt.is_set():
             # Get current state and decide what to do
-            with self._transport_state_mutex as state:
-                playing = state.playing
-                if playing:
-                    interval = float_cycle_length / state.cps
+            with self._transport_state_mutex as ts:
+                if ts.playing:
+                    interval = float_cycle_length / ts.timing.cps
                     instant = Instant(
-                        cycle_time=state.current_cycle,
-                        cps=state.cps,
-                        posix_start=state.playback_start,
+                        cycle_time=ts.current_cycle,
+                        cps=ts.timing.cps,
+                        posix_start=ts.playback_start,
                     )
-                    state.current_cycle = CycleTime(
-                        state.current_cycle + frac_cycle_length
-                    )
+                    ts.current_cycle = CycleTime(ts.current_cycle + frac_cycle_length)
                 else:
                     # When not playing, use current CPS to calculate pause interval
-                    interval = calculate_sleep_interval(
-                        state.cps,
-                        self._env.generations_per_cycle,
-                        self._env.wait_factor,
-                    )
+                    interval = ts.timing.sleep_interval
                     instant = None
 
             if instant is not None:
@@ -428,35 +436,32 @@ class TransportActor[T](Actor[TransportMessage[T]]):
     @override
     def on_message(self, env: ActorEnv, value: TransportMessage[T]) -> None:
         match value:
-            case TransportSetCps(cps):
-                self._set_cps(env.logger, cps)
+            case TransportSetTiming(timing):
+                self._set_timing(env.logger, timing)
             case TransportPlay(playing):
                 self._set_playing(env.logger, playing)
             case TransportSetCycle(cycle):
                 self._set_cycle(env.logger, cycle)
 
-    def _set_cps(self, logger: Logger, cps: Fraction) -> None:
-        """Set the cycles per second (tempo)."""
-        with self._transport_state_mutex as state:
-            state.cps = cps
-        logger.debug("Set CPS to %s", cps)
+    def _set_timing(self, logger: Logger, timing: Timing) -> None:
+        with self._transport_state_mutex as ts:
+            ts.timing = timing
+        logger.debug("Set timing to %s", timing)
 
     def _set_playing(self, logger: Logger, playing: bool) -> None:
-        """Set the playing state."""
-        with self._transport_state_mutex as state:
-            state.playing = playing
+        with self._transport_state_mutex as ts:
+            ts.playing = playing
             if playing:
                 # Record start time when starting
-                state.playback_start = PosixTime(time.time())
+                ts.playback_start = PosixTime(time.time())
             else:
                 # Reset start time when stopping
-                state.playback_start = PosixTime(0.0)
+                ts.playback_start = PosixTime(0.0)
         logger.debug("Set playing to %s", playing)
 
     def _set_cycle(self, logger: Logger, cycle: CycleTime) -> None:
-        """Set the current cycle position."""
-        with self._transport_state_mutex as state:
-            state.current_cycle = cycle
+        with self._transport_state_mutex as ts:
+            ts.current_cycle = cycle
         logger.debug("Set cycle to %s", cycle)
 
 
@@ -468,15 +473,15 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
 
     def __init__(
         self,
+        generations_per_cycle: int,
         pattern_state: PatternState[T],
         processor: Processor[T, U],
         backend_sender: Sender[BackendMessage[U]],
-        env: LiveEnv,
     ):
+        self._generations_per_cycle = generations_per_cycle
         self._pattern_state = pattern_state
         self._processor = processor
         self._backend_sender = backend_sender
-        self._env = env
 
     @override
     def on_start(self, env: ActorEnv) -> None:
@@ -504,7 +509,7 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
 
         # Calculate the time arc for this generation
         cycle_start = instant.cycle_time
-        cycle_length = Fraction(1) / self._env.generations_per_cycle
+        cycle_length = Fraction(1) / self._generations_per_cycle
         cycle_end = CycleTime(cycle_start + cycle_length)
         arc = CycleArc(cycle_start, cycle_end)
 
@@ -556,7 +561,9 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
     ) -> None:
         """Set the stream for a specific orbit."""
         # Get existing orbit state or create new one
-        existing_state = self._pattern_state.orbits.get(orbit, OrbitState())
+        existing_state = self._pattern_state.orbits.get(orbit)
+        if existing_state is None:
+            existing_state = OrbitState.initial()
         updated_state = OrbitState(
             stream=stream, muted=existing_state.muted, solo=existing_state.solo
         )
@@ -572,7 +579,9 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
     def _mute_orbit(self, logger: Logger, orbit: Orbit, muted: bool) -> None:
         """Mute or unmute an orbit."""
         # Get existing orbit state or create new one
-        existing_state = self._pattern_state.orbits.get(orbit, OrbitState())
+        existing_state = self._pattern_state.orbits.get(orbit)
+        if existing_state is None:
+            existing_state = OrbitState.initial()
         updated_state = OrbitState(
             stream=existing_state.stream, muted=muted, solo=existing_state.solo
         )
@@ -584,7 +593,9 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
     def _solo_orbit(self, logger: Logger, orbit: Orbit, solo: bool) -> None:
         """Solo or unsolo an orbit."""
         # Get existing orbit state or create new one
-        existing_state = self._pattern_state.orbits.get(orbit, OrbitState())
+        existing_state = self._pattern_state.orbits.get(orbit)
+        if existing_state is None:
+            existing_state = OrbitState.initial()
         updated_state = OrbitState(
             stream=existing_state.stream, muted=existing_state.muted, solo=solo
         )
@@ -629,26 +640,26 @@ class LiveSystem[T, U]:
 
     def __init__(
         self,
+        timing: Timing,
         transport_sender: Sender[TransportMessage[T]],
         pattern_sender: Sender[PatternMessage[T]],
         backend_sender: Sender[BackendMessage[U]],
-        env: LiveEnv,
         transport_state_mutex: Mutex[TransportState],
     ):
         """Initialize the live system.
 
         Args:
+            timing: Timing configuration.
             transport_sender: Sender for transport control messages.
             pattern_sender: Sender for pattern messages.
             backend_sender: Sender for backend messages.
-            env: Environment configuration.
             transport_state_mutex: Mutex for accessing transport state.
         """
         self._logger = logging.getLogger("minipat.live")
+        self._timing = timing
         self._transport_sender = transport_sender
         self._pattern_sender = pattern_sender
         self._backend_sender = backend_sender
-        self._env = env
         self._transport_state_mutex = transport_state_mutex
 
     @staticmethod
@@ -657,7 +668,6 @@ class LiveSystem[T, U]:
         processor: Processor[T, U],
         backend_sender: Sender[BackendMessage[U]],
         cps: Optional[Fraction] = None,
-        env: Optional[LiveEnv] = None,
     ) -> LiveSystem[T, U]:
         """Create and start the live pattern system.
 
@@ -671,19 +681,20 @@ class LiveSystem[T, U]:
         Returns:
             A started LiveSystem instance.
         """
-        cps = cps if cps is not None else DEFAULT_CPS
-        env = env if env is not None else LiveEnv()
+        timing = Timing.initial(cps)
 
         logger = logging.getLogger("minipat")
         logger.info("Starting live pattern system")
 
         # Create state objects for actors
-        transport_state = TransportState(cps=cps)
+        transport_state = TransportState.initial(timing)
         transport_state_mutex = Mutex(transport_state)
-        pattern_state = PatternState[T]()
+        pattern_state: PatternState[T] = PatternState.initial()
 
         # Create the pattern actor
-        pattern_actor = PatternActor(pattern_state, processor, backend_sender, env)
+        pattern_actor = PatternActor(
+            timing.generations_per_cycle, pattern_state, processor, backend_sender
+        )
         pattern_sender = system.spawn_actor("pattern", pattern_actor)
 
         # Create the transport actor for handling control messages
@@ -692,14 +703,17 @@ class LiveSystem[T, U]:
 
         # Create the live system with the senders
         live_system = LiveSystem(
-            transport_sender, pattern_sender, backend_sender, env, transport_state_mutex
+            timing,
+            transport_sender,
+            pattern_sender,
+            backend_sender,
+            transport_state_mutex,
         )
 
         # Create and spawn the timer task for timing loop
         timer_task = TimerTask(
             pattern_sender,
             transport_sender,
-            env,
             transport_state_mutex,
         )
         system.spawn_task("timer_loop", timer_task)
@@ -707,11 +721,6 @@ class LiveSystem[T, U]:
         logger.info("Live pattern system started")
 
         # Send initial timing configuration to backend
-        timing = Timing(
-            cps=transport_state.cps,
-            generations_per_cycle=env.generations_per_cycle,
-            wait_factor=env.wait_factor,
-        )
         initial_timing: BackendTiming[U] = BackendTiming(timing=timing)
         backend_sender.send(initial_timing)
         logger.debug(
@@ -741,15 +750,10 @@ class LiveSystem[T, U]:
         Args:
             cps: The new tempo in cycles per second.
         """
-        self._transport_sender.send(TransportSetCps(cps))
-        # Also send timing update to backend
-        timing = Timing(
-            cps=cps,
-            generations_per_cycle=self._env.generations_per_cycle,
-            wait_factor=self._env.wait_factor,
-        )
-        timing_update: BackendTiming[U] = BackendTiming(timing=timing)
-        self._backend_sender.send(timing_update)
+        # Update here and forward updates to transport and backend actors
+        timing = self._timing.set_cps(cps)
+        self._transport_sender.send(TransportSetTiming(timing))
+        self._backend_sender.send(BackendTiming(timing))
 
     def set_cycle(self, cycle: CycleTime) -> None:
         """Set the current cycle position.
@@ -830,13 +834,14 @@ class LiveSystem[T, U]:
         aligned = aligned if aligned is not None else False
 
         # Eagerly evaluate the stream
-        with self._transport_state_mutex as state:
-            current_cycle = state.current_cycle
-            current_cps = state.cps
-            posix_start = state.playback_start
+        with self._transport_state_mutex as ts:
+            current_cycle = ts.current_cycle
+            current_cps = ts.timing.cps
+            gpc = ts.timing.generations_per_cycle
+            posix_start = ts.playback_start
 
         # Calculate start time
-        generation_cycle_length = Fraction(1) / self._env.generations_per_cycle
+        generation_cycle_length = Fraction(1) / gpc
         minimum_future_time = current_cycle + generation_cycle_length
 
         if aligned:
