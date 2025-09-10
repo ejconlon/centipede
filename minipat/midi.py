@@ -509,6 +509,9 @@ class MidiSenderTask(Task):
                     break
             else:
                 delay = timed_msg.time - current_time
+                # Debug: Log timing details
+                # with open("midi_debug.log", "a") as f:
+                #     f.write(f"MidiSenderTask: Sending message time={timed_msg.time:.6f} current={current_time:.6f} delay={delay:.6f} type={MsgTypeField.get(timed_msg.message)}\n")
                 # logger.debug("DELAYING %f %s", delay, timed_msg.message)
                 if delay > 0 and halt.wait(timeout=delay):
                     break
@@ -1256,6 +1259,9 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
                             instant.posix_start
                             + (float(span.active.start) / float(instant.cps))
                         )
+                        # Debug: Log instant values and calculation
+                        # with open("midi_debug.log", "a") as f:
+                        #     f.write(f"Note Event: span.start={float(span.active.start):.6f} span.end={float(span.active.end):.6f} instant.cps={float(instant.cps):.6f} posix_start={instant.posix_start:.6f} calculated_timestamp={timestamp:.6f}\n")
                         timed_messages.append(TimedMessage(timestamp, msg))
 
                     if event_end:
@@ -1344,6 +1350,10 @@ class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
             case BackendEvents(messages):
                 if self._playing:
                     env.logger.debug("MIDI: Pushing %d messages", len(messages))
+                    # Debug: Log message timing details
+                    # with open("midi_debug.log", "a") as f:
+                    #     for msg in messages:
+                    #         f.write(f"BackendEvents: Pushing message time={msg.time:.6f} type={MsgTypeField.get(msg.message)}\n")
                     pmh_push_all(self._heap, messages)
                 else:
                     env.logger.debug("MIDI: Ignoring events while stopped")

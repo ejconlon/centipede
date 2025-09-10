@@ -321,10 +321,6 @@ def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
     # Convert to DAG
     dag = PatDag.from_pat(pat)
 
-    # Canonicalize to find and merge equivalent subpatterns
-    # This makes Find equality work properly for minimizers
-    dag.canonicalize()
-
     # Apply DAG-based minimization rules
     # These now use root node IDs for equality checks
     dag_minimizers = [
@@ -333,9 +329,25 @@ def minimize_pattern[T](pat: Pat[T]) -> Pat[T]:
         minimize_seq_gcd_dag,
     ]
 
-    run_dag_minimizers(dag, dag_minimizers)
+    # Loop minimization and canonicalization until we reach a fixed point
+    max_iterations = 10
+    for _ in range(max_iterations):
+        # Store the current DAG state to check for changes
+        before = dag.to_pat()
 
-    # Run canonicalization again after minimization to catch new equivalences
+        # Canonicalize to find and merge equivalent subpatterns
+        # This makes Find equality work properly for minimizers
+        dag.canonicalize()
+
+        # Apply minimizers
+        run_dag_minimizers(dag, dag_minimizers)
+
+        # Check if we've reached a fixed point
+        after = dag.to_pat()
+        if before == after:
+            break
+
+    # Final canonicalization to ensure everything is clean
     dag.canonicalize()
 
     # Convert back to Pat only at the very end

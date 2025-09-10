@@ -7,11 +7,12 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
+from math import ceil, floor
 from typing import Callable, List, Optional, Tuple, override
 
 from minipat.arc import CycleArc, CycleSpan
 from minipat.common import CycleDelta, CycleTime, PartialMatchException
-from minipat.ev import Ev, ev_heap_empty, ev_heap_push, ev_heap_singleton
+from minipat.ev import Ev, ev_heap_empty, ev_heap_push
 from minipat.pat import (
     Pat,
     PatAlt,
@@ -326,8 +327,29 @@ class PureStream[T](Stream[T]):
     def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[T]]:
         if arc.null():
             return ev_heap_empty()
-        span = CycleSpan(arc, None)
-        return ev_heap_singleton(Ev(span, self.value))
+
+        # For pure values, create one event per cycle that intersects with the arc
+        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+
+        # Find all cycles that intersect with the query arc
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
+
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+
+            # Check if cycle intersects with query arc
+            intersection = cycle_arc.intersect(arc)
+            if not intersection.null():
+                # Only include the event if the query arc contains the cycle start
+                # This ensures each event is only included once across multiple partial queries
+                if arc.start <= cycle_start < arc.end:
+                    span = CycleSpan(cycle_arc, None)
+                    result = ev_heap_push(Ev(span, self.value), result)
+
+        return result
 
 
 @dataclass(frozen=True)
@@ -347,34 +369,62 @@ class WeightedSeqStream[T](Stream[T]):
             return ev_heap_empty()
 
         seq_result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+
+        # Calculate canonical positions for each child within a cycle
+        canonical_positions: List[Tuple[Stream[T], Fraction, Fraction]] = []
         current_offset = Fraction(0)
 
         for child_stream, weight in self.weighted_children:
-            # Calculate time allocation for this child based on its weight
             child_proportion = weight / total_weight
-            child_duration = arc.length() * child_proportion
-
-            child_start = arc.start + current_offset
-            child_arc = CycleArc(
-                CycleTime(child_start), CycleTime(child_start + child_duration)
-            )
-
-            intersection = child_arc.intersect(arc)
-            if not intersection.null():
-                child_events = child_stream.unstream(child_arc)
-                for _, ev in child_events:
-                    # Create proper span for this event within the query arc
-                    span = _create_span(ev.span.active, arc)
-                    if span is not None:
-                        # Preserve the child's whole information if it exists, otherwise use the child's active as whole
-                        if ev.span.whole is not None:
-                            span = CycleSpan(span.active, ev.span.whole)
-                        elif ev.span.active != span.active:
-                            span = CycleSpan(span.active, ev.span.active)
-                        new_ev = Ev(span, ev.val)
-                        seq_result = ev_heap_push(new_ev, seq_result)
-
+            child_duration = child_proportion  # Duration within one canonical cycle
+            canonical_positions.append((child_stream, current_offset, child_duration))
             current_offset += child_duration
+
+        # Find all cycles that intersect with the query arc
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
+
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+
+            # Check if this cycle intersects with the query arc
+            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+            cycle_intersection = cycle_arc.intersect(arc)
+            if cycle_intersection.null():
+                continue
+
+            # For each child, calculate its position in this cycle
+            for child_stream, child_offset, child_duration in canonical_positions:
+                child_start = cycle_start + child_offset
+                child_end = child_start + child_duration
+
+                # Only include the child if its arc intersects with the query arc
+                if child_start < arc.end and child_end > arc.start:
+                    # Evaluate child for the full cycle to get canonical behavior
+                    child_events = child_stream.unstream(cycle_arc)
+                    for _, ev in child_events:
+                        # Map the child event's timing to the allocated slot
+                        # Calculate the relative position within the child's canonical cycle
+                        child_cycle_start = Fraction(floor(ev.span.active.start))
+                        relative_start = ev.span.active.start - child_cycle_start
+                        relative_end = ev.span.active.end - child_cycle_start
+
+                        # Map to allocated slot
+                        mapped_start = child_start + relative_start * child_duration
+                        mapped_end = child_start + relative_end * child_duration
+
+                        # Create arc for the mapped timing
+                        mapped_arc = CycleArc(
+                            CycleTime(mapped_start), CycleTime(mapped_end)
+                        )
+
+                        # Check if mapped arc intersects with query arc
+                        intersection = mapped_arc.intersect(arc)
+                        if not intersection.null():
+                            span = CycleSpan(intersection, ev.span.whole)
+                            new_ev = Ev(span, ev.val)
+                            seq_result = ev_heap_push(new_ev, seq_result)
 
         return seq_result
 
@@ -391,28 +441,78 @@ class SeqStream[T](Stream[T]):
             return ev_heap_empty()
 
         seq_result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
-        child_duration = arc.length() / len(self.children)
+
+        # Calculate canonical positions for each child within a cycle
+        child_duration = Fraction(1) / len(self.children)
+        canonical_positions: List[Tuple[Stream[T], Fraction, Fraction]] = []
 
         for i, child in enumerate(self.children):
-            child_start = arc.start + i * child_duration
-            child_arc = CycleArc(
-                CycleTime(child_start), CycleTime(child_start + child_duration)
-            )
+            child_offset = i * child_duration
+            canonical_positions.append((child, child_offset, child_duration))
 
-            intersection = child_arc.intersect(arc)
-            if not intersection.null():
-                child_events = child.unstream(child_arc)
-                for _, ev in child_events:
-                    # Create proper span for this event within the query arc
-                    span = _create_span(ev.span.active, arc)
-                    if span is not None:
-                        # Preserve the child's whole information if it exists, otherwise use the child's active as whole
-                        if ev.span.whole is not None:
-                            span = CycleSpan(span.active, ev.span.whole)
-                        elif ev.span.active != span.active:
-                            span = CycleSpan(span.active, ev.span.active)
-                        new_ev = Ev(span, ev.val)
-                        seq_result = ev_heap_push(new_ev, seq_result)
+        # Find all cycles that intersect with the query arc
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
+
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+
+            # Check if this cycle intersects with the query arc
+            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+            cycle_intersection = cycle_arc.intersect(arc)
+            if cycle_intersection.null():
+                continue
+
+            # For each child, calculate its position in this cycle
+            for child_stream, child_offset, child_duration in canonical_positions:
+                child_start = cycle_start + child_offset
+                child_end = child_start + child_duration
+                child_arc = CycleArc(CycleTime(child_start), CycleTime(child_end))
+
+                # Find intersection with the query arc
+                intersection = child_arc.intersect(arc)
+                if not intersection.null():
+                    # For PureStream children, create events directly in their allocated slots
+                    # This bypasses the cycle-start restriction in PureStream
+                    if hasattr(child_stream, "value"):
+                        # This is a PureStream - create the event directly
+                        child_intersection = child_arc.intersect(arc)
+                        if not child_intersection.null():
+                            span = CycleSpan(child_intersection, None)
+                            new_ev = Ev(span, child_stream.value)
+                            seq_result = ev_heap_push(new_ev, seq_result)
+                    else:
+                        # For other stream types, query with full cycle and map events to allocated slots
+                        cycle_arc = CycleArc(
+                            CycleTime(cycle_start), CycleTime(cycle_end)
+                        )
+                        child_events = child_stream.unstream(cycle_arc)
+                        for _, ev in child_events:
+                            # Map the child event's timing to the allocated slot
+                            # The child's event time is relative to the full cycle (0-1)
+                            # We need to map it to the allocated slot (child_start to child_end)
+
+                            # Calculate the relative position within the child's canonical cycle
+                            child_cycle_start = Fraction(floor(ev.span.active.start))
+                            relative_start = ev.span.active.start - child_cycle_start
+                            relative_end = ev.span.active.end - child_cycle_start
+
+                            # Map to allocated slot
+                            mapped_start = child_start + relative_start * child_duration
+                            mapped_end = child_start + relative_end * child_duration
+
+                            # Create arc for the mapped timing
+                            mapped_arc = CycleArc(
+                                CycleTime(mapped_start), CycleTime(mapped_end)
+                            )
+
+                            # Check if mapped arc intersects with query arc
+                            intersection = mapped_arc.intersect(arc)
+                            if not intersection.null():
+                                span = CycleSpan(intersection, ev.span.whole)
+                                new_ev = Ev(span, ev.val)
+                                seq_result = ev_heap_push(new_ev, seq_result)
 
         return seq_result
 
@@ -475,22 +575,42 @@ class EucStream[T](Stream[T]):
             return ev_heap_empty()
 
         euc_result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
-        step_duration = arc.length() / self.steps
 
-        for i, is_hit in enumerate(self.pattern):
-            if is_hit:
-                step_start = arc.start + i * step_duration
-                step_arc = CycleArc(
-                    CycleTime(step_start), CycleTime(step_start + step_duration)
-                )
+        # Find all cycles that intersect with the query arc
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
 
-                if not arc.intersect(step_arc).null():
-                    atom_events = self.atom.unstream(step_arc)
-                    for _, ev in atom_events:
-                        # Create span for this step within the query arc
-                        span = _create_span(step_arc, arc)
-                        if span is not None:
-                            step_ev = Ev(span, ev.val)
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+
+            # Check if this cycle intersects with the query arc
+            cycle_intersection = cycle_arc.intersect(arc)
+            if cycle_intersection.null():
+                continue
+
+            # Get atom events for the full cycle
+            atom_events = self.atom.unstream(cycle_arc)
+            if not atom_events:
+                continue
+
+            # For each step in this cycle, check if it's a hit
+            step_duration = Fraction(1) / self.steps
+
+            for i, is_hit in enumerate(self.pattern):
+                if is_hit:
+                    step_start = cycle_start + i * step_duration
+                    step_end = step_start + step_duration
+                    step_arc = CycleArc(CycleTime(step_start), CycleTime(step_end))
+
+                    # Check if step intersects with query arc
+                    step_intersection = step_arc.intersect(arc)
+                    if not step_intersection.null():
+                        # For each atom event, create a step event
+                        for _, atom_ev in atom_events:
+                            span = CycleSpan(step_intersection, None)
+                            step_ev = Ev(span, atom_ev.val)
                             euc_result = ev_heap_push(step_ev, euc_result)
 
         return euc_result
@@ -527,11 +647,8 @@ class PolyStream[T](Stream[T]):
                     scaled_ev = ev.scale(Fraction(self.subdiv))
                     span = _create_span(scaled_ev.span.active, arc)
                     if span is not None:
-                        # Preserve the whole information from scaling
-                        if scaled_ev.span.whole is not None:
-                            span = CycleSpan(span.active, scaled_ev.span.whole)
-                        elif scaled_ev.span.active != span.active:
-                            span = CycleSpan(span.active, scaled_ev.span.active)
+                        # Use None for whole to be consistent with other streams
+                        span = CycleSpan(span.active, None)
                         new_ev = Ev(span, scaled_ev.val)
                         polymetric_result = ev_heap_push(new_ev, polymetric_result)
 
@@ -546,6 +663,98 @@ class SpeedStream[T](Stream[T]):
     operator: SpeedOp
     count: Fraction
 
+    def _unstream_fast(
+        self,
+        factor: Fraction,
+        arc: CycleArc,
+        cycle_arc: CycleArc,
+        result: PHeapMap[CycleSpan, Ev[T]],
+    ) -> PHeapMap[CycleSpan, Ev[T]]:
+        cycle_start = cycle_arc.start
+        cycle_end = cycle_arc.end
+
+        # Handle fractional repetitions: x*2.5 = 2 full + 0.5 partial repetition
+        if factor > 0:
+            # Get integer and fractional parts
+            int_part = int(factor)  # Number of full repetitions
+            frac_part = factor - int_part  # Fractional part for partial repetition
+
+            # Use canonical cycle duration for proper timing
+            rep_duration = (
+                Fraction(1) / factor
+            )  # Duration of each repetition within canonical cycle
+
+            # Add full repetitions - evaluate each separately for proper alternation
+            for i in range(int_part):
+                rep_start = cycle_start + i * rep_duration
+
+                # Only include the repetition if the query arc contains its start point
+                if arc.start <= rep_start < arc.end:
+                    # Evaluate pattern for the full cycle to get canonical behavior, then scale
+                    full_cycle_arc = CycleArc(
+                        CycleTime(cycle_start), CycleTime(cycle_end)
+                    )
+                    rep_events = self.pattern.unstream(full_cycle_arc)
+                    for span, ev in rep_events:
+                        # Scale the event to fit within the repetition
+                        # Original event is relative to (0,1), scale to repetition span
+                        event_start_ratio = span.active.start - cycle_start
+                        event_end_ratio = span.active.end - cycle_start
+
+                        scaled_start = rep_start + event_start_ratio * rep_duration
+                        scaled_end = rep_start + event_end_ratio * rep_duration
+                        scaled_arc = CycleArc(
+                            CycleTime(scaled_start), CycleTime(scaled_end)
+                        )
+
+                        # Check if scaled arc intersects with query arc
+                        intersection = scaled_arc.intersect(arc)
+                        if not intersection.null():
+                            scaled_span = CycleSpan(intersection, None)
+                            scaled_ev = Ev(scaled_span, ev.val)
+                            result = ev_heap_push(scaled_ev, result)
+
+            # Add partial repetition if needed
+            if frac_part > 0:
+                partial_start = cycle_start + int_part * rep_duration
+                partial_end = partial_start + frac_part * rep_duration
+
+                # Only include the partial repetition if it intersects with the query arc
+                if partial_start < arc.end and partial_end > arc.start:
+                    # Evaluate pattern for the full cycle to get canonical behavior
+                    full_cycle_arc = CycleArc(
+                        CycleTime(cycle_start), CycleTime(cycle_end)
+                    )
+                    partial_pattern_events = self.pattern.unstream(full_cycle_arc)
+                    for _, ev in partial_pattern_events:
+                        # Scale the event to fit within the partial repetition, clipped
+                        event_start_ratio = ev.span.active.start - cycle_start
+                        event_end_ratio = ev.span.active.end - cycle_start
+                        partial_duration = frac_part * rep_duration
+
+                        scaled_start = (
+                            partial_start + event_start_ratio * partial_duration
+                        )
+                        scaled_end = partial_start + event_end_ratio * partial_duration
+
+                        # Clip to partial repetition boundaries
+                        scaled_start = max(scaled_start, partial_start)
+                        scaled_end = min(scaled_end, partial_end)
+
+                        if scaled_start < scaled_end:
+                            scaled_arc = CycleArc(
+                                CycleTime(scaled_start),
+                                CycleTime(scaled_end),
+                            )
+                            # Check if scaled arc intersects with query arc
+                            intersection = scaled_arc.intersect(arc)
+                            if not intersection.null():
+                                scaled_span = CycleSpan(intersection, None)
+                                scaled_ev = Ev(scaled_span, ev.val)
+                                result = ev_heap_push(scaled_ev, result)
+
+        return result
+
     @override
     def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[T]]:
         if arc.null() or self.count <= 0:
@@ -553,80 +762,25 @@ class SpeedStream[T](Stream[T]):
 
         result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
-        # Process each cycle separately to preserve alternation context
-        for _, cycle_arc in arc.split_cycles():
+        # Find all cycles that intersect with the query arc
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
+
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+
+            # Check if this cycle intersects with the query arc
+            cycle_intersection = cycle_arc.intersect(arc)
+            if cycle_intersection.null():
+                continue
+
             match self.operator:
                 case SpeedOp.Fast:
-                    # Handle fractional repetitions: x*2.5 = 2 full + 0.5 partial repetition
-                    if self.count > 0:
-                        # Get integer and fractional parts
-                        int_part = int(self.count)  # Number of full repetitions
-                        frac_part = (
-                            self.count - int_part
-                        )  # Fractional part for partial repetition
-
-                        rep_duration = (
-                            cycle_arc.length() / self.count
-                        )  # Duration of each repetition
-
-                        # Add full repetitions - evaluate each separately for proper alternation
-                        for i in range(int_part):
-                            rep_start = cycle_arc.start + i * rep_duration
-                            rep_arc = CycleArc(
-                                CycleTime(rep_start),
-                                CycleTime(rep_start + rep_duration),
-                            )
-
-                            # Evaluate each repetition separately to preserve alternation context
-                            rep_events = self.pattern.unstream(rep_arc)
-                            for span, ev in rep_events:
-                                clipped_span = _create_span(span.active, cycle_arc)
-                                if clipped_span is not None:
-                                    if span.whole is not None:
-                                        clipped_span = CycleSpan(
-                                            clipped_span.active, span.whole
-                                        )
-                                    elif span.active != clipped_span.active:
-                                        clipped_span = CycleSpan(
-                                            clipped_span.active, span.active
-                                        )
-                                    new_ev = Ev(clipped_span, ev.val)
-                                    result = ev_heap_push(new_ev, result)
-
-                        # Add partial repetition if needed
-                        if frac_part > 0:
-                            partial_start = cycle_arc.start + int_part * rep_duration
-                            partial_end = partial_start + frac_part * rep_duration
-                            partial_arc = CycleArc(
-                                CycleTime(partial_start), CycleTime(partial_end)
-                            )
-
-                            # Unstream the partial repetition
-                            partial_pattern_events = self.pattern.unstream(partial_arc)
-                            for _, ev in partial_pattern_events:
-                                clipped_span = _create_span(ev.span.active, cycle_arc)
-                                if clipped_span is not None:
-                                    if ev.span.whole is not None:
-                                        span = CycleSpan(
-                                            clipped_span.active, ev.span.whole
-                                        )
-                                    elif ev.span.active != clipped_span.active:
-                                        span = CycleSpan(
-                                            clipped_span.active, ev.span.active
-                                        )
-                                    else:
-                                        span = clipped_span
-                                    new_ev = Ev(span, ev.val)
-                                    result = ev_heap_push(new_ev, result)
-
+                    result = self._unstream_fast(self.count, arc, cycle_arc, result)
                 case SpeedOp.Slow:
-                    # Slow by factor N is just fast by 1/N
-                    fast_stream = SpeedStream(
-                        self.pattern, SpeedOp.Fast, Fraction(1) / self.count
-                    )
-                    cycle_events = fast_stream.unstream(cycle_arc)
-                    for _, ev in cycle_events:
-                        result = ev_heap_push(ev, result)
+                    result = self._unstream_fast(1 / self.count, arc, cycle_arc, result)
 
         return result
 
@@ -706,50 +860,74 @@ class RepeatStream[T](Stream[T]):
 
         result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
-        # Process each cycle separately (following Haskell implementation)
-        for _, cycle_arc in arc.split_cycles():
+        # Find all cycles that intersect with the query arc
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
+
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+
             int_part = int(self.count)
             frac_part = self.count - int_part
-            rep_duration = cycle_arc.length() / self.count
+            rep_duration = Fraction(1) / self.count  # Use canonical cycle duration
 
             # Full repetitions within this cycle
             for i in range(int_part):
-                rep_start = cycle_arc.start + i * rep_duration
-                rep_end = rep_start + rep_duration
-                rep_arc = CycleArc(CycleTime(rep_start), CycleTime(rep_end))
+                rep_start = cycle_start + i * rep_duration
 
-                # Evaluate pattern separately for each repetition to preserve context
-                pattern_events = self.pattern.unstream(rep_arc)
-                for _, ev in pattern_events:
-                    clipped_span = _create_span(ev.span.active, cycle_arc)
-                    if clipped_span is not None:
-                        if ev.span.whole is not None:
-                            clipped_span = CycleSpan(clipped_span.active, ev.span.whole)
-                        elif ev.span.active != clipped_span.active:
-                            clipped_span = CycleSpan(
-                                clipped_span.active, ev.span.active
-                            )
-                        new_ev = Ev(clipped_span, ev.val)
-                        result = ev_heap_push(new_ev, result)
+                # Only include the repetition if the query arc contains its start point
+                if arc.start <= rep_start < arc.end:
+                    # Evaluate pattern for the full cycle to get canonical behavior
+                    cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+                    pattern_events = self.pattern.unstream(cycle_arc)
+                    for _, ev in pattern_events:
+                        # Scale the event to fit within the repetition
+                        event_start_ratio = ev.span.active.start - cycle_start
+                        event_end_ratio = ev.span.active.end - cycle_start
+
+                        scaled_start = rep_start + event_start_ratio * rep_duration
+                        scaled_end = rep_start + event_end_ratio * rep_duration
+                        scaled_arc = CycleArc(
+                            CycleTime(scaled_start), CycleTime(scaled_end)
+                        )
+
+                        scaled_span = CycleSpan(scaled_arc, None)
+                        scaled_ev = Ev(scaled_span, ev.val)
+                        result = ev_heap_push(scaled_ev, result)
 
             # Partial repetition within this cycle
             if frac_part > 0:
-                partial_start = cycle_arc.start + int_part * rep_duration
+                partial_start = cycle_start + int_part * rep_duration
                 partial_end = partial_start + frac_part * rep_duration
-                partial_arc = CycleArc(CycleTime(partial_start), CycleTime(partial_end))
 
-                pattern_events = self.pattern.unstream(partial_arc)
-                for _, ev in pattern_events:
-                    clipped_span = _create_span(ev.span.active, cycle_arc)
-                    if clipped_span is not None:
-                        if ev.span.whole is not None:
-                            span = CycleSpan(clipped_span.active, ev.span.whole)
-                        elif ev.span.active != clipped_span.active:
-                            span = CycleSpan(clipped_span.active, ev.span.active)
-                        else:
-                            span = clipped_span
-                        new_ev = Ev(span, ev.val)
-                        result = ev_heap_push(new_ev, result)
+                # Only include the partial repetition if the query arc contains its start point
+                if arc.start <= partial_start < arc.end:
+                    # Evaluate pattern for the full cycle to get canonical behavior
+                    cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+                    pattern_events = self.pattern.unstream(cycle_arc)
+                    for _, ev in pattern_events:
+                        # Scale the event to fit within the partial repetition, clipped
+                        event_start_ratio = ev.span.active.start - cycle_start
+                        event_end_ratio = ev.span.active.end - cycle_start
+                        partial_duration = frac_part * rep_duration
+
+                        scaled_start = (
+                            partial_start + event_start_ratio * partial_duration
+                        )
+                        scaled_end = partial_start + event_end_ratio * partial_duration
+
+                        # Clip to partial repetition boundaries
+                        scaled_start = max(scaled_start, partial_start)
+                        scaled_end = min(scaled_end, partial_end)
+
+                        if scaled_start < scaled_end:
+                            scaled_arc = CycleArc(
+                                CycleTime(scaled_start), CycleTime(scaled_end)
+                            )
+                            scaled_span = CycleSpan(scaled_arc, None)
+                            scaled_ev = Ev(scaled_span, ev.val)
+                            result = ev_heap_push(scaled_ev, result)
 
         return result
 

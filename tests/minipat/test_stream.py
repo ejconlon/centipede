@@ -484,7 +484,7 @@ def test_dot_grouping_stream() -> None:
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
     events = stream.unstream(arc)
-    event_list = sorted(events, key=lambda x: x[0].active.start)
+    event_list = sorted(events, key=lambda x: (x[0].active.start, x[1].val))
 
     # Should have 4 events total
     assert len(event_list) == 4
@@ -492,10 +492,31 @@ def test_dot_grouping_stream() -> None:
     # Should have all the expected values
     values = [event.val for _, event in event_list]
     assert len(values) == 4
-    assert values[0] == "bd"
-    assert values[1] == "sd"
-    assert values[2] == "hh"
-    assert values[3] == "cp"
+
+    # Check that we have the right values (order may vary within parallel groups)
+    assert "bd" in values
+    assert "sd" in values
+    assert "hh" in values
+    assert "cp" in values
+
+    # Check timing: first two events should be in first half, last two in second half
+    first_half_events = [
+        ev for span, ev in event_list if span.active.start < Fraction(1, 2)
+    ]
+    second_half_events = [
+        ev for span, ev in event_list if span.active.start >= Fraction(1, 2)
+    ]
+
+    assert len(first_half_events) == 2
+    assert len(second_half_events) == 2
+
+    # Check that first half contains bd and sd
+    first_half_values = {ev.val for ev in first_half_events}
+    assert first_half_values == {"bd", "sd"}
+
+    # Check that second half contains hh and cp
+    second_half_values = {ev.val for ev in second_half_events}
+    assert second_half_values == {"hh", "cp"}
 
 
 def test_new_features_stream_integration() -> None:

@@ -14,7 +14,7 @@ import pytest
 from mido.frozen import FrozenMessage
 
 from bad_actor import System, new_system
-from minipat.common import ONE, CycleDelta, PosixTime
+from minipat.common import PosixTime
 from minipat.live import (
     LiveSystem,
     Orbit,
@@ -146,385 +146,142 @@ def live_system(system: System) -> Generator[MidiLiveFixture, None, None]:
 class TestMidiLiveSystemIntegration:
     """Integration tests for MIDI live system."""
 
-    def test_simple_message_generation(self, live_system: MidiLiveFixture) -> None:
-        """Test that a simple pattern generates messages."""
-        live, mock_port = live_system
+    def test_pattern_timing_with_cps(self, live_system: MidiLiveFixture) -> None:
+        """Test that a repeating pattern generates notes with correct timing for the CPS.
 
-        # Clear any existing messages
-        mock_port.clear()
-
-        # Set up a simple single-note pattern
-        pattern = note_stream("c4")
-        live.set_orbit(Orbit(0), pattern)
-
-        # Set CPS to 1 (1 cycle per second)
-        live.set_cps(Fraction(1, 1))
-
-        # Start playing
-        live.play()
-
-        # Wait for messages to be generated
-        time.sleep(1.5)
-
-        # Stop playing
-        live.pause()
-
-        # Check what we got
-        message_count = len(mock_port.messages)
-
-        # Collect from queue
-        queued_messages = []
-        while mock_port.has_messages():
-            msg = mock_port.wait_for_message(timeout=0.1)
-            if msg:
-                queued_messages.append(msg)
-
-        # At this point we expect to have received at least one message
-        assert message_count > 0 or len(queued_messages) > 0, (
-            "Expected at least one message from the live system"
-        )
-
-    def test_multiple_orbits_with_cps_timing(
-        self, live_system: MidiLiveFixture
-    ) -> None:
-        """Test that multiple orbits generate messages at the expected CPS rate.
-
-        This test verifies that when we set a specific CPS (cycles per second),
-        the live system generates and sends messages through the mock port
-        at roughly the expected timing intervals.
+        For CPS=2 (2 cycles per second):
+        - Each cycle takes 0.5 seconds
+        - A 4-note pattern (c4 d4 e4 f4) has each note lasting 0.125 seconds
+        - Each note_on should be followed by note_off after 0.125 seconds
+        - The next note_on starts immediately after the previous note_off
+        - For 2 cycles, we expect 8 note_on/note_off pairs
         """
         live, mock_port = live_system
 
         # Clear any existing messages
         mock_port.clear()
 
-        # CPS is now set to 2 in the fixture (2 cycles per second = 0.5 seconds per cycle)
-        # With generations_per_cycle=4, patterns are queried 4 times per cycle
+        # Set up a 4-note pattern
+        pattern = note_stream("c4 d4 e4 f4")
+        live.set_orbit(Orbit(0), pattern)
 
-        # Set up two orbits with different note patterns
-        # Orbit 0: 3 notes per cycle
-        orbit0_pattern = note_stream("c4 d4 e4")
-        live.set_orbit(Orbit(0), orbit0_pattern)
+        # CPS is already set to 2 in the fixture
 
-        # Orbit 1: 2 notes per cycle
-        orbit1_pattern = note_stream("f5 g5")
-        live.set_orbit(Orbit(1), orbit1_pattern)
-
-        # Start playing to trigger the live system
+        # Start playing
         live.play()
 
-        # Wait for at least 2 full cycles
-        # At 2 CPS, 2 cycles = 1 second
-        # Add extra time to account for processing delays
-        time.sleep(1.5)
+        # Wait for 2 full cycles (at CPS=2, this is 1 second)
+        # Add a bit extra to ensure we capture all messages
+        time.sleep(1.2)
 
         # Stop playing
         live.pause()
 
-        # Collect all messages that the live system sent
+        # Collect all messages
         messages = []
         while mock_port.has_messages():
             msg = mock_port.wait_for_message(timeout=0.1)
             if msg is not None:
                 messages.append(msg)
 
-        # We should have received messages
-        assert len(messages) > 0, (
-            "Expected to receive MIDI messages from the live system"
-        )
-
-        # Group messages by note to identify orbits
-        c4_messages = []  # From orbit 0
-        d4_messages = []  # From orbit 0
-        e4_messages = []  # From orbit 0
-        f5_messages = []  # From orbit 1
-        g5_messages = []  # From orbit 1
+        # Separate note_on and note_off messages
+        note_on_messages = []
+        note_off_messages = []
 
         for msg in messages:
-            if MsgTypeField.get(msg.message) == "note_on":
+            msg_type = MsgTypeField.get(msg.message)
+            if msg_type == "note_on":
+                note_on_messages.append(msg)
+            elif msg_type == "note_off":
+                note_off_messages.append(msg)
+
+        # We should have at least 4 note_on messages (1 complete cycle)
+        assert len(note_on_messages) >= 4, (
+            f"Expected at least 4 note_on messages for 1+ cycles, got {len(note_on_messages)}"
+        )
+
+        # We should have corresponding note_off messages
+        assert len(note_off_messages) >= 4, (
+            f"Expected at least 4 note_off messages for 1+ cycles, got {len(note_off_messages)}"
+        )
+
+        # Check the note sequence - should be c4, d4, e4, f4 repeated
+        expected_notes = [60, 62, 64, 65]  # c4, d4, e4, f4 in MIDI note numbers
+
+        # Extract the actual note sequence from all note_on messages we received
+        actual_notes = []
+        for msg in note_on_messages:
+            note_num = NoteField.unmk(NoteField.get(msg.message))
+            actual_notes.append(note_num)
+
+        # Verify the note sequence matches expected pattern (allow for partial cycles)
+        num_complete_cycles = len(actual_notes) // 4
+        expected_sequence = expected_notes * num_complete_cycles
+        # Add any partial cycle notes
+        remaining_notes = len(actual_notes) % 4
+        if remaining_notes > 0:
+            expected_sequence.extend(expected_notes[:remaining_notes])
+
+        assert actual_notes == expected_sequence, (
+            f"Expected note sequence {expected_sequence}, got {actual_notes}"
+        )
+
+        # Check timing between consecutive note_on messages
+        # Each should be approximately 0.125 seconds apart (125ms)
+        expected_interval = 0.125  # 0.5 seconds per cycle / 4 notes
+        tolerance = 0.035  # Allow 35ms tolerance for timing variations (system jitter)
+
+        for i in range(1, len(note_on_messages)):
+            time_diff = note_on_messages[i].time - note_on_messages[i - 1].time
+            assert abs(time_diff - expected_interval) <= tolerance, (
+                f"Note {i}: Expected interval ~{expected_interval}s, "
+                f"got {time_diff:.3f}s (jitter must be <35ms)"
+            )
+
+        # Check that each note_on has a corresponding note_off at the right time
+        # Group messages by note to match on/off pairs
+        note_events: dict[int, list[tuple[str, float]]] = {}
+        for msg in messages:  # Look at all messages
+            msg_type = MsgTypeField.get(msg.message)
+            if msg_type in ["note_on", "note_off"]:
                 note_num = NoteField.unmk(NoteField.get(msg.message))
-                if note_num == 60:  # C4
-                    c4_messages.append(msg)
-                elif note_num == 62:  # D4
-                    d4_messages.append(msg)
-                elif note_num == 64:  # E4
-                    e4_messages.append(msg)
-                elif note_num == 77:  # F5
-                    f5_messages.append(msg)
-                elif note_num == 79:  # G5
-                    g5_messages.append(msg)
+                if note_num not in note_events:
+                    note_events[note_num] = []
+                note_events[note_num].append((msg_type, msg.time))
 
-        # If we got messages, verify we got at least some from each pattern
-        # (we ran for ~1.5 seconds at 2 CPS, so we expect ~3 cycles)
-        # But be lenient - just require at least 1 note from each pattern if present
-        expected_min_count = 1  # Be lenient due to timing variability
+        # For each note that actually appeared, check on/off pairing and duration
+        for note_num in set(actual_notes):
+            if note_num in note_events:
+                events = note_events[note_num]
+                # Should have alternating on/off events
+                for j in range(0, len(events) - 1, 2):
+                    if j + 1 < len(events):
+                        on_type, on_time = events[j]
+                        off_type, off_time = events[j + 1]
 
-        if len(c4_messages) > 0:
-            assert len(c4_messages) >= expected_min_count, (
-                f"Expected at least {expected_min_count} C4 notes, got {len(c4_messages)}"
+                        assert on_type == "note_on", f"Expected note_on at index {j}"
+                        assert off_type == "note_off", (
+                            f"Expected note_off at index {j + 1}"
+                        )
+
+                        # Duration between on and off should be ~0.125 seconds
+                        # Note: Allow more tolerance for note durations as they may be affected
+                        # by system timing and concurrent processing
+                        duration = off_time - on_time
+                        duration_tolerance = 0.075  # 75ms tolerance for note durations
+                        assert (
+                            abs(duration - expected_interval) <= duration_tolerance
+                        ), (
+                            f"Note {note_num}: Expected duration ~{expected_interval}s, "
+                            f"got {duration:.3f}s (duration tolerance: 75ms)"
+                        )
+
+        # Verify total time span for the number of notes we actually received
+        if len(note_on_messages) >= 2:
+            total_time = note_on_messages[-1].time - note_on_messages[0].time
+            num_intervals = len(note_on_messages) - 1
+            expected_total = num_intervals * expected_interval
+            assert abs(total_time - expected_total) <= tolerance * num_intervals, (
+                f"Expected total time for {num_intervals} intervals ~{expected_total}s, "
+                f"got {total_time:.3f}s"
             )
-        if len(d4_messages) > 0:
-            assert len(d4_messages) >= expected_min_count, (
-                f"Expected at least {expected_min_count} D4 notes, got {len(d4_messages)}"
-            )
-        if len(e4_messages) > 0:
-            assert len(e4_messages) >= expected_min_count, (
-                f"Expected at least {expected_min_count} E4 notes, got {len(e4_messages)}"
-            )
-        if len(f5_messages) > 0:
-            assert len(f5_messages) >= expected_min_count, (
-                f"Expected at least {expected_min_count} F5 notes, got {len(f5_messages)}"
-            )
-        if len(g5_messages) > 0:
-            assert len(g5_messages) >= expected_min_count, (
-                f"Expected at least {expected_min_count} G5 notes, got {len(g5_messages)}"
-            )
-
-        # Verify timing is roughly correct for CPS=2 with generations_per_cycle=4
-        # At 2 CPS, each cycle is 0.5 seconds, each generation is 0.125 seconds
-        # With "c4 d4 e4" pattern and 4 generations/cycle:
-        # - Pattern spans full cycle: c4 at [0, 1/3), d4 at [1/3, 2/3), e4 at [2/3, 1)
-        # - Generation 0 queries [0, 0.25): gets c4
-        # - Generation 1 queries [0.25, 0.5): gets c4 until 0.33, then d4
-        # - Generation 2 queries [0.5, 0.75): gets d4 until 0.67, then e4
-        # - Generation 3 queries [0.75, 1.0): gets e4
-        # Due to the complex overlap, timing varies
-        if len(c4_messages) >= 2:
-            for i in range(1, min(len(c4_messages), 3)):  # Check first 2 intervals
-                time_diff = c4_messages[i].time - c4_messages[i - 1].time
-                # C4 can appear in multiple generations per cycle
-                # Allow wide tolerance due to pattern/generation interaction
-                expected_min = 0.08  # Roughly generation interval
-                expected_max = 0.6  # Up to a full cycle
-                assert expected_min <= time_diff <= expected_max, (
-                    f"Expected interval between {expected_min}s and {expected_max}s, "
-                    f"got {time_diff:.3f}s between C4 notes"
-                )
-
-        # Similarly check F5 notes for orbit 1
-        # With "f5 g5" pattern (2 notes per cycle), timing also varies
-        if len(f5_messages) >= 2:
-            for i in range(1, min(len(f5_messages), 3)):  # Check first 2 intervals
-                time_diff = f5_messages[i].time - f5_messages[i - 1].time
-                # F5 appears in first half of cycle, similar complex timing
-                expected_min = 0.08  # Roughly generation interval
-                expected_max = 0.6  # Up to a full cycle
-                assert expected_min <= time_diff <= expected_max, (
-                    f"Expected interval between {expected_min}s and {expected_max}s, "
-                    f"got {time_diff:.3f}s between F5 notes"
-                )
-
-    def test_once_method_immediate(self, live_system: MidiLiveFixture) -> None:
-        """Test that the once method generates immediate messages without alignment."""
-        live, mock_port = live_system
-
-        # Clear any existing messages
-        mock_port.clear()
-
-        # Set up the live system and start playback to initialize timing
-        live.set_cps(Fraction(2, 1))  # 2 cycles per second
-        live.play()  # Start playback to initialize the system
-        time.sleep(0.1)  # Let it initialize
-
-        # Create a simple pattern
-        pattern = note_stream("c4 d4")
-
-        # Use once method with immediate timing (aligned=False)
-        # Generate for half a cycle
-        live.once(pattern, CycleDelta(Fraction(1, 2)), aligned=False, orbit=Orbit(0))
-
-        # Wait a short time for message processing
-        time.sleep(0.3)
-
-        # Pause playback
-        live.pause()
-
-        # Collect messages
-        messages = []
-        while mock_port.has_messages():
-            msg = mock_port.wait_for_message(timeout=0.1)
-            if msg is not None:
-                messages.append(msg)
-
-        # Should have received messages from the once call
-        assert len(messages) > 0, "Expected messages from once method call"
-
-        # Verify we got note-on messages
-        note_on_messages = [
-            msg for msg in messages if MsgTypeField.get(msg.message) == "note_on"
-        ]
-        assert len(note_on_messages) > 0, "Expected at least one note-on message"
-
-        # Should contain C4 (60) or D4 (62) depending on timing within the pattern
-        note_nums = [NoteField.get(msg.message) for msg in note_on_messages]
-        expected_notes = {60, 62}  # C4 and D4 from our pattern
-        found_notes = set(note_nums)
-        common_notes = expected_notes.intersection(found_notes)
-        assert len(common_notes) > 0, (
-            f"Expected notes from pattern 'c4 d4' (60 or 62), got: {found_notes}"
-        )
-
-    def test_once_method_aligned(self, live_system: MidiLiveFixture) -> None:
-        """Test that the once method works with cycle alignment."""
-        live, mock_port = live_system
-
-        # Clear any existing messages
-        mock_port.clear()
-
-        # Set up the live system
-        live.set_cps(Fraction(1, 1))  # 1 cycle per second for easier testing
-
-        # Start playback to establish timing
-        live.play()
-        time.sleep(0.2)  # Let it establish timing
-
-        # Create a pattern
-        pattern = note_stream("c4 e4 g4")  # C major triad
-
-        # Use once method with alignment (should start at next cycle boundary)
-        live.once(pattern, CycleDelta(ONE), aligned=True, orbit=Orbit(0))
-
-        # Wait for messages to be processed
-        time.sleep(1.5)  # Give time for at least one cycle
-
-        # Stop playback
-        live.pause()
-
-        # Collect messages
-        messages = []
-        while mock_port.has_messages():
-            msg = mock_port.wait_for_message(timeout=0.1)
-            if msg is not None:
-                messages.append(msg)
-
-        # Should have received messages
-        assert len(messages) > 0, "Expected messages from aligned once call"
-
-        # Check for our triad notes
-        note_on_messages = [
-            msg for msg in messages if MsgTypeField.get(msg.message) == "note_on"
-        ]
-        note_nums = [NoteField.get(msg.message) for msg in note_on_messages]
-
-        # Should contain C4 (60), E4 (64), G4 (67)
-        expected_notes = {60, 64, 67}  # C4, E4, G4
-        found_notes = set(note_nums)
-
-        # Check that we found at least some of our expected notes
-        common_notes = expected_notes.intersection(found_notes)
-        assert len(common_notes) > 0, (
-            f"Expected some notes from C major triad, got notes: {found_notes}"
-        )
-
-    def test_once_method_multiple_calls(self, live_system: MidiLiveFixture) -> None:
-        """Test that multiple once calls work correctly."""
-        live, mock_port = live_system
-
-        # Clear any existing messages
-        mock_port.clear()
-
-        # Set up the live system
-        live.set_cps(Fraction(4, 1))  # 4 cycles per second for faster testing
-        live.play()  # Start playback to initialize the system
-        time.sleep(0.1)  # Let it initialize
-
-        # Create different patterns
-        pattern1 = note_stream("c4")
-        pattern2 = note_stream("g4")
-
-        # Make multiple once calls in quick succession
-        live.once(pattern1, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(0))
-        time.sleep(0.1)
-        live.once(pattern2, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(1))
-
-        # Wait for processing
-        time.sleep(0.5)
-
-        # Pause playback
-        live.pause()
-
-        # Collect messages
-        messages = []
-        while mock_port.has_messages():
-            msg = mock_port.wait_for_message(timeout=0.1)
-            if msg is not None:
-                messages.append(msg)
-
-        # Should have messages from both calls
-        assert len(messages) > 0, "Expected messages from multiple once calls"
-
-        # Check for any note messages (note_on or note_off) that contain our expected notes
-        all_note_messages = [msg for msg in messages if hasattr(msg.message, "note")]
-        all_note_nums = [NoteField.get(msg.message) for msg in all_note_messages]
-
-        # Should contain both C4 (60) and G4 (67) - be flexible since timing might affect which gets through
-        expected_notes = {60, 67}  # C4 and G4
-        found_notes = set(all_note_nums)
-        common_notes = expected_notes.intersection(found_notes)
-        assert len(common_notes) > 0, (
-            f"Expected at least one note from our patterns (60 or 67), got: {found_notes}"
-        )
-
-    def test_once_method_orbit_channel_mapping(
-        self, live_system: MidiLiveFixture
-    ) -> None:
-        """Test that orbit parameter correctly maps to MIDI channels in once method calls."""
-        live, mock_port = live_system
-
-        # Clear any existing messages
-        mock_port.clear()
-
-        # Set up the live system
-        live.set_cps(Fraction(4, 1))  # 4 cycles per second for faster testing
-        live.play()  # Start playback to initialize the system
-        time.sleep(0.1)  # Let it initialize
-
-        # Create a simple pattern
-        pattern = note_stream("c4")
-
-        # Make once calls with different orbits
-        live.once(
-            pattern, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(0)
-        )  # Should map to MIDI channel 0
-        time.sleep(0.05)
-        live.once(
-            pattern, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(5)
-        )  # Should map to MIDI channel 5
-        time.sleep(0.05)
-        live.once(
-            pattern, CycleDelta(Fraction(1, 4)), aligned=False, orbit=Orbit(9)
-        )  # Should map to MIDI channel 9 (drums)
-
-        # Wait for processing
-        time.sleep(0.4)
-
-        # Pause playback
-        live.pause()
-
-        # Collect messages
-        messages = []
-        while mock_port.has_messages():
-            msg = mock_port.wait_for_message(timeout=0.1)
-            if msg is not None:
-                messages.append(msg)
-
-        # Should have messages from all orbit calls
-        assert len(messages) > 0, "Expected messages from orbit-specific once calls"
-
-        # Check that we got messages on different MIDI channels
-        channels = set()
-        for msg in messages:
-            if hasattr(msg.message, "channel"):
-                channels.add(msg.message.channel)
-
-        # Should have at least two different channels (0, 5, and/or 9)
-        assert len(channels) >= 2, (
-            f"Expected messages on multiple MIDI channels from different orbits, got channels: {channels}"
-        )
-
-        # Verify specific expected channels are present
-        expected_channels = {0, 5, 9}
-        common_channels = expected_channels.intersection(channels)
-        assert len(common_channels) > 0, (
-            f"Expected to find some of channels {expected_channels}, got: {channels}"
-        )

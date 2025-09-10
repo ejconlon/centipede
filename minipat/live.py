@@ -373,6 +373,10 @@ class TimerTask[T](Task):
         frac_cycle_length = Fraction(1) / self._env.generations_per_cycle
         float_cycle_length = float(frac_cycle_length)
 
+        # Debug: Log the actual generations_per_cycle value
+        # with open("midi_debug.log", "a") as f:
+        #     f.write(f"TimerTask: generations_per_cycle={self._env.generations_per_cycle} frac_cycle_length={frac_cycle_length} float_cycle_length={float_cycle_length}\n")
+
         while not halt.is_set():
             # Get current state and decide what to do
             with self._transport_state_mutex as state:
@@ -503,6 +507,10 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
         cycle_length = Fraction(1) / self._env.generations_per_cycle
         cycle_end = CycleTime(cycle_start + cycle_length)
         arc = CycleArc(cycle_start, cycle_end)
+
+        # Debug: Log generation details
+        # with open("midi_debug.log", "a") as f:
+        #     f.write(f"GenerateEvents: generations_per_cycle={self._env.generations_per_cycle} cycle_length={cycle_length} arc={arc.start}-{arc.end}\n")
 
         # Check if any orbits are soloed
         has_solo = any(
