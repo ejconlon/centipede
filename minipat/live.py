@@ -561,8 +561,9 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
     ) -> None:
         """Set the stream for a specific orbit."""
         # Get existing orbit state or create new one
-        existing_state = self._pattern_state.orbits.get(orbit)
-        if existing_state is None:
+        if self._pattern_state.orbits.contains(orbit):
+            existing_state = self._pattern_state.orbits.get(orbit)
+        else:
             existing_state = OrbitState.initial()
         updated_state = OrbitState(
             stream=stream, muted=existing_state.muted, solo=existing_state.solo
@@ -579,8 +580,9 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
     def _mute_orbit(self, logger: Logger, orbit: Orbit, muted: bool) -> None:
         """Mute or unmute an orbit."""
         # Get existing orbit state or create new one
-        existing_state = self._pattern_state.orbits.get(orbit)
-        if existing_state is None:
+        if self._pattern_state.orbits.contains(orbit):
+            existing_state = self._pattern_state.orbits.get(orbit)
+        else:
             existing_state = OrbitState.initial()
         updated_state = OrbitState(
             stream=existing_state.stream, muted=muted, solo=existing_state.solo
@@ -593,8 +595,9 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
     def _solo_orbit(self, logger: Logger, orbit: Orbit, solo: bool) -> None:
         """Solo or unsolo an orbit."""
         # Get existing orbit state or create new one
-        existing_state = self._pattern_state.orbits.get(orbit)
-        if existing_state is None:
+        if self._pattern_state.orbits.contains(orbit):
+            existing_state = self._pattern_state.orbits.get(orbit)
+        else:
             existing_state = OrbitState.initial()
         updated_state = OrbitState(
             stream=existing_state.stream, muted=existing_state.muted, solo=solo
