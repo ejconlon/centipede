@@ -3,6 +3,7 @@ name = "centipede"
 authors = [{name = "Eric Conlon"}]
 version = "0.1.0"
 description = "a python synth/tracker"
+license = "BSD3"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

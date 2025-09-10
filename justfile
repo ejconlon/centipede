@@ -70,6 +70,10 @@ docs:
   rm -rf docs
   {{python}} -m pdoc -o docs -d markdown --include-undocumented {{packages}}
 
+# license check
+license-check:
+  .venv/bin/python -m licensecheck --only-licenses MIT BSD
+
 # Start fluidsynth as midi target
 fluid:
   fluidsynth -qsi
