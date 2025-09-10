@@ -134,7 +134,8 @@ def live_system(system: System) -> Generator[MidiLiveFixture, None, None]:
     """Create a live MIDI system with mock output."""
     mock_port = MockMidiPort()
     # Patch where mido.open_output is actually called
-    with patch("minipat.midi.mido.open_output", return_value=mock_port):
+    with patch("minipat.midi.mido.open_output", return_value=mock_port), \
+         patch("minipat.midi.mido.get_output_names", return_value=["test_port"]):
         # Pass CPS=2 directly to the constructor
         live = start_midi_live_system(system, "test_port", cps=Fraction(2, 1))
         try:
