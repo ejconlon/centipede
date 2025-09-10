@@ -229,13 +229,13 @@ class TestMidiLiveSystemIntegration:
         # Check timing between consecutive note_on messages
         # Each should be approximately 0.125 seconds apart (125ms)
         expected_interval = 0.125  # 0.5 seconds per cycle / 4 notes
-        tolerance = 0.035  # Allow 35ms tolerance for timing variations (system jitter)
+        tolerance = 0.030  # Allow 30ms tolerance for timing variations (system jitter)
 
         for i in range(1, len(note_on_messages)):
             time_diff = note_on_messages[i].time - note_on_messages[i - 1].time
             assert abs(time_diff - expected_interval) <= tolerance, (
                 f"Note {i}: Expected interval ~{expected_interval}s, "
-                f"got {time_diff:.3f}s (jitter must be <35ms)"
+                f"got {time_diff:.3f}s (jitter must be <30ms)"
             )
 
         # Check that each note_on has a corresponding note_off at the right time
