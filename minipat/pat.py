@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from functools import partial
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Iterable, Optional, Tuple, cast, override
 
 from minipat.common import ONE_HALF, PartialMatchException, ignore_arg
 from spiny import Box, PSeq
@@ -584,14 +584,14 @@ def pat_fold[T, Z](fn: Callable[[Box[Z], T], None]) -> Callable[[Z, Pat[T]], Z]:
         A function that folds over patterns
     """
 
-    def visit(box: Box[Z], pf: PatF[T, None]) -> None:
+    def elim(box: Box[Z], pf: PatF[T, None]) -> None:
         match pf:
             case PatPure(val):
                 fn(box, val)
             case _:
                 pass
 
-    k: Callable[[Box[Z], Pat[T]], None] = pat_cata_env(visit)
+    k: Callable[[Box[Z], Pat[T]], None] = pat_cata_env(elim)
 
     def wrapper(start: Z, pat: Pat[T]) -> Z:
         box = Box(start)
@@ -599,3 +599,102 @@ def pat_fold[T, Z](fn: Callable[[Box[Z], T], None]) -> Callable[[Z, Pat[T]], Z]:
         return box.value
 
     return wrapper
+
+
+def pat_bind[T, U](fn: Callable[[T], Pat[U]]) -> Callable[[Pat[T]], Pat[U]]:
+    """Create a pattern binding function.
+
+    Args:
+        fn: The binding function
+
+    Returns:
+        A function that binds over patterns
+    """
+
+    def elim(pf: PatF[T, Pat[U]]) -> Pat[U]:
+        match pf:
+            case PatPure(value):
+                return fn(value)
+            case _:
+                return Pat(cast(PatF[U, Pat[U]], pf))
+
+    return pat_cata(elim)
+
+
+class PatBinder[T, U](metaclass=ABCMeta):
+    @abstractmethod
+    def bind(self, value: T) -> Pat[U]:
+        raise NotImplementedError()
+
+    @staticmethod
+    def identity() -> PatBinder[T, T]:
+        return _ID_BINDER_INSTANCE
+
+    @staticmethod
+    def mk(fn: Callable[[T], Pat[U]]) -> PatBinder[T, U]:
+        return FnBinder(fn)
+
+    def andThen[V](self, other: PatBinder[U, V]) -> PatBinder[T, V]:
+        return ChainBinder.link(self, other)
+
+
+class FnBinder[T, U](PatBinder[T, U]):
+    def __init__(self, fn: Callable[[T], Pat[U]]) -> None:
+        self._fn = fn
+
+    @override
+    def bind(self, value: T) -> Pat[U]:
+        return self._fn(value)
+
+
+class IdBinder[T](PatBinder[T, T]):
+    @override
+    def bind(self, value: T) -> Pat[T]:
+        return Pat.pure(value)
+
+
+_ID_BINDER_INSTANCE: IdBinder[Any] = IdBinder()
+
+
+class ChainBinder[T, V](PatBinder[T, V]):
+    def __init__(self, chain: PSeq[PatBinder[Any, Any]]) -> None:
+        self._chain = chain
+
+    @staticmethod
+    def link[U](b1: PatBinder[T, U], b2: PatBinder[U, V]) -> PatBinder[T, V]:
+        chain: PSeq[PatBinder[Any, Any]]
+        if isinstance(b1, IdBinder):
+            return cast(PatBinder[T, V], b2)
+        elif isinstance(b2, IdBinder):
+            return cast(PatBinder[T, V], b1)
+        elif isinstance(b1, ChainBinder):
+            if isinstance(b2, ChainBinder):
+                chain = b1._chain.concat(b2._chain)
+            else:
+                chain = b1._chain.snoc(b2)
+        else:
+            if isinstance(b2, ChainBinder):
+                chain = b2._chain.cons(b1)
+            else:
+                chain = PSeq.mk([b1, b2])
+        return ChainBinder(chain)
+
+    def _unroll(self, acc: Pat[Any], rest: PSeq[PatBinder[Any, Any]]) -> Pat[Any]:
+        while True:
+            x = rest.uncons()
+            if x is None:
+                break
+            else:
+                binder, next_rest = x
+                acc = binder.bind(acc)
+                rest = next_rest
+        return acc
+
+    @override
+    def bind(self, value: T) -> Pat[V]:
+        x = self._chain.uncons()
+        assert x is not None
+        binder, rest = x
+        acc: Pat[Any] = binder.bind(value)
+        acc = self._unroll(acc, rest)
+        return cast(Pat[V], acc)

@@ -11,11 +11,12 @@ from math import ceil, floor
 from typing import Callable, List, Optional, Tuple, override
 
 from minipat.arc import CycleArc, CycleSpan
-from minipat.common import CycleDelta, CycleTime, PartialMatchException
+from minipat.common import ONE, CycleDelta, CycleTime, PartialMatchException
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push
 from minipat.pat import (
     Pat,
     PatAlt,
+    PatBinder,
     PatEuc,
     PatPar,
     PatPoly,
@@ -31,8 +32,6 @@ from minipat.pat import (
 )
 from spiny import PSeq
 from spiny.heapmap import PHeapMap
-
-__all__ = ["MergeStrat", "Stream"]
 
 
 class MergeStrat(Enum):
@@ -243,20 +242,20 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A specialized stream for the pattern
         """
-        return pat_stream(pattern, IdSubst())
+        return pat_stream(pattern, PatBinder.identity())
 
     @staticmethod
-    def pat_subst[U](pattern: Pat[T], subst: Subst[T, U]) -> Stream[U]:
-        """Create a stream from a pattern and substitution
+    def pat_bind[U](pattern: Pat[T], binder: PatBinder[T, U]) -> Stream[U]:
+        """Create a stream from a pattern, binding incrementally.
 
         Args:
             pattern: The pattern to convert to a stream
-            subst: The substitution to apply at the leaves.
+            binder: The binding to apply
 
         Returns:
             A specialized stream for the pattern
         """
-        return pat_stream(pattern, subst)
+        return pat_stream(pattern, binder)
 
     def map[U](self, func: Callable[[T], U]) -> Stream[U]:
         """Map a function over the stream values.
@@ -1079,41 +1078,12 @@ class MapStream[T, U](Stream[U]):
         return result
 
 
-class Subst[T, U](metaclass=ABCMeta):
-    @abstractmethod
-    def replace(self, value: T) -> Stream[U]:
-        raise NotImplementedError()
-
-
-class IdSubst[T](Subst[T, T]):
-    @override
-    def replace(self, value: T) -> Stream[T]:
-        return Stream.pure(value)
-
-
-class NamedSubst[T](Subst[str, T]):
-    @override
-    def replace(self, value: str) -> Stream[T]:
-        labels = value.split(":")
-        stream = self.replace_base(labels[0])
-        for label in labels[1:]:
-            stream = self.replace_xform(label, stream)
-        return stream
-
-    @abstractmethod
-    def replace_base(self, label: str) -> Stream[T]:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def replace_xform(self, label: str, source: Stream[T]) -> Stream[T]:
-        raise NotImplementedError()
-
-
-def pat_stream[T, U](pat: Pat[T], subst: Subst[T, U]) -> Stream[U]:
+def pat_stream[T, U](pat: Pat[T], binder: PatBinder[T, U]) -> Stream[U]:
     """Create a specialized stream for the given pattern.
 
     Args:
         pat: The pattern to create a stream for
+        binder: Any binding to apply to leaves of the pattern
 
     Returns:
         A specialized stream optimized for the pattern's constructor
@@ -1122,49 +1092,54 @@ def pat_stream[T, U](pat: Pat[T], subst: Subst[T, U]) -> Stream[U]:
         case PatSilent():
             return Stream.silent()
         case PatPure(val):
-            return subst.replace(val)
-        case PatSeq(children):
+            rep_pat = binder.bind(val)
+            match rep_pat.unwrap:
+                case PatPure(rep_val):
+                    return Stream.pure(rep_val)
+                case _:
+                    return pat_stream(rep_pat, PatBinder.identity())
+        case PatSeq(pats):
             # Create weighted sequence where each child contributes its weight
-            weighted_children = []
-            for child in children:
+            wpats = []
+            for pat in pats:
                 # Calculate weight based on pattern type
                 weight: Fraction
-                if isinstance(child.unwrap, PatStretch):
+                if isinstance(pat.unwrap, PatStretch):
                     # Stretch patterns take up more space (weight = count)
-                    weight = child.unwrap.count
+                    weight = pat.unwrap.count
                     # Use the inner pattern, not the stretch wrapper
-                    child = child.unwrap.pat
+                    pat = pat.unwrap.pat
                 else:
-                    weight = Fraction(1)
-                weighted_children.append((pat_stream(child, subst), weight))
-            return WeightedSeqStream(weighted_children)
+                    weight = ONE
+                wpats.append((pat_stream(pat, binder), weight))
+            return WeightedSeqStream(wpats)
         case PatPar(pats):
-            child_streams = PSeq.mk(pat_stream(child, subst) for child in pats)
-            return Stream.par(child_streams)
+            ss = PSeq.mk(pat_stream(p, binder) for p in pats)
+            return Stream.par(ss)
         case PatRand(pats):
-            choice_streams = PSeq.mk(pat_stream(choice, subst) for choice in pats)
-            return Stream.rand(choice_streams)
+            ss = PSeq.mk(pat_stream(p, binder) for p in pats)
+            return Stream.rand(ss)
         case PatEuc(pat, hits, steps, rotation):
-            atom_stream = pat_stream(pat, subst)
-            return EucStream.create(atom_stream, hits, steps, rotation)
+            s = pat_stream(pat, binder)
+            return EucStream.create(s, hits, steps, rotation)
         case PatPoly(pats, subdiv):
-            pattern_streams = PSeq.mk(pat_stream(pat, subst) for pat in pats)
-            return Stream.poly(pattern_streams, subdiv)
+            ss = PSeq.mk(pat_stream(p, binder) for p in pats)
+            return Stream.poly(ss, subdiv)
         case PatSpeed(pat, op, factor):
-            pattern_stream = pat_stream(pat, subst)
-            return Stream.speed(pattern_stream, op, factor)
+            s = pat_stream(pat, binder)
+            return Stream.speed(s, op, factor)
         case PatStretch(pat, count):
-            pattern_stream = pat_stream(pat, subst)
-            return Stream.stretch(pattern_stream, count)
+            s = pat_stream(pat, binder)
+            return Stream.stretch(s, count)
         case PatProb(pat, chance):
-            pattern_stream = pat_stream(pat, subst)
-            return Stream.prob(pattern_stream, chance)
+            s = pat_stream(pat, binder)
+            return Stream.prob(s, chance)
         case PatAlt(pats):
-            pattern_streams = PSeq.mk(pat_stream(pat, subst) for pat in pats)
-            return Stream.alt(pattern_streams)
+            ss = PSeq.mk(pat_stream(p, binder) for p in pats)
+            return Stream.alt(ss)
         case PatRepeat(pat, count):
-            pattern_stream = pat_stream(pat, subst)
-            return Stream.repeat(pattern_stream, count)
+            s = pat_stream(pat, binder)
+            return Stream.repeat(s, count)
         case _:
             # This should never happen if all pattern types are handled above
             raise PartialMatchException(pat.unwrap)
