@@ -29,6 +29,9 @@ from spiny.dmap import DMap
 # Pattern Parsing and Rendering
 # =============================================================================
 
+# Default octave for notes specified without octave number
+DEFAULT_OCTAVE = 4
+
 
 class ElemParser[V](metaclass=ABCMeta):
     """Abstract base class for parsing and rendering pattern values.
@@ -102,41 +105,44 @@ class NoteNumElemParser(ElemParser[Note], Singleton):
 
 
 class NoteNameElemParser(ElemParser[Note], Singleton):
-    """Selector for parsing musical note names with octave numbers.
+    """Selector for parsing musical note names with optional octave numbers.
 
     Converts standard musical notation to MIDI note numbers. Supports
     note names (C, D, E, F, G, A, B) with optional sharps (#) or flats (b)
-    and octave numbers.
+    and optional octave numbers. If no octave is specified, uses DEFAULT_OCTAVE.
 
-    Note naming follows standard MIDI convention where:
-    - C4 = 60 (Middle C)
-    - Octaves range from -1 to 9
+    Note naming convention:
+    - C0 = 0 (lowest MIDI note C)
+    - C4 = 48
+    - C5 = 60 (Middle C)
     - Each octave starts at C
 
     Examples:
-        "c4"  -> Note(60)  # Middle C
-        "c#4" -> Note(61)  # C sharp 4
-        "db4" -> Note(61)  # D flat 4 (enharmonic equivalent)
-        "a0"  -> Note(21)  # A0 (lowest A on piano)
-        "c8"  -> Note(108) # C8 (high C)
+        "c5"  -> Note(60)  # Middle C
+        "c#5" -> Note(61)  # C sharp 5
+        "db5" -> Note(61)  # D flat 5 (enharmonic equivalent)
+        "c0"  -> Note(0)   # C0 (MIDI note 0)
+        "c"   -> Note(48)  # C with default octave 4
+        "f#"  -> Note(54)  # F# with default octave 4
 
-    Parsing is case-insensitive: "C4", "c4", and "C4" are all equivalent.
+    Parsing is case-insensitive: "C5", "c5", and "C5" are all equivalent.
 
     Raises:
-        ValueError: If the note name format is invalid, octave is missing,
+        ValueError: If the note name format is invalid
                    or the resulting MIDI note is outside the valid range (0-127)
     """
 
     @override
     def parse(self, s: str) -> Note:
         # Parse note names like "c4" (middle C = 60), "d#4", "eb3", etc.
+        # Also supports notes without octave like "c", "f#", "gb" using DEFAULT_OCTAVE
         note_str = s.lower()
 
         # Note name to semitone mapping (C is 0)
         note_map = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
 
         # Parse note name and octave
-        if len(note_str) < 2:
+        if len(note_str) < 1:
             raise ValueError(f"Invalid note name: {s}")
 
         # Get base note
@@ -156,15 +162,20 @@ class NoteNameElemParser(ElemParser[Note], Singleton):
                 semitone -= 1
                 pos += 1
 
-        # Get octave
-        try:
-            octave = int(note_str[pos:])
-        except ValueError:
-            raise ValueError(f"Invalid octave in note: {s}")
+        # Get octave (use DEFAULT_OCTAVE if not specified)
+        if pos < len(note_str):
+            octave_str = note_str[pos:]
+            # Check if remaining string is a valid number (possibly negative)
+            if octave_str.lstrip("-").isdigit():
+                octave = int(octave_str)
+            else:
+                raise ValueError(f"Invalid octave in note: {s}")
+        else:
+            octave = DEFAULT_OCTAVE
 
-        # Calculate MIDI note number (C4 = 60, so octave 4 starts at 60-12=48 for C)
-        # MIDI note = (octave + 1) * 12 + semitone
-        midi_note = (octave + 1) * 12 + semitone
+        # Calculate MIDI note number (C0 = 0, C4 = 48, C5 = 60)
+        # MIDI note = octave * 12 + semitone
+        midi_note = octave * 12 + semitone
 
         return NoteField.mk(midi_note)
 
@@ -172,7 +183,7 @@ class NoteNameElemParser(ElemParser[Note], Singleton):
     def render(self, value: Note) -> str:
         # Convert MIDI note back to note name
         note_num = int(value)
-        octave = (note_num // 12) - 1
+        octave = note_num // 12
         semitone = note_num % 12
 
         # Semitone to note name mapping (using sharps)

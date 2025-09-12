@@ -204,7 +204,7 @@ class TestMidiLiveSystemIntegration:
         )
 
         # Check the note sequence - should be c4, d4, e4, f4 repeated
-        expected_notes = [60, 62, 64, 65]  # c4, d4, e4, f4 in MIDI note numbers
+        expected_notes = [48, 50, 52, 53]  # c4, d4, e4, f4 in MIDI note numbers
 
         # Extract the actual note sequence from all note_on messages we received
         actual_notes = []

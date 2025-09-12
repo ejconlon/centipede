@@ -65,16 +65,16 @@ def test_note_parsing() -> None:
 
     assert len(event_list) == 3
 
-    # Check that we get the right MIDI notes (C4=60, D4=62, E4=64)
+    # Check that we get the right MIDI notes (C4=48, D4=50, E4=52)
     values = []
     for _, event in event_list:
         note_val = event.val.lookup(NoteKey())
         if note_val is not None:
             values.append(int(note_val))
 
-    assert 60 in values  # C4
-    assert 62 in values  # D4
-    assert 64 in values  # E4
+    assert 48 in values  # C4
+    assert 50 in values  # D4
+    assert 52 in values  # E4
 
 
 def test_velocity_parsing() -> None:
