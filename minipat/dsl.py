@@ -16,7 +16,7 @@ from minipat.combinators import (
     note_stream,
     program_stream,
     value_stream,
-    vel_stream,
+    velocity_stream,
 )
 from minipat.common import CycleDelta, Numeric, numeric_frac
 from minipat.live import LiveSystem, Orbit
@@ -251,7 +251,7 @@ def vel(pat_str: str) -> Flow:
         vel("127 0 64")          # Loud, silent, medium
         vel("100*8")             # Repeat loud velocity 8 times
     """
-    return Flow(vel_stream(pat_str))
+    return Flow(velocity_stream(pat_str))
 
 
 def program(pat_str: str) -> Flow:

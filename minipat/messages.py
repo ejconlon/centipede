@@ -89,7 +89,7 @@ def msg_cc(channel: Channel, control: ControlNum, value: ControlVal) -> FrozenMe
 class MessageField[T, U](metaclass=ABCMeta):
     @classmethod
     @abstractmethod
-    def key(cls) -> Optional[MidiKey[U]]:
+    def key(cls) -> Optional[MidiKey[T]]:
         """If this field has a corresponding attrs key, return it"""
         raise NotImplementedError
 
@@ -155,7 +155,7 @@ class MsgTypeField(MessageField[str, str]):
 class ChannelField(MessageField[Channel, int]):
     @override
     @classmethod
-    def key(cls) -> Optional[MidiKey[int]]:
+    def key(cls) -> Optional[MidiKey[Channel]]:
         return ChannelKey()
 
     @override
@@ -183,7 +183,7 @@ class ChannelField(MessageField[Channel, int]):
 class NoteField(MessageField[Note, int]):
     @override
     @classmethod
-    def key(cls) -> Optional[MidiKey[int]]:
+    def key(cls) -> Optional[MidiKey[Note]]:
         return NoteKey()
 
     @override
@@ -211,7 +211,7 @@ class NoteField(MessageField[Note, int]):
 class VelocityField(MessageField[Velocity, int]):
     @override
     @classmethod
-    def key(cls) -> Optional[MidiKey[int]]:
+    def key(cls) -> Optional[MidiKey[Velocity]]:
         return VelocityKey()
 
     @override
@@ -239,7 +239,7 @@ class VelocityField(MessageField[Velocity, int]):
 class ProgramField(MessageField[Program, int]):
     @override
     @classmethod
-    def key(cls) -> Optional[MidiKey[int]]:
+    def key(cls) -> Optional[MidiKey[Program]]:
         return ProgramKey()
 
     @override
@@ -267,7 +267,7 @@ class ProgramField(MessageField[Program, int]):
 class ControlField(MessageField[ControlNum, int]):
     @override
     @classmethod
-    def key(cls) -> Optional[MidiKey[int]]:
+    def key(cls) -> Optional[MidiKey[ControlNum]]:
         return ControlNumKey()
 
     @override
@@ -295,7 +295,7 @@ class ControlField(MessageField[ControlNum, int]):
 class ValueField(MessageField[ControlVal, int]):
     @override
     @classmethod
-    def key(cls) -> Optional[MidiKey[int]]:
+    def key(cls) -> Optional[MidiKey[ControlVal]]:
         return ControlValKey()
 
     @override

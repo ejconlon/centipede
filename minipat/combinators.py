@@ -6,23 +6,18 @@ from typing import Sequence, override
 from minipat.messages import (
     Channel,
     ChannelField,
-    ChannelKey,
     ControlField,
     ControlNum,
-    ControlNumKey,
     ControlVal,
-    ControlValKey,
+    MessageField,
     MidiAttrs,
     Note,
     NoteField,
-    NoteKey,
     Program,
     ProgramField,
-    ProgramKey,
     ValueField,
     Velocity,
     VelocityField,
-    VelocityKey,
 )
 from minipat.parser import parse_pattern
 from minipat.pat import Pat, PatBinder
@@ -35,7 +30,7 @@ from spiny.dmap import DMap
 # =============================================================================
 
 
-class ElemParser[V](PatBinder[str, V], metaclass=ABCMeta):
+class ElemParser[V](metaclass=ABCMeta):
     """Abstract base class for parsing and rendering pattern values.
 
     An ElemParser handles the bidirectional conversion between string representations
@@ -78,18 +73,6 @@ class ElemParser[V](PatBinder[str, V], metaclass=ABCMeta):
             A string representation suitable for patterns
         """
         raise NotImplementedError
-
-    @override
-    def bind(self, value: str) -> Pat[V]:
-        """Default bind implementation that parses the value into a pure pattern.
-
-        Args:
-            value: String value to parse and bind
-
-        Returns:
-            A pure pattern containing the parsed value
-        """
-        return Pat.pure(self.parse(value))
 
 
 class NoteNumElemParser(ElemParser[Note], Singleton):
@@ -199,7 +182,7 @@ class NoteNameElemParser(ElemParser[Note], Singleton):
         return note_name
 
 
-class VelElemParser(ElemParser[Velocity], Singleton):
+class VelocityElemParser(ElemParser[Velocity], Singleton):
     """Selector for parsing MIDI velocity values.
 
     Handles MIDI velocity values which control the volume/intensity of notes.
@@ -330,51 +313,32 @@ class ControlValElemParser(ElemParser[ControlVal], Singleton):
         return str(value)
 
 
+class ElemBinder(PatBinder[str, MidiAttrs]):
+    def __init__[V, X](self, parser: ElemParser[V], field: MessageField[V, X]) -> None:
+        self._parser = parser
+        self._field = field
+
+    @override
+    def bind(self, value: str) -> Pat[MidiAttrs]:
+        parsed = self._parser.parse(value)
+        key = self._field.key()
+        assert key is not None
+        attrs = DMap.singleton(key, parsed)
+        return Pat.pure(attrs)
+
+
 # =============================================================================
 # Pattern Stream Functions
 # =============================================================================
 
 
-def _convert_midinote(s: str) -> MidiAttrs:
-    """Convert numeric note to MIDI attributes."""
-    note = NoteNumElemParser().parse(s)
-    return DMap.singleton(NoteKey(), note)
-
-
-def _convert_note(s: str) -> MidiAttrs:
-    """Convert note name to MIDI attributes."""
-    note = NoteNameElemParser().parse(s)
-    return DMap.singleton(NoteKey(), note)
-
-
-def _convert_vel(s: str) -> MidiAttrs:
-    """Convert velocity to MIDI attributes."""
-    velocity = VelElemParser().parse(s)
-    return DMap.singleton(VelocityKey(), velocity)
-
-
-def _convert_channel(s: str) -> MidiAttrs:
-    """Convert channel to MIDI attributes."""
-    channel = ChannelElemParser().parse(s)
-    return DMap.singleton(ChannelKey(), channel)
-
-
-def _convert_program(s: str) -> MidiAttrs:
-    """Convert program to MIDI attributes."""
-    program = ProgramElemParser().parse(s)
-    return DMap.singleton(ProgramKey(), program)
-
-
-def _convert_control(s: str) -> MidiAttrs:
-    """Convert control number to MIDI attributes."""
-    control_num = ControlNumElemParser().parse(s)
-    return DMap.singleton(ControlNumKey(), control_num)
-
-
-def _convert_value(s: str) -> MidiAttrs:
-    """Convert control value to MIDI attributes."""
-    control_val = ControlValElemParser().parse(s)
-    return DMap.singleton(ControlValKey(), control_val)
+_NOTE_NAME_BINDER = ElemBinder(NoteNameElemParser(), NoteField())
+_NOTE_NUM_BINDER = ElemBinder(NoteNumElemParser(), NoteField())
+_VELOCITY_BINDER = ElemBinder(VelocityElemParser(), VelocityField())
+_CHANNEL_BINDER = ElemBinder(ChannelElemParser(), ChannelField())
+_PROGRAM_BINDER = ElemBinder(ProgramElemParser(), ProgramField())
+_CONTROL_NUM_BINDER = ElemBinder(ControlNumElemParser(), ControlField())
+_CONTROL_VAL_BINDER = ElemBinder(ControlValElemParser(), ValueField())
 
 
 def midinote_stream(s: str) -> Stream[MidiAttrs]:
@@ -388,7 +352,7 @@ def midinote_stream(s: str) -> Stream[MidiAttrs]:
         midinote("36 ~ 42")      # Kick, rest, snare pattern
         midinote("[60,64,67]")   # C major chord (simultaneous)
     """
-    return Stream.pat(parse_pattern(s).map(_convert_midinote))
+    return Stream.pat_bind(parse_pattern(s), _NOTE_NUM_BINDER)
 
 
 def note_stream(s: str) -> Stream[MidiAttrs]:
@@ -403,10 +367,10 @@ def note_stream(s: str) -> Stream[MidiAttrs]:
         note("[c4,e4,g4]")       # C major chord (simultaneous)
         note("c#4 db5 f4")       # Mixed sharps and flats
     """
-    return Stream.pat(parse_pattern(s).map(_convert_note))
+    return Stream.pat_bind(parse_pattern(s), _NOTE_NAME_BINDER)
 
 
-def vel_stream(s: str) -> Stream[MidiAttrs]:
+def velocity_stream(s: str) -> Stream[MidiAttrs]:
     """Create stream from velocity values.
 
     Parses a pattern string containing MIDI velocity values (0-127)
@@ -417,7 +381,7 @@ def vel_stream(s: str) -> Stream[MidiAttrs]:
         vel_stream("127 0 64")          # Loud, silent, medium
         vel_stream("100*8")             # Repeat loud velocity 8 times
     """
-    return Stream.pat(parse_pattern(s).map(_convert_vel))
+    return Stream.pat_bind(parse_pattern(s), _VELOCITY_BINDER)
 
 
 def channel_stream(s: str) -> Stream[MidiAttrs]:
@@ -432,7 +396,7 @@ def channel_stream(s: str) -> Stream[MidiAttrs]:
         channel_stream("15 ~ 0")         # Channel 16, rest, Channel 1
         channel_stream("9*4")            # Repeat Channel 10 (drums) 4 times
     """
-    return Stream.pat(parse_pattern(s).map(_convert_channel))
+    return Stream.pat_bind(parse_pattern(s), _CHANNEL_BINDER)
 
 
 def program_stream(s: str) -> Stream[MidiAttrs]:
@@ -446,7 +410,7 @@ def program_stream(s: str) -> Stream[MidiAttrs]:
         program_stream("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
         program_stream("1*4")            # Repeat Bright Piano 4 times
     """
-    return Stream.pat(parse_pattern(s).map(_convert_program))
+    return Stream.pat_bind(parse_pattern(s), _PROGRAM_BINDER)
 
 
 def control_stream(s: str) -> Stream[MidiAttrs]:
@@ -461,7 +425,7 @@ def control_stream(s: str) -> Stream[MidiAttrs]:
         control_stream("64 ~ 1")         # Sustain, rest, Modulation
         control_stream("7*8")            # Repeat Volume control 8 times
     """
-    return Stream.pat(parse_pattern(s).map(_convert_control))
+    return Stream.pat_bind(parse_pattern(s), _CONTROL_NUM_BINDER)
 
 
 def value_stream(s: str) -> Stream[MidiAttrs]:
@@ -476,7 +440,7 @@ def value_stream(s: str) -> Stream[MidiAttrs]:
         value_stream("127 ~ 0")          # Max, rest, min
         value_stream("64*8")             # Repeat center value 8 times
     """
-    return Stream.pat(parse_pattern(s).map(_convert_value))
+    return Stream.pat_bind(parse_pattern(s), _CONTROL_VAL_BINDER)
 
 
 def _merge_attrs(x: MidiAttrs, y: MidiAttrs) -> MidiAttrs:

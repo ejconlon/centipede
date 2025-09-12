@@ -14,7 +14,7 @@ from minipat.combinators import (
     combine_all,
     note_stream,
     program_stream,
-    vel_stream,
+    velocity_stream,
 )
 from minipat.common import CycleTime, PosixTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
@@ -79,7 +79,7 @@ def test_note_parsing() -> None:
 
 def test_velocity_parsing() -> None:
     """Test parsing velocity values."""
-    vels = vel_stream("64 80 100")
+    vels = velocity_stream("64 80 100")
 
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = vels.unstream(arc)
@@ -102,7 +102,7 @@ def test_velocity_parsing() -> None:
 def test_combine_two_streams() -> None:
     """Test combining two streams with combine function."""
     notes = note_stream("c4 d4")
-    vels = vel_stream("64 80")
+    vels = velocity_stream("64 80")
 
     combined = combine(notes, vels)
 
@@ -141,7 +141,7 @@ def test_combine_all_streams() -> None:
 
     # Test with multiple streams
     notes = note_stream("c4 d4")
-    vels = vel_stream("64 80")
+    vels = velocity_stream("64 80")
     # Test with two streams
     combined = combine_all([notes, vels])
     events = list(combined.unstream(arc))
