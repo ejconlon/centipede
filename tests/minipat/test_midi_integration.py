@@ -19,14 +19,8 @@ from minipat.live import (
     LiveSystem,
     Orbit,
 )
-from minipat.midi import (
-    MidiAttrs,
-    MsgTypeField,
-    NoteField,
-    TimedMessage,
-    note_stream,
-    start_midi_live_system,
-)
+from minipat.messages import MidiAttrs, MsgTypeField, NoteField, TimedMessage
+from minipat.midi import note_stream, start_midi_live_system
 
 # Type aliases for brevity
 MidiLiveSystem = LiveSystem[MidiAttrs, TimedMessage]

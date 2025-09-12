@@ -13,7 +13,7 @@ from typing import Optional, Sequence
 
 from mido.frozen import FrozenMessage
 
-from minipat.midi import (
+from minipat.messages import (
     ChannelField,
     ControlNum,
     ControlVal,

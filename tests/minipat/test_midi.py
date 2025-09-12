@@ -12,7 +12,7 @@ from minipat.arc import CycleArc, CycleSpan
 from minipat.common import CycleTime, PosixTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
-from minipat.midi import (
+from minipat.messages import (
     DEFAULT_VELOCITY,
     ChannelField,
     ControlField,
@@ -22,7 +22,7 @@ from minipat.midi import (
     ControlValKey,
     MidiAttrs,
     MidiDom,
-    MidiProcessor,
+    MsgHeap,
     MsgTypeField,
     Note,
     NoteField,
@@ -35,13 +35,13 @@ from minipat.midi import (
     Velocity,
     VelocityField,
     VelocityKey,
+    midi_message_sort_key,
+)
+from minipat.midi import (
+    MidiProcessor,
     combine,
     combine_all,
     echo_system,
-    mh_always_pop,
-    mh_empty,
-    mh_push,
-    midi_message_sort_key,
     note_stream,
     parse_messages,
     program_stream,
@@ -415,7 +415,7 @@ def test_parse_messages_note_on() -> None:
     # Test with note only (should use default velocity)
     attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
 
-    msgs = parse_messages(Orbit(0), attrs, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), attrs)
     assert len(msgs) == 1
     msg = msgs[0]
 
@@ -433,7 +433,7 @@ def test_parse_messages_note_on() -> None:
         .put(VelocityKey(), VelocityField.mk(100))
     )
 
-    msgs2 = parse_messages(Orbit(1), attrs_with_vel, DEFAULT_VELOCITY)
+    msgs2 = parse_messages(Orbit(1), attrs_with_vel)
     assert len(msgs2) == 1
     msg2 = msgs2[0]
 
@@ -447,7 +447,7 @@ def test_parse_messages_program_change() -> None:
     """Test parse_messages creates program_change message from program attributes."""
     attrs: MidiAttrs = DMap.empty(MidiDom).put(ProgramKey(), ProgramField.mk(42))
 
-    msgs = parse_messages(Orbit(2), attrs, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(2), attrs)
     assert len(msgs) == 1
     msg = msgs[0]
 
@@ -464,7 +464,7 @@ def test_parse_messages_control_change() -> None:
         .put(ControlValKey(), ControlVal(80))
     )
 
-    msgs = parse_messages(Orbit(3), attrs, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(3), attrs)
     assert len(msgs) == 1
     msg = msgs[0]
 
@@ -482,7 +482,7 @@ def test_parse_messages_channel_validation() -> None:
     valid_test_cases = [(Orbit(0), 0), (Orbit(15), 15), (Orbit(8), 8)]
 
     for orbit, expected_channel in valid_test_cases:
-        msgs = parse_messages(orbit, attrs, DEFAULT_VELOCITY)
+        msgs = parse_messages(orbit, attrs)
         assert len(msgs) == 1
         assert ChannelField.unmk(ChannelField.get(msgs[0])) == expected_channel
 
@@ -491,7 +491,7 @@ def test_parse_messages_channel_validation() -> None:
 
     for invalid_orbit in invalid_orbits:
         try:
-            parse_messages(invalid_orbit, attrs, DEFAULT_VELOCITY)
+            parse_messages(invalid_orbit, attrs)
             assert False, f"Should have raised ValueError for orbit {invalid_orbit}"
         except ValueError as e:
             assert "out of valid MIDI channel range" in str(e)
@@ -506,7 +506,7 @@ def test_parse_messages_conflicting_attributes() -> None:
         .put(ProgramKey(), ProgramField.mk(42))
     )
 
-    msgs = parse_messages(Orbit(0), attrs_note_and_program, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), attrs_note_and_program)
     assert len(msgs) == 2
     msg_types = {MsgTypeField.get(msg) for msg in msgs}
     assert "note_on" in msg_types
@@ -520,7 +520,7 @@ def test_parse_messages_conflicting_attributes() -> None:
         .put(ControlValKey(), ControlVal(80))
     )
 
-    msgs = parse_messages(Orbit(0), attrs_note_and_control, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), attrs_note_and_control)
     assert len(msgs) == 2
     msg_types = {MsgTypeField.get(msg) for msg in msgs}
     assert "note_on" in msg_types
@@ -534,7 +534,7 @@ def test_parse_messages_conflicting_attributes() -> None:
         .put(ControlValKey(), ControlVal(80))
     )
 
-    msgs = parse_messages(Orbit(0), attrs_program_and_control, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), attrs_program_and_control)
     assert len(msgs) == 2
     msg_types = {MsgTypeField.get(msg) for msg in msgs}
     assert "program_change" in msg_types
@@ -549,7 +549,7 @@ def test_parse_messages_conflicting_attributes() -> None:
         .put(ControlValKey(), ControlVal(80))
     )
 
-    msgs = parse_messages(Orbit(0), attrs_all_three, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), attrs_all_three)
     assert len(msgs) == 3
     msg_types = {MsgTypeField.get(msg) for msg in msgs}
     assert "note_on" in msg_types
@@ -567,7 +567,7 @@ def test_parse_messages_velocity_only_conflicting() -> None:
     )
 
     try:
-        parse_messages(Orbit(0), attrs_velocity_and_program, DEFAULT_VELOCITY)
+        parse_messages(Orbit(0), attrs_velocity_and_program)
         assert False, "Should have raised ValueError for velocity + program"
     except ValueError as e:
         # Velocity without note is still an error
@@ -582,7 +582,7 @@ def test_parse_messages_velocity_only_conflicting() -> None:
     )
 
     try:
-        parse_messages(Orbit(0), attrs_velocity_and_control, DEFAULT_VELOCITY)
+        parse_messages(Orbit(0), attrs_velocity_and_control)
         assert False, "Should have raised ValueError for velocity + control"
     except ValueError as e:
         # Velocity without note is still an error
@@ -597,7 +597,7 @@ def test_parse_messages_control_incomplete() -> None:
     )
 
     try:
-        parse_messages(Orbit(0), attrs_control_num_only, DEFAULT_VELOCITY)
+        parse_messages(Orbit(0), attrs_control_num_only)
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "Incomplete control change attributes" in str(e)
@@ -609,7 +609,7 @@ def test_parse_messages_control_incomplete() -> None:
     )
 
     try:
-        parse_messages(Orbit(0), attrs_control_val_only, DEFAULT_VELOCITY)
+        parse_messages(Orbit(0), attrs_control_val_only)
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "Incomplete control change attributes" in str(e)
@@ -621,7 +621,7 @@ def test_parse_messages_empty_attributes() -> None:
     empty_attrs: MidiAttrs = DMap.empty(MidiDom)
 
     # Empty attributes should return empty list
-    msgs = parse_messages(Orbit(0), empty_attrs, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), empty_attrs)
     assert len(msgs) == 0
 
 
@@ -632,7 +632,7 @@ def test_parse_messages_velocity_only() -> None:
     )
 
     try:
-        parse_messages(Orbit(0), velocity_only_attrs, DEFAULT_VELOCITY)
+        parse_messages(Orbit(0), velocity_only_attrs)
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "Velocity attribute found without note" in str(e)
@@ -700,7 +700,7 @@ def test_parse_messages_mixed_types() -> None:
         .put(ProgramKey(), ProgramField.mk(42))
     )
 
-    msgs = parse_messages(Orbit(0), attrs_note_and_program, DEFAULT_VELOCITY)
+    msgs = parse_messages(Orbit(0), attrs_note_and_program)
     assert len(msgs) == 2
 
     # Check message types
@@ -725,7 +725,7 @@ def test_parse_messages_mixed_types() -> None:
         .put(ControlValKey(), ControlVal(80))
     )
 
-    msgs_all = parse_messages(Orbit(1), attrs_all_types, DEFAULT_VELOCITY)
+    msgs_all = parse_messages(Orbit(1), attrs_all_types)
     assert len(msgs_all) == 3
 
     # Check all message types are present
@@ -838,7 +838,7 @@ def test_mixed_streams_with_combine() -> None:
         # At least one event should have both
         if note_val is not None and program_val is not None:
             # This should now work with parse_messages
-            msgs = parse_messages(Orbit(0), event.val, DEFAULT_VELOCITY)
+            msgs = parse_messages(Orbit(0), event.val)
             assert len(msgs) == 2  # Should have both note_on and program_change
 
             msg_types = {MsgTypeField.get(msg) for msg in msgs}
@@ -919,16 +919,16 @@ def test_timed_message_comparison() -> None:
     expected_order = [tm_note_off, tm_program, tm_control, tm_note_on, tm_note_on_later]
     assert sorted_messages == expected_order
 
-    # Test heap ordering with the new PHeap implementation
-    heap = mh_empty()
+    # Test heap ordering with the new MsgHeap implementation
+    heap = MsgHeap.empty()
     tms = [tm_note_on_later, tm_note_on, tm_note_off, tm_program, tm_control]
     for tm in tms:
-        heap = mh_push(heap, tm)
+        heap.push(tm)
 
     # Pop messages and verify they come out in the correct order
     popped_messages = []
     while True:
-        ptm, heap = mh_always_pop(heap)
+        ptm = heap.pop()
         if ptm is None:
             break
         popped_messages.append(ptm)

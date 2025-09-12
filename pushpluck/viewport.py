@@ -95,7 +95,7 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             Unit instance indicating successful configuration update.
         """
         self._config = config
-        return Unit.instance()
+        return Unit()
 
     def _view_str_offset(self) -> int:
         max_str_dim = (

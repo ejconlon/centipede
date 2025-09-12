@@ -10,9 +10,8 @@ from typing import Callable, NoReturn, Optional
 from bad_actor import System, new_system
 from minipat.common import CycleDelta, Numeric, numeric_frac
 from minipat.live import LiveSystem, Orbit
+from minipat.messages import MidiAttrs, TimedMessage
 from minipat.midi import (
-    MidiAttrs,
-    TimedMessage,
     channel_stream,
     combine_all,
     control_stream,

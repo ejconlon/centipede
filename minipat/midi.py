@@ -14,12 +14,9 @@ from logging import Logger
 from threading import Event
 from typing import (
     Any,
-    Iterable,
     List,
-    NewType,
     Optional,
     Sequence,
-    Tuple,
     cast,
     override,
 )
@@ -51,365 +48,37 @@ from minipat.live import (
     Processor,
     Timing,
 )
+from minipat.messages import (
+    DEFAULT_VELOCITY,
+    Channel,
+    ChannelField,
+    ChannelKey,
+    ControlField,
+    ControlNum,
+    ControlNumKey,
+    ControlVal,
+    ControlValKey,
+    MidiAttrs,
+    MidiMessage,
+    MsgHeap,
+    MsgTypeField,
+    Note,
+    NoteField,
+    NoteKey,
+    Program,
+    ProgramField,
+    ProgramKey,
+    TimedMessage,
+    ValueField,
+    Velocity,
+    VelocityField,
+    VelocityKey,
+    msg_note_off,
+)
 from minipat.parser import parse_pattern
 from minipat.stream import MergeStrat, Stream
-from spiny.dmap import DKey, DMap
-from spiny.heap import PHeap
+from spiny.dmap import DMap
 from spiny.seq import PSeq
-
-# =============================================================================
-# MIDI Value Types
-# =============================================================================
-
-Note = NewType("Note", int)
-"""MIDI note number (0-127)"""
-
-Velocity = NewType("Velocity", int)
-"""MIDI velocity (0-127)"""
-
-Channel = NewType("Channel", int)
-"""MIDI channel (0-15)"""
-
-Program = NewType("Program", int)
-"""MIDI program number (0-127)"""
-
-ControlNum = NewType("ControlNum", int)
-"""MIDI control number (0-127)"""
-
-ControlVal = NewType("ControlVal", int)
-"""MIDI control value (0-127)"""
-
-DEFAULT_VELOCITY = Velocity(64)
-"""Default MIDI velocity when not specified"""
-
-
-def _assert_midi_range(value: int, max_value: int, name: str) -> None:
-    """Assert that a value is in valid MIDI range."""
-    if not (0 <= value <= max_value):
-        raise ValueError(f"{name} {value} out of range (0-{max_value})")
-
-
-# =============================================================================
-# MIDI Message Construction
-# =============================================================================
-
-
-def msg_note_on(channel: Channel, note: Note, velocity: Velocity) -> FrozenMessage:
-    """Create a note-on MIDI message."""
-    return FrozenMessage(
-        "note_on", channel=int(channel), note=int(note), velocity=int(velocity)
-    )
-
-
-def msg_note_off(channel: Channel, note: Note) -> FrozenMessage:
-    """Create a note-off MIDI message."""
-    return FrozenMessage("note_off", channel=int(channel), note=int(note), velocity=0)
-
-
-def msg_pc(channel: Channel, program: Program) -> FrozenMessage:
-    """Create a program change MIDI message."""
-    return FrozenMessage("program_change", channel=int(channel), program=int(program))
-
-
-def msg_cc(channel: Channel, control: ControlNum, value: ControlVal) -> FrozenMessage:
-    """Create a program change MIDI message."""
-    return FrozenMessage(
-        "control_change", channel=int(channel), control=int(control), value=int(value)
-    )
-
-
-# =============================================================================
-# MIDI Message Field Access
-# =============================================================================
-
-
-class MessageField[T, U](metaclass=ABCMeta):
-    @classmethod
-    @abstractmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        """Return whether the message has field"""
-        raise NotImplementedError
-
-    @classmethod
-    @abstractmethod
-    def get(cls, msg: FrozenMessage) -> T:
-        """Get field value or raise AttributeError"""
-        raise NotImplementedError
-
-    @classmethod
-    def opt(cls, msg: FrozenMessage) -> Optional[T]:
-        """Get field value or return None"""
-        return cls.get(msg) if cls.exists(msg) else None
-
-    @classmethod
-    @abstractmethod
-    def mk(cls, raw_val: U) -> T:
-        """Construct value or raise AttributeError if invalid"""
-        raise NotImplementedError
-
-    @classmethod
-    @abstractmethod
-    def unmk(cls, val: T) -> U:
-        """Deconstruct value"""
-        raise NotImplementedError
-
-
-class MsgTypeField(MessageField[str, str]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "type")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> str:
-        return cast(str, getattr(msg, "type"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: str) -> str:
-        # No validation needed for message type strings
-        return raw_val
-
-    @override
-    @classmethod
-    def unmk(cls, val: str) -> str:
-        return val
-
-
-class ChannelField(MessageField[Channel, int]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "channel")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> Channel:
-        return Channel(getattr(msg, "channel"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: int) -> Channel:
-        _assert_midi_range(raw_val, 15, "channel")
-        return Channel(raw_val)
-
-    @override
-    @classmethod
-    def unmk(cls, val: Channel) -> int:
-        return int(val)
-
-
-class NoteField(MessageField[Note, int]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "note")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> Note:
-        return Note(getattr(msg, "note"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: int) -> Note:
-        _assert_midi_range(raw_val, 127, "note")
-        return Note(raw_val)
-
-    @override
-    @classmethod
-    def unmk(cls, val: Note) -> int:
-        return int(val)
-
-
-class VelocityField(MessageField[Velocity, int]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "velocity")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> Velocity:
-        return Velocity(getattr(msg, "velocity"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: int) -> Velocity:
-        _assert_midi_range(raw_val, 127, "velocity")
-        return Velocity(raw_val)
-
-    @override
-    @classmethod
-    def unmk(cls, val: Velocity) -> int:
-        return int(val)
-
-
-class ProgramField(MessageField[Program, int]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "program")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> Program:
-        return Program(getattr(msg, "program"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: int) -> Program:
-        _assert_midi_range(raw_val, 127, "program")
-        return Program(raw_val)
-
-    @override
-    @classmethod
-    def unmk(cls, val: Program) -> int:
-        return int(val)
-
-
-class ControlField(MessageField[ControlNum, int]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "control")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> ControlNum:
-        return ControlNum(getattr(msg, "control"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: int) -> ControlNum:
-        _assert_midi_range(raw_val, 127, "control")
-        return ControlNum(raw_val)
-
-    @override
-    @classmethod
-    def unmk(cls, val: ControlNum) -> int:
-        return int(val)
-
-
-class ValueField(MessageField[ControlVal, int]):
-    @override
-    @classmethod
-    def exists(cls, msg: FrozenMessage) -> bool:
-        return hasattr(msg, "value")
-
-    @override
-    @classmethod
-    def get(cls, msg: FrozenMessage) -> ControlVal:
-        return ControlVal(getattr(msg, "value"))
-
-    @override
-    @classmethod
-    def mk(cls, raw_val: int) -> ControlVal:
-        _assert_midi_range(raw_val, 127, "value")
-        return ControlVal(raw_val)
-
-    @override
-    @classmethod
-    def unmk(cls, val: ControlVal) -> int:
-        return int(val)
-
-
-# =============================================================================
-# Timed Messages
-# =============================================================================
-
-
-def midi_message_sort_key(msg: FrozenMessage) -> int:
-    """Get sort key for a MIDI message.
-
-    Returns a numeric priority for sorting MIDI messages.
-    Lower values come first in the sort order.
-
-    Sort order: note_off < program_change < control_change < note_on
-
-    This ensures that:
-    - Note offs happen before other events (to clear previous notes)
-    - Program and control changes happen between notes (to set up the next note)
-    - Note ons happen last (to use the new program/control settings)
-
-    Args:
-        msg: The MIDI message to get a sort key for
-
-    Returns:
-        An integer sort key (lower values sort first)
-    """
-    if MsgTypeField.exists(msg):
-        msg_type = MsgTypeField.get(msg)
-        if msg_type == "note_off":
-            return 0
-        elif msg_type == "program_change":
-            return 1
-        elif msg_type == "control_change":
-            return 2
-        elif msg_type == "note_on":
-            return 3
-    return 4
-
-
-@dataclass(frozen=True, order=False)
-class TimedMessage:
-    """A timed message with POSIX timestamp."""
-
-    time: PosixTime
-    """Timestamp when the message should be sent (POSIX time)."""
-
-    message: FrozenMessage
-    """The frozen MIDI message."""
-
-    def __lt__(self, other: TimedMessage) -> bool:
-        """Compare timed messages by time first, then by message type priority."""
-        if self.time != other.time:
-            return self.time < other.time
-        return midi_message_sort_key(self.message) < midi_message_sort_key(
-            other.message
-        )
-
-    def __le__(self, other: TimedMessage) -> bool:
-        return self == other or self < other
-
-    def __gt__(self, other: TimedMessage) -> bool:
-        return not (self <= other)
-
-    def __ge__(self, other: TimedMessage) -> bool:
-        return not (self < other)
-
-
-type MsgHeap = PHeap[TimedMessage]
-"""A priority queue of timed MIDI messages ordered by time and message type."""
-
-
-def mh_empty() -> MsgHeap:
-    """Create an empty message heap."""
-    return PHeap.empty()
-
-
-def mh_push(mh: MsgHeap, tm: TimedMessage) -> MsgHeap:
-    return mh.insert(tm)
-
-
-def mh_always_pop(mh: MsgHeap) -> Tuple[Optional[TimedMessage], MsgHeap]:
-    """Pop the earliest message from the heap."""
-    x = mh.find_min()
-    if x is None:
-        return (None, mh)
-    else:
-        v, mh2 = x
-        return (v, mh2)
-
-
-def mh_seek_pop(mh: MsgHeap, time: PosixTime) -> Tuple[Optional[TimedMessage], MsgHeap]:
-    """Pop head message <= given time"""
-    x = mh_always_pop(mh)
-    if x[0] is None or x[0].time <= time:
-        return x
-    else:
-        return (None, mh)
 
 
 @dataclass
@@ -421,37 +90,7 @@ class SenderState:
 
     @staticmethod
     def initial(timing: Timing) -> SenderState:
-        return SenderState(timing, mh_empty())
-
-    def push(self, tm: TimedMessage) -> None:
-        self.msg_heap = mh_push(self.msg_heap, tm)
-
-    def push_all(self, tms: Iterable[TimedMessage]) -> None:
-        h = self.msg_heap
-        for tm in tms:
-            h = mh_push(h, tm)
-        self.msg_heap = h
-
-    def always_pop(self) -> Optional[TimedMessage]:
-        res = mh_always_pop(self.msg_heap)
-        if res is None:
-            return None
-        else:
-            tm, mh = res
-            self.msg_heap = mh
-            return tm
-
-    def seek_pop(self, time: PosixTime) -> Optional[TimedMessage]:
-        res = mh_seek_pop(self.msg_heap, time)
-        if res is None:
-            return None
-        else:
-            tm, mh = res
-            self.msg_heap = mh
-            return tm
-
-    def clear(self) -> None:
-        self.msg_heap = mh_empty()
+        return SenderState(timing, MsgHeap.empty())
 
 
 class MidiSenderTask(Task):
@@ -485,28 +124,22 @@ class MidiSenderTask(Task):
             halt: Event that will be set when the task should stop.
         """
         logger.debug("MIDI sender task started")
-        while not halt.is_set():
+        while True:
             current_time = current_posix_time()
 
             # Get the next message that's ready to send
             with self._state as st:
                 sleep_interval = st.timing.sleep_interval
-                timed_msg = st.seek_pop(current_time)
+                msgs = st.msg_heap.pop_all_before(current_time)
 
-            if timed_msg is None:
-                # No messages ready, sleep based on current timing configuration
-                # Use halt.wait() instead of sleep() to be responsive to shutdown
-                if halt.wait(timeout=sleep_interval):
-                    break
-            else:
-                delay = timed_msg.time - current_time
-                # Debug: Log timing details
-                # with open("midi_debug.log", "a") as f:
-                #     f.write(f"MidiSenderTask: Sending message time={timed_msg.time:.6f} current={current_time:.6f} delay={delay:.6f} type={MsgTypeField.get(timed_msg.message)}\n")
-                # logger.debug("DELAYING %f %s", delay, timed_msg.message)
-                if delay > 0 and halt.wait(timeout=delay):
-                    break
-                self._output.send(timed_msg.message)
+            if msgs:
+                for timed_msg in msgs:
+                    self._output.send(timed_msg.message)
+
+            # Sleep based on current timing configuration
+            # Use halt.wait() instead of sleep() to be responsive to shutdown
+            if halt.wait(timeout=sleep_interval):
+                break
 
         logger.debug("MIDI sender task stopped")
 
@@ -516,67 +149,16 @@ class MidiSenderTask(Task):
 # =============================================================================
 
 
-class MidiDom:
-    """Domain marker for MIDI attributes."""
-
-    pass
-
-
-type MidiAttrs = DMap[MidiDom]
-"""MIDI attribute map."""
-
-
-class MidiKey[V](DKey[MidiDom, V]):
-    """Base class for MIDI attribute keys."""
-
-    pass
-
-
-class NoteKey(MidiKey[Note]):
-    """Key for note in MIDI attributes."""
-
-    pass
-
-
-class VelocityKey(MidiKey[Velocity]):
-    """Key for velocity in MIDI attributes."""
-
-    pass
-
-
-class ChannelKey(MidiKey[Channel]):
-    """Key for channel in MIDI attributes."""
-
-    pass
-
-
-class ProgramKey(MidiKey[Program]):
-    """Key for program in MIDI attributes."""
-
-    pass
-
-
-class ControlNumKey(MidiKey[ControlNum]):
-    """Key for control number in MIDI attributes."""
-
-    pass
-
-
-class ControlValKey(MidiKey[ControlVal]):
-    """Key for control value in MIDI attributes."""
-
-    pass
-
-
 def parse_messages(
     orbit: Optional[Orbit],
     attrs: MidiAttrs,
-    default_velocity: Velocity,
+    default_velocity: Optional[Velocity] = None,
 ) -> List[FrozenMessage]:
-    """Parse MIDI attributes into multiple FrozenMessages.
+    """Parse MIDI attributes into multiple FrozenMessages
 
-    Converts a set of MIDI attributes into multiple MIDI message types.
-    The function extracts all valid message types present in the attributes:
+    Converts a set of MIDI attributes into multiple MIDI message types using
+    the higher-level typed message system. The function extracts all valid
+    message types present in the attributes:
 
     - If note is present: creates a note_on message (note required, velocity optional)
     - If program is present: creates a program_change message (program required only)
@@ -588,7 +170,7 @@ def parse_messages(
     Args:
         orbit: The orbit number, used as MIDI channel (must be 0-15), or None if not specified
         attrs: MIDI attributes containing the message parameters
-        default_velocity: Default velocity to use when not specified (defaults to DEFAULT_VELOCITY)
+        default_velocity: Default velocity to use when not specified in attributes
 
     Returns:
         A list of FrozenMessage objects representing the parsed MIDI messages
@@ -597,75 +179,20 @@ def parse_messages(
         ValueError: If the orbit is outside valid MIDI channel range (0-15),
                    or if neither orbit nor channel attribute is provided,
                    or if incomplete control change attributes are present
-
-    Examples:
-        >>> # Create note-on message
-        >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(VelocityKey(), Velocity(100))
-        >>> msgs = parse_messages(Orbit(0), attrs)
-        >>> len(msgs) == 1 and msgs[0].type == "note_on"
-        True
-
-        >>> # Create both note and program change messages
-        >>> attrs = DMap.empty(MidiDom).put(NoteKey(), Note(60)).put(ProgramKey(), Program(42))
-        >>> msgs = parse_messages(Orbit(1), attrs)
-        >>> len(msgs) == 2
-        True
     """
-    # Extract attributes
-    note = attrs.lookup(NoteKey())
-    velocity = attrs.lookup(VelocityKey())
-    channel_attr = attrs.lookup(ChannelKey())
-    program = attrs.lookup(ProgramKey())
-    control_num = attrs.lookup(ControlNumKey())
-    control_val = attrs.lookup(ControlValKey())
-
-    # Determine channel: use explicit channel attribute if present, otherwise orbit
-    if channel_attr is not None:
-        channel = channel_attr
-    elif orbit is not None:
-        # Use orbit as MIDI channel (validate range)
+    channel = attrs.lookup(ChannelKey())
+    if channel is None and orbit is not None:
         orbit_value = int(orbit)
         if not (0 <= orbit_value <= 15):
             raise ValueError(
                 f"Orbit {orbit_value} out of valid MIDI channel range (0-15)"
             )
-        channel = ChannelField.mk(orbit_value)
-    else:
-        # No channel or orbit specified
-        raise ValueError(
-            "Either channel attribute or orbit must be provided for MIDI message"
-        )
+        attrs = attrs.put(ChannelKey(), Channel(orbit_value))
 
-    messages: List[FrozenMessage] = []
-
-    # Check for note message
-    if note is not None:
-        # Create note_on message (velocity is allowed with note)
-        vel = velocity if velocity is not None else default_velocity
-        messages.append(msg_note_on(channel=channel, note=note, velocity=vel))
-    elif velocity is not None:
-        # Velocity without note - this is an error case
-        raise ValueError(
-            "Velocity attribute found without note. "
-            "Velocity can only be used with note attributes for note_on messages"
-        )
-
-    # Check for program change message
-    if program is not None:
-        messages.append(msg_pc(channel=channel, program=program))
-
-    # Check for control change message
-    if control_num is not None and control_val is not None:
-        messages.append(msg_cc(channel=channel, control=control_num, value=control_val))
-    elif control_num is not None or control_val is not None:
-        # Incomplete control change attributes
-        missing = "control_val" if control_num is not None else "control_num"
-        raise ValueError(
-            f"Incomplete control change attributes: missing {missing}. "
-            "Both control_num and control_val are required for control_change messages"
-        )
-
-    return messages
+    # Get typed messages and render them to FrozenMessage objects
+    typed_messages = MidiMessage.parse_attrs(attrs)
+    velocity = default_velocity if default_velocity is not None else DEFAULT_VELOCITY
+    return [msg.render_midi(velocity) for msg in typed_messages]
 
 
 # =============================================================================
@@ -678,7 +205,7 @@ class ElemParser[V](metaclass=ABCMeta):
 
     An ElemParser handles the bidirectional conversion between string representations
     in patterns and strongly-typed values. This enables the pattern system to work
-    with domain-specific types like MIDI notes and velocities while maintaining
+    with domain-specific  types like MIDI notes and velocities while maintaining
     readable string syntax in patterns.
 
     The pattern system uses str values which ElemParser instances split apart.
@@ -1235,13 +762,13 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
             event_start = span.whole is None or span.active.start == span.whole.start
             event_end = span.whole is None or span.active.end == span.whole.end
 
-            # Process each message
-            for msg in msgs:
-                # Handle different message types
-                if MsgTypeField.get(msg) == "note_on":
+            # Process each message (already FrozenMessage objects)
+            for midi_msg in msgs:
+                msg_type = MsgTypeField.get(midi_msg)
+                if msg_type == "note_on":
                     # For note messages, we need to handle timing for note_on/note_off pairs
-                    note = NoteField.get(msg)
-                    channel = ChannelField.get(msg)
+                    note = NoteField.get(midi_msg)
+                    channel = ChannelField.get(midi_msg)
 
                     if event_start:
                         # Calculate timestamp for the start of the event
@@ -1252,7 +779,7 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
                         # Debug: Log instant values and calculation
                         # with open("midi_debug.log", "a") as f:
                         #     f.write(f"Note Event: span.start={float(span.active.start):.6f} span.end={float(span.active.end):.6f} instant.cps={float(instant.cps):.6f} posix_start={instant.posix_start:.6f} calculated_timestamp={timestamp:.6f}\n")
-                        timed_messages.append(TimedMessage(timestamp, msg))
+                        timed_messages.append(TimedMessage(timestamp, midi_msg))
 
                     if event_end:
                         # Create note off message (at end of span)
@@ -1272,7 +799,7 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
                             instant.posix_start
                             + (float(span.active.start) / float(instant.cps))
                         )
-                        timed_messages.append(TimedMessage(timestamp, msg))
+                        timed_messages.append(TimedMessage(timestamp, midi_msg))
 
         return PSeq.mk(timed_messages)
 
@@ -1328,20 +855,17 @@ class MidiBackendActor(Actor[BackendMessage[TimedMessage]]):
                     )
                     # Clear buffer
                     with self._state as st:
-                        st.clear()
+                        st.msg_heap.clear()
                     # Reset to send "Reset All Controllers" and "All Notes Off"
                     self._output.reset()
                     # Track that the last thing we did was reset
                     self._reset = True
-            case BackendEvents(messages):
+            case BackendEvents(msgs):
                 if self._playing:
-                    env.logger.debug("MIDI: Pushing %d messages", len(messages))
-                    # Debug: Log message timing details
-                    # with open("midi_debug.log", "a") as f:
-                    #     for msg in messages:
-                    #         f.write(f"BackendEvents: Pushing message time={msg.time:.6f} type={MsgTypeField.get(msg.message)}\n")
+                    env.logger.debug("MIDI: Pushing %d messages", len(msgs))
                     with self._state as st:
-                        st.push_all(messages)
+                        for msg in msgs:
+                            st.msg_heap.push(msg)
                 else:
                     env.logger.debug("MIDI: Ignoring events while stopped")
             case BackendTiming(timing):

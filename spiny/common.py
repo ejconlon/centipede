@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterator, List, Tuple, cast, override
+from typing import Any, Iterator, List, Self, Tuple, cast, override
 
 __all__ = [
     "Box",
@@ -108,25 +108,22 @@ class Box[T]:
         return self
 
 
+class Singleton:
+    def __new__(cls) -> Self:
+        if not hasattr(cls, "_instance"):
+            setattr(cls, "_instance", super().__new__(cls))
+        return cast(Self, getattr(cls, "_instance"))
+
+
 @dataclass(frozen=True)
-class Unit:
+class Unit(Singleton):
     """Singleton unit type representing no meaningful value.
 
     Similar to void in other languages, used where a type is required
     but no actual data needs to be stored.
     """
 
-    @staticmethod
-    def instance() -> Unit:
-        """Get the singleton Unit instance.
-
-        Returns:
-            The global Unit instance.
-        """
-        return _UNIT
-
-
-_UNIT = Unit()
+    pass
 
 
 class Sized(metaclass=ABCMeta):
