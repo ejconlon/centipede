@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List, NewType, Optional, Self, cast, override
+from typing import Any, List, NewType, Optional, cast, override
 
 from mido import Message
 from mido.frozen import FrozenMessage
@@ -338,10 +338,7 @@ type MidiAttrs = DMap[MidiDom]
 class MidiKey[V](DKey[MidiDom, V]):
     """Base class for MIDI attribute keys."""
 
-    def __new__(cls) -> Self:
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    pass
 
 
 class NoteKey(MidiKey[Note]):

@@ -25,7 +25,9 @@ from minipat.messages import (
     VelocityKey,
 )
 from minipat.parser import parse_pattern
+from minipat.pat import Pat, PatBinder
 from minipat.stream import MergeStrat, Stream
+from spiny.common import Singleton
 from spiny.dmap import DMap
 
 # =============================================================================
@@ -33,7 +35,7 @@ from spiny.dmap import DMap
 # =============================================================================
 
 
-class ElemParser[V](metaclass=ABCMeta):
+class ElemParser[V](PatBinder[str, V], metaclass=ABCMeta):
     """Abstract base class for parsing and rendering pattern values.
 
     An ElemParser handles the bidirectional conversion between string representations
@@ -50,9 +52,8 @@ class ElemParser[V](metaclass=ABCMeta):
         A NoteElemParser might parse "c4" -> Note(60) and render Note(60) -> "c4"
     """
 
-    @classmethod
     @abstractmethod
-    def parse(cls, s: str) -> V:
+    def parse(self, s: str) -> V:
         """Parse a string pattern value into a strongly-typed value.
 
         Args:
@@ -66,9 +67,8 @@ class ElemParser[V](metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    @classmethod
     @abstractmethod
-    def render(cls, value: V) -> str:
+    def render(self, value: V) -> str:
         """Render a strongly-typed value back to a string pattern representation.
 
         Args:
@@ -79,8 +79,20 @@ class ElemParser[V](metaclass=ABCMeta):
         """
         raise NotImplementedError
 
+    @override
+    def bind(self, value: str) -> Pat[V]:
+        """Default bind implementation that parses the value into a pure pattern.
 
-class NoteNumElemParser(ElemParser[Note]):
+        Args:
+            value: String value to parse and bind
+
+        Returns:
+            A pure pattern containing the parsed value
+        """
+        return Pat.pure(self.parse(value))
+
+
+class NoteNumElemParser(ElemParser[Note], Singleton):
     """Selector for parsing numeric MIDI note representations.
 
     Handles direct numeric MIDI note values in the range 0-127.
@@ -98,18 +110,15 @@ class NoteNumElemParser(ElemParser[Note]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> Note:
-        note_num = int(s)
-        return NoteField.mk(note_num)
+    def parse(self, s: str) -> Note:
+        return NoteField.mk(int(s))
 
     @override
-    @classmethod
-    def render(cls, value: Note) -> str:
+    def render(self, value: Note) -> str:
         return str(value)
 
 
-class NoteNameElemParser(ElemParser[Note]):
+class NoteNameElemParser(ElemParser[Note], Singleton):
     """Selector for parsing musical note names with octave numbers.
 
     Converts standard musical notation to MIDI note numbers. Supports
@@ -136,8 +145,7 @@ class NoteNameElemParser(ElemParser[Note]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> Note:
+    def parse(self, s: str) -> Note:
         # Parse note names like "c4" (middle C = 60), "d#4", "eb3", etc.
         note_str = s.lower()
 
@@ -178,8 +186,7 @@ class NoteNameElemParser(ElemParser[Note]):
         return NoteField.mk(midi_note)
 
     @override
-    @classmethod
-    def render(cls, value: Note) -> str:
+    def render(self, value: Note) -> str:
         # Convert MIDI note back to note name
         note_num = int(value)
         octave = (note_num // 12) - 1
@@ -192,7 +199,7 @@ class NoteNameElemParser(ElemParser[Note]):
         return note_name
 
 
-class VelElemParser(ElemParser[Velocity]):
+class VelElemParser(ElemParser[Velocity], Singleton):
     """Selector for parsing MIDI velocity values.
 
     Handles MIDI velocity values which control the volume/intensity of notes.
@@ -216,18 +223,16 @@ class VelElemParser(ElemParser[Velocity]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> Velocity:
+    def parse(self, s: str) -> Velocity:
         vel_num = int(s)
         return VelocityField.mk(vel_num)
 
     @override
-    @classmethod
-    def render(cls, value: Velocity) -> str:
+    def render(self, value: Velocity) -> str:
         return str(value)
 
 
-class ChannelElemParser(ElemParser[Channel]):
+class ChannelElemParser(ElemParser[Channel], Singleton):
     """Selector for parsing MIDI channel values.
 
     Handles MIDI channel values which specify which MIDI channel to use.
@@ -243,18 +248,16 @@ class ChannelElemParser(ElemParser[Channel]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> Channel:
+    def parse(self, s: str) -> Channel:
         channel_num = int(s)
         return ChannelField.mk(channel_num)
 
     @override
-    @classmethod
-    def render(cls, value: Channel) -> str:
+    def render(self, value: Channel) -> str:
         return str(value)
 
 
-class ProgramElemParser(ElemParser[Program]):
+class ProgramElemParser(ElemParser[Program], Singleton):
     """Selector for parsing MIDI program values.
 
     Handles MIDI program change values which select instrument patches.
@@ -270,18 +273,15 @@ class ProgramElemParser(ElemParser[Program]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> Program:
-        program_num = int(s)
-        return ProgramField.mk(program_num)
+    def parse(self, s: str) -> Program:
+        return ProgramField.mk(int(s))
 
     @override
-    @classmethod
-    def render(cls, value: Program) -> str:
+    def render(self, value: Program) -> str:
         return str(value)
 
 
-class ControlNumElemParser(ElemParser[ControlNum]):
+class ControlNumElemParser(ElemParser[ControlNum], Singleton):
     """Selector for parsing MIDI control number values.
 
     Handles MIDI control change numbers which specify which parameter to control.
@@ -298,18 +298,15 @@ class ControlNumElemParser(ElemParser[ControlNum]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> ControlNum:
-        control_num = int(s)
-        return ControlField.mk(control_num)
+    def parse(self, s: str) -> ControlNum:
+        return ControlField.mk(int(s))
 
     @override
-    @classmethod
-    def render(cls, value: ControlNum) -> str:
+    def render(self, value: ControlNum) -> str:
         return str(value)
 
 
-class ControlValElemParser(ElemParser[ControlVal]):
+class ControlValElemParser(ElemParser[ControlVal], Singleton):
     """Selector for parsing MIDI control value values.
 
     Handles MIDI control change values which specify the parameter value.
@@ -325,14 +322,11 @@ class ControlValElemParser(ElemParser[ControlVal]):
     """
 
     @override
-    @classmethod
-    def parse(cls, s: str) -> ControlVal:
-        control_val = int(s)
-        return ValueField.mk(control_val)
+    def parse(self, s: str) -> ControlVal:
+        return ValueField.mk(int(s))
 
     @override
-    @classmethod
-    def render(cls, value: ControlVal) -> str:
+    def render(self, value: ControlVal) -> str:
         return str(value)
 
 
@@ -343,43 +337,43 @@ class ControlValElemParser(ElemParser[ControlVal]):
 
 def _convert_midinote(s: str) -> MidiAttrs:
     """Convert numeric note to MIDI attributes."""
-    note = NoteNumElemParser.parse(s)
+    note = NoteNumElemParser().parse(s)
     return DMap.singleton(NoteKey(), note)
 
 
 def _convert_note(s: str) -> MidiAttrs:
     """Convert note name to MIDI attributes."""
-    note = NoteNameElemParser.parse(s)
+    note = NoteNameElemParser().parse(s)
     return DMap.singleton(NoteKey(), note)
 
 
 def _convert_vel(s: str) -> MidiAttrs:
     """Convert velocity to MIDI attributes."""
-    velocity = VelElemParser.parse(s)
+    velocity = VelElemParser().parse(s)
     return DMap.singleton(VelocityKey(), velocity)
 
 
 def _convert_channel(s: str) -> MidiAttrs:
     """Convert channel to MIDI attributes."""
-    channel = ChannelElemParser.parse(s)
+    channel = ChannelElemParser().parse(s)
     return DMap.singleton(ChannelKey(), channel)
 
 
 def _convert_program(s: str) -> MidiAttrs:
     """Convert program to MIDI attributes."""
-    program = ProgramElemParser.parse(s)
+    program = ProgramElemParser().parse(s)
     return DMap.singleton(ProgramKey(), program)
 
 
 def _convert_control(s: str) -> MidiAttrs:
     """Convert control number to MIDI attributes."""
-    control_num = ControlNumElemParser.parse(s)
+    control_num = ControlNumElemParser().parse(s)
     return DMap.singleton(ControlNumKey(), control_num)
 
 
 def _convert_value(s: str) -> MidiAttrs:
     """Convert control value to MIDI attributes."""
-    control_val = ControlValElemParser.parse(s)
+    control_val = ControlValElemParser().parse(s)
     return DMap.singleton(ControlValKey(), control_val)
 
 
