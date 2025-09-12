@@ -9,6 +9,13 @@ import mido
 from mido.frozen import FrozenMessage
 
 from minipat.arc import CycleArc, CycleSpan
+from minipat.combinators import (
+    combine,
+    combine_all,
+    note_stream,
+    program_stream,
+    vel_stream,
+)
 from minipat.common import CycleTime, PosixTime
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
@@ -39,13 +46,8 @@ from minipat.messages import (
 )
 from minipat.midi import (
     MidiProcessor,
-    combine,
-    combine_all,
     echo_system,
-    note_stream,
     parse_messages,
-    program_stream,
-    vel_stream,
 )
 from spiny.dmap import DMap
 

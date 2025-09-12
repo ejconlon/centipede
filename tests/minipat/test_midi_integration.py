@@ -14,13 +14,14 @@ import pytest
 from mido.frozen import FrozenMessage
 
 from bad_actor import System, new_system
+from minipat.combinators import note_stream
 from minipat.common import PosixTime
 from minipat.live import (
     LiveSystem,
     Orbit,
 )
 from minipat.messages import MidiAttrs, MsgTypeField, NoteField, TimedMessage
-from minipat.midi import note_stream, start_midi_live_system
+from minipat.midi import start_midi_live_system
 
 # Type aliases for brevity
 MidiLiveSystem = LiveSystem[MidiAttrs, TimedMessage]

@@ -8,20 +8,20 @@ from fractions import Fraction
 from typing import Callable, NoReturn, Optional
 
 from bad_actor import System, new_system
-from minipat.common import CycleDelta, Numeric, numeric_frac
-from minipat.live import LiveSystem, Orbit
-from minipat.messages import MidiAttrs, TimedMessage
-from minipat.midi import (
+from minipat.combinators import (
     channel_stream,
     combine_all,
     control_stream,
     midinote_stream,
     note_stream,
     program_stream,
-    start_midi_live_system,
     value_stream,
     vel_stream,
 )
+from minipat.common import CycleDelta, Numeric, numeric_frac
+from minipat.live import LiveSystem, Orbit
+from minipat.messages import MidiAttrs, TimedMessage
+from minipat.midi import start_midi_live_system
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
