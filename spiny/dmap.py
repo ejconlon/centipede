@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from dataclasses import dataclass
-from typing import Any, Optional, Self, Type, Union, cast
+from typing import Any, Optional, Type, Union, cast
 
+from spiny.common import Singleton
 from spiny.map import PMap
 
 
@@ -15,14 +16,7 @@ class Missing:
 _MISSING = Missing()
 
 
-class DKey[K, V](metaclass=ABCMeta):
-    _instance: Optional[Self] = None
-
-    def __new__(cls) -> Self:
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
+class DKey[K, V](Singleton, metaclass=ABCMeta):
     @classmethod
     def key(cls) -> str:
         return cls.__name__
