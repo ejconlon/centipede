@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Sequence, override
+from fractions import Fraction
+from typing import Any, Callable, Sequence, cast, override
 
 from minipat.messages import (
     Channel,
@@ -22,6 +23,7 @@ from minipat.messages import (
 from minipat.parser import parse_pattern
 from minipat.pat import Pat, PatBinder
 from minipat.stream import MergeStrat, Stream
+from spiny import PSeq
 from spiny.common import Singleton
 from spiny.dmap import DMap
 
@@ -33,7 +35,7 @@ from spiny.dmap import DMap
 DEFAULT_OCTAVE = 4
 
 
-class ElemParser[V](metaclass=ABCMeta):
+class ElemParser[T, U](metaclass=ABCMeta):
     """Abstract base class for parsing and rendering pattern values.
 
     An ElemParser handles the bidirectional conversion between string representations
@@ -44,41 +46,215 @@ class ElemParser[V](metaclass=ABCMeta):
     The pattern system uses str values which ElemParser instances split apart.
 
     Type Parameters:
-        V: The value type this parser handles (e.g., Note, Vel)
+        T: The input type for parsing (and output type for rendering)
+        U: The output type for parsing (and input type for rendering)
 
     Example:
         A NoteElemParser might parse "c4" -> Note(60) and render Note(60) -> "c4"
     """
 
     @abstractmethod
-    def parse(self, s: str) -> V:
-        """Parse a string pattern value into a strongly-typed value.
+    def parse(self, s: T) -> U:
+        """Parse an input value into a strongly-typed value.
 
         Args:
-            s: A string containing the pattern value
+            s: The input value to parse
 
         Returns:
-            The parsed value of type V
+            The parsed value of type U
 
         Raises:
-            ValueError: If the string cannot be parsed into a valid value
+            ValueError: If the input cannot be parsed into a valid value
         """
         raise NotImplementedError
 
     @abstractmethod
-    def render(self, value: V) -> str:
-        """Render a strongly-typed value back to a string pattern representation.
+    def render(self, value: U) -> T:
+        """Render a strongly-typed value back to the input representation.
 
         Args:
             value: The strongly-typed value to render
 
         Returns:
-            A string representation suitable for patterns
+            A representation of type T
         """
         raise NotImplementedError
 
+    @staticmethod
+    def identity() -> ElemParser[T, T]:
+        """Create an identity parser that passes values through unchanged.
 
-class NoteNumElemParser(ElemParser[Note], Singleton):
+        Returns:
+            An identity parser
+        """
+        return IdParser()
+
+    @staticmethod
+    def mk(parse_fn: Callable[[T], U], render_fn: Callable[[U], T]) -> ElemParser[T, U]:
+        """Create a parser from parse and render functions.
+
+        Args:
+            parse_fn: Function to parse T -> U
+            render_fn: Function to render U -> T
+
+        Returns:
+            A parser wrapping the provided functions
+        """
+        return FnParser(parse_fn, render_fn)
+
+    def andThen[V](self, other: ElemParser[U, V]) -> ElemParser[T, V]:
+        """Compose this parser with another parser.
+
+        Creates a new parser that first applies this parser, then the other parser.
+
+        Args:
+            other: The parser to compose with
+
+        Returns:
+            A composed parser from T to V
+        """
+        return ChainParser.link(self, other)
+
+
+class FnParser[T, U](ElemParser[T, U]):
+    """Parser created from parse and render functions."""
+
+    def __init__(self, parse_fn: Callable[[T], U], render_fn: Callable[[U], T]) -> None:
+        self._parse_fn = parse_fn
+        self._render_fn = render_fn
+
+    @override
+    def parse(self, s: T) -> U:
+        return self._parse_fn(s)
+
+    @override
+    def render(self, value: U) -> T:
+        return self._render_fn(value)
+
+
+class IdParser[T](ElemParser[T, T]):
+    """Identity parser that passes values through unchanged."""
+
+    @override
+    def parse(self, s: T) -> T:
+        return s
+
+    @override
+    def render(self, value: T) -> T:
+        return value
+
+
+class ChainParser[T, V](ElemParser[T, V]):
+    """Composed parser created from chaining multiple parsers."""
+
+    def __init__(self, chain: PSeq[ElemParser[Any, Any]]) -> None:
+        self._chain = chain
+
+    @staticmethod
+    def link[U](p1: ElemParser[T, U], p2: ElemParser[U, V]) -> ElemParser[T, V]:
+        """Link two parsers together, optimizing for identity parsers.
+
+        Args:
+            p1: First parser (T -> U)
+            p2: Second parser (U -> V)
+
+        Returns:
+            A composed parser (T -> V)
+        """
+        chain: PSeq[ElemParser[Any, Any]]
+        if isinstance(p1, IdParser):
+            return cast(ElemParser[T, V], p2)
+        elif isinstance(p2, IdParser):
+            return cast(ElemParser[T, V], p1)
+        elif isinstance(p1, ChainParser):
+            if isinstance(p2, ChainParser):
+                chain = p1._chain.concat(p2._chain)
+            else:
+                chain = p1._chain.snoc(p2)
+        elif isinstance(p2, ChainParser):
+            chain = PSeq.mk([p1]).concat(p2._chain)
+        else:
+            chain = PSeq.mk([p1, p2])
+        return ChainParser(chain)
+
+    @override
+    def parse(self, s: T) -> V:
+        """Parse by applying each parser in the chain."""
+        result: Any = s
+        for parser in self._chain:
+            result = parser.parse(result)
+        return cast(V, result)
+
+    @override
+    def render(self, value: V) -> T:
+        """Render by applying each parser's render in reverse order."""
+        result: Any = value
+        # Apply render functions in reverse order
+        for parser in reversed(list(self._chain)):
+            result = parser.render(result)
+        return cast(T, result)
+
+
+class IntElemParser(ElemParser[str, int], Singleton):
+    """Parser for integer values from string representations.
+
+    Parses string representations of integers.
+
+    Examples:
+        "42"  -> 42
+        "-5"  -> -5
+        "0"   -> 0
+
+    Raises:
+        ValueError: If the string is not a valid integer
+    """
+
+    @override
+    def parse(self, s: str) -> int:
+        return int(s)
+
+    @override
+    def render(self, value: int) -> str:
+        return str(value)
+
+
+class FractionElemParser(ElemParser[str, Fraction], Singleton):
+    """Parser for Fraction values from string representations.
+
+    Parses string representations of numbers and converts them to Fractions:
+    - Integers are converted to fractions with denominator 1
+    - Floats are converted to exact fraction representations
+    - Fraction strings (e.g., "3/4") are parsed directly
+
+    Examples:
+        "42"    -> Fraction(42, 1)
+        "3.14"  -> Fraction(157, 50)
+        "3/4"   -> Fraction(3, 4)
+        "-2.5"  -> Fraction(-5, 2)
+        "0.333" -> Fraction(333, 1000)
+
+    Raises:
+        ValueError: If the string is not a valid numeric representation
+    """
+
+    @override
+    def parse(self, s: str) -> Fraction:
+        # Fraction constructor handles all these cases:
+        # - "3/4" -> Fraction(3, 4)
+        # - "42" -> Fraction(42, 1)
+        # - "3.14" -> Fraction(157, 50)
+        return Fraction(s)
+
+    @override
+    def render(self, value: Fraction) -> str:
+        # Render fraction in simplest form
+        if value.denominator == 1:
+            return str(value.numerator)
+        else:
+            return f"{value.numerator}/{value.denominator}"
+
+
+class NoteNumElemParser(ElemParser[str, Note], Singleton):
     """Selector for parsing numeric MIDI note representations.
 
     Handles direct numeric MIDI note values in the range 0-127.
@@ -104,7 +280,7 @@ class NoteNumElemParser(ElemParser[Note], Singleton):
         return str(value)
 
 
-class NoteNameElemParser(ElemParser[Note], Singleton):
+class NoteNameElemParser(ElemParser[str, Note], Singleton):
     """Selector for parsing musical note names with optional octave numbers.
 
     Converts standard musical notation to MIDI note numbers. Supports
@@ -193,7 +369,7 @@ class NoteNameElemParser(ElemParser[Note], Singleton):
         return note_name
 
 
-class VelocityElemParser(ElemParser[Velocity], Singleton):
+class VelocityElemParser(ElemParser[str, Velocity], Singleton):
     """Selector for parsing MIDI velocity values.
 
     Handles MIDI velocity values which control the volume/intensity of notes.
@@ -226,7 +402,7 @@ class VelocityElemParser(ElemParser[Velocity], Singleton):
         return str(value)
 
 
-class ChannelElemParser(ElemParser[Channel], Singleton):
+class ChannelElemParser(ElemParser[str, Channel], Singleton):
     """Selector for parsing MIDI channel values.
 
     Handles MIDI channel values which specify which MIDI channel to use.
@@ -251,7 +427,7 @@ class ChannelElemParser(ElemParser[Channel], Singleton):
         return str(value)
 
 
-class ProgramElemParser(ElemParser[Program], Singleton):
+class ProgramElemParser(ElemParser[str, Program], Singleton):
     """Selector for parsing MIDI program values.
 
     Handles MIDI program change values which select instrument patches.
@@ -275,7 +451,7 @@ class ProgramElemParser(ElemParser[Program], Singleton):
         return str(value)
 
 
-class ControlNumElemParser(ElemParser[ControlNum], Singleton):
+class ControlNumElemParser(ElemParser[str, ControlNum], Singleton):
     """Selector for parsing MIDI control number values.
 
     Handles MIDI control change numbers which specify which parameter to control.
@@ -300,7 +476,7 @@ class ControlNumElemParser(ElemParser[ControlNum], Singleton):
         return str(value)
 
 
-class ControlValElemParser(ElemParser[ControlVal], Singleton):
+class ControlValElemParser(ElemParser[str, ControlVal], Singleton):
     """Selector for parsing MIDI control value values.
 
     Handles MIDI control change values which specify the parameter value.
@@ -324,8 +500,18 @@ class ControlValElemParser(ElemParser[ControlVal], Singleton):
         return str(value)
 
 
+# class StringElemParser(ElemParser[str], Singleton):
+#     @override
+#     def parse(self, s: str) -> ControlVal:
+#         return ValueField.mk(int(s))
+#
+#     @override
+#     def render(self, value: ControlVal) -> str:
+#         return str(value)
+
+
 class ElemBinder(PatBinder[str, MidiAttrs]):
-    def __init__[V, X](self, parser: ElemParser[V], field: MessageField[V, X]) -> None:
+    def __init__[V, X](self, parser: ElemParser[str, V], field: MessageField[V, X]) -> None:
         self._parser = parser
         self._field = field
 
