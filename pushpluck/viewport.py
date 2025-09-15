@@ -132,7 +132,7 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             fret = pos.col
         else:
             str_index = pos.col
-            fret = constants.NUM_PAD_ROWS - pos.row - 1
+            fret = pos.row
         str_index += self._total_str_offset()
         fret += self._config.fret_offset
         if str_index < 0 or str_index >= self._config.num_strings:
@@ -174,7 +174,7 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             row = str_dim
             col = fret_dim
         else:
-            row = constants.NUM_PAD_ROWS - fret_dim - 1
+            row = fret_dim
             col = str_dim
         if row < 0 or row >= constants.NUM_PAD_ROWS:
             return None

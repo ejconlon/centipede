@@ -30,7 +30,7 @@ class Direction(Enum):
         (DEFAULT_CONFIG, Pos(7, 1), None, Direction.Forward),
         (SHIFT_CONFIG, Pos(0, 0), StringPos(0, 1), Direction.Both),
         (VERT_CONFIG, Pos(0, 0), None, Direction.Forward),
-        (VERT_CONFIG, Pos(1, 1), StringPos(0, 6), Direction.Both),
+        (VERT_CONFIG, Pos(1, 1), StringPos(0, 1), Direction.Both),
     ],
 )
 def test_viewport(

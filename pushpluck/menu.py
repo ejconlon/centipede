@@ -14,7 +14,7 @@ from enum import Enum, auto, unique
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, cast
 
 from pushpluck import constants
-from pushpluck.config import ChannelMode, Config, Layout, PlayMode
+from pushpluck.config import Config, Instrument, Layout, PlayMode
 from pushpluck.constants import ButtonCC, ButtonIllum, KnobGroup
 from pushpluck.push import ButtonEvent, KnobEvent, PushEvent, PushInterface
 from pushpluck.scale import SCALES, NoteName
@@ -56,6 +56,7 @@ class Page(Enum):
 ACTIVE_BUTTONS: List[ButtonCC] = [
     ButtonCC.Undo,
     ButtonCC.Master,
+    ButtonCC.Automation,
     ButtonCC.Left,
     ButtonCC.Right,
     ButtonCC.Up,
@@ -179,6 +180,26 @@ class DataclassLens(Lens[Y, N]):
         return replace(struct, **{self._field_name: value})  # type: ignore
 
 
+class InstrumentLens(Lens[Config, Any]):
+    """Special lens for instrument changes that updates all related configuration."""
+
+    def get_value(self, struct: Config) -> Any:
+        return struct.instrument
+
+    def set_value(self, struct: Config, value: Any) -> Config:
+        from pushpluck.config import get_config_for_instrument
+
+        new_config = get_config_for_instrument(value, struct.min_velocity)
+        # Keep user-modified settings but reset instrument-specific ones
+        return replace(
+            new_config,
+            scale=struct.scale,
+            root=struct.root,
+            str_offset=struct.str_offset,
+            fret_offset=struct.fret_offset,
+        )
+
+
 @dataclass(frozen=True, eq=False)
 class KnobControl(Generic[Y, N]):
     name: str
@@ -277,6 +298,12 @@ def default_menu_layout() -> MenuLayout:
     return MenuLayout(
         device_knob_controls=[
             KnobControl(
+                "Instr",
+                low_sens,
+                ChoiceValRange.new([v for v in Instrument], lambda v: v.name),
+                InstrumentLens(),
+            ),
+            KnobControl(
                 "MinVel", high_sens, IntValRange(0, 127), DataclassLens("min_velocity")
             ),
             KnobControl(
@@ -310,12 +337,6 @@ def default_menu_layout() -> MenuLayout:
                 low_sens,
                 ChoiceValRange.new([v for v in NoteName], lambda v: v.name),
                 DataclassLens("root"),
-            ),
-            KnobControl(
-                "ChanMode",
-                low_sens,
-                ChoiceValRange.new([v for v in ChannelMode], lambda v: v.name),
-                DataclassLens("chan_mode"),
             ),
         ]
     )

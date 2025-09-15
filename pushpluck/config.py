@@ -281,6 +281,14 @@ class ChannelMode(Enum):
     Multi = auto()  # Notes distributed across multiple MIDI channels
 
 
+@unique
+class Instrument(Enum):
+    """Defines different instrument configurations available."""
+
+    Guitar = auto()  # Guitar with standard horizontal layout
+    Harpejji = auto()  # Harpejji with vertical chromatic layout
+
+
 # TODO This needs to be hierarchical
 # Each instrument has a default orientation and tuning
 # As well as multiple possible tunings
@@ -301,6 +309,7 @@ class Config:
     display offsets.
     """
 
+    instrument: Instrument  # The instrument type (Guitar, Harpejji, etc.)
     instrument_name: str  # Name of the instrument (e.g., "Guitar", "Bass")
     tuning_name: str  # Name of the tuning (e.g., "Standard", "Drop D")
     tuning: List[int]  # MIDI note numbers for each string's open note
@@ -315,10 +324,10 @@ class Config:
 
 
 def init_config(min_velocity: int) -> Config:
-    """Initialize a default configuration with standard guitar settings.
+    """Initialize a default configuration with Harpejji settings.
 
-    Creates a Config instance with sensible defaults for a standard guitar
-    setup: standard tuning, horizontal layout, tap mode, single channel,
+    Creates a Config instance with sensible defaults for a Harpejji
+    setup: whole-step tuning, vertical layout, tap mode, single channel,
     C major scale, and no display offsets.
 
     Args:
@@ -328,6 +337,36 @@ def init_config(min_velocity: int) -> Config:
         A Config instance with default settings and the specified min_velocity.
     """
     return Config(
+        instrument=Instrument.Harpejji,
+        instrument_name="Harpejji",
+        tuning_name="Chromatic",
+        tuning=constants.HARPEJJI_TUNING,
+        layout=Layout.Vert,
+        play_mode=PlayMode.Tap,
+        chan_mode=ChannelMode.Single,
+        scale=SCALE_LOOKUP["Major"],
+        root=NoteName.C,
+        min_velocity=min_velocity,
+        str_offset=0,
+        fret_offset=0,
+    )
+
+
+def init_guitar_config(min_velocity: int) -> Config:
+    """Initialize a configuration with Guitar settings.
+
+    Creates a Config instance with defaults for a Guitar setup:
+    standard tuning, horizontal layout, tap mode, single channel,
+    C major scale, and no display offsets.
+
+    Args:
+        min_velocity: The minimum MIDI velocity to use for note output.
+
+    Returns:
+        A Config instance with Guitar settings and the specified min_velocity.
+    """
+    return Config(
+        instrument=Instrument.Guitar,
         instrument_name="Guitar",
         tuning_name="Standard",
         tuning=constants.STANDARD_TUNING,
@@ -340,6 +379,53 @@ def init_config(min_velocity: int) -> Config:
         str_offset=0,
         fret_offset=0,
     )
+
+
+def init_harpejji_config(min_velocity: int) -> Config:
+    """Initialize a configuration with Harpejji settings.
+
+    Creates a Config instance with defaults for a Harpejji setup:
+    whole-step tuning starting from C3, vertical layout, tap mode,
+    single channel, C major scale, and no display offsets.
+
+    Args:
+        min_velocity: The minimum MIDI velocity to use for note output.
+
+    Returns:
+        A Config instance with Harpejji settings and the specified min_velocity.
+    """
+    return Config(
+        instrument=Instrument.Harpejji,
+        instrument_name="Harpejji",
+        tuning_name="Chromatic",
+        tuning=constants.HARPEJJI_TUNING,
+        layout=Layout.Vert,
+        play_mode=PlayMode.Tap,
+        chan_mode=ChannelMode.Single,
+        scale=SCALE_LOOKUP["Major"],
+        root=NoteName.C,
+        min_velocity=min_velocity,
+        str_offset=0,
+        fret_offset=0,
+    )
+
+
+def get_config_for_instrument(instrument: Instrument, min_velocity: int) -> Config:
+    """Get the appropriate configuration for a given instrument.
+
+    Args:
+        instrument: The instrument type to configure.
+        min_velocity: The minimum MIDI velocity to use for note output.
+
+    Returns:
+        A Config instance with appropriate settings for the instrument.
+    """
+    if instrument == Instrument.Guitar:
+        return init_guitar_config(min_velocity)
+    elif instrument == Instrument.Harpejji:
+        return init_harpejji_config(min_velocity)
+    else:
+        raise ValueError(f"Unknown instrument: {instrument}")
 
 
 def default_scheme() -> ColorScheme:

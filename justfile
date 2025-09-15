@@ -81,3 +81,7 @@ fluid:
 # Start minipat repl
 boot:
   {{python}} -i -m minipat.boot
+
+# Start pushpluck
+pushpluck:
+  {{python}} -m pushpluck.main

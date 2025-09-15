@@ -285,3 +285,6 @@ DISPLAY_BUFFER_LEN = DISPLAY_MAX_ROWS * DISPLAY_MAX_LINE_LEN
 
 STANDARD_TUNING = [40, 45, 50, 55, 59, 64]
 """Standard guitar tuning in MIDI note numbers (E-A-D-G-B-E)."""
+
+HARPEJJI_TUNING = [48, 50, 52, 54, 56, 58, 60, 62]
+"""Harpejji tuning in MIDI note numbers starting from C3, whole steps (C-D-E-F#-G#-A#-C-D)."""
