@@ -317,6 +317,8 @@ class Config:
     play_mode: PlayMode  # How notes are triggered and sustained
     chan_mode: ChannelMode  # MIDI channel usage strategy
     midi_channel: int  # Base MIDI channel (1-16)
+    repeat_steps: int  # Semitone range of tuning pattern for infinite strings
+    view_offset: int  # String offset for centering/positioning (0 = no-op)
     scale: Scale  # Current musical scale for note classification
     root: NoteName  # Root note of the current scale
     min_velocity: int  # Minimum MIDI velocity for note output
@@ -346,6 +348,8 @@ def init_config(min_velocity: int) -> Config:
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,
+        repeat_steps=2,  # Harpejji: whole steps between strings
+        view_offset=0,  # Harpejji: start from string 0
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
@@ -376,6 +380,8 @@ def init_guitar_config(min_velocity: int) -> Config:
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,
+        repeat_steps=24,  # Guitar: high E - low E interval (2 octaves)
+        view_offset=1,  # Guitar: center the 5-string pattern (access to low B and high A)
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
@@ -406,6 +412,8 @@ def init_harpejji_config(min_velocity: int) -> Config:
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,
+        repeat_steps=2,  # Harpejji: whole steps between strings
+        view_offset=0,  # Harpejji: start from string 0
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,

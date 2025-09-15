@@ -11,7 +11,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from bisect import bisect_left
 from dataclasses import dataclass
-from typing import Dict, Generator, List, Optional, Set, cast, override
+from typing import Dict, Generator, List, Optional, Set, Tuple, cast, override
 
 from mido.frozen import FrozenMessage
 
@@ -449,6 +449,102 @@ class FixedTuner(Tuner):
             return NoteGroup(note, primary, equivs)
 
 
+class InfiniteTuner(Tuner):
+    """A tuner implementation for instruments with infinite string mapping.
+
+    This tuner uses a base tuning pattern and repeat_steps to create
+    an infinite mapping from any string index to MIDI notes. It calculates
+    notes by taking the string index modulo the tuning length, then adding
+    octave offsets based on repeat_steps.
+    """
+
+    def __init__(self, tuning: List[int], repeat_steps: int, bounds: Optional[StringBounds]) -> None:
+        """Initialize the infinite tuner with base tuning and repeat pattern.
+
+        Args:
+            tuning: Base tuning pattern (list of MIDI note numbers).
+            repeat_steps: Number of semitones before the pattern repeats.
+            bounds: Optional bounding region for valid positions.
+        """
+        if not tuning:
+            raise ValueError("Tuning cannot be empty")
+        self._tuning = tuning
+        self._repeat_steps = repeat_steps
+        self._bounds = bounds
+
+    def _get_note_for_string_index(self, str_index: int) -> int:
+        """Calculate the MIDI note for any string index.
+
+        Args:
+            str_index: The string index (can be negative or very large).
+
+        Returns:
+            The MIDI note number for this string index.
+        """
+        # Get the base note from the tuning pattern
+        base_note = self._tuning[str_index % len(self._tuning)]
+
+        # Calculate how many complete cycles through the tuning we've done
+        cycles = str_index // len(self._tuning)
+
+        # Add the repeat_steps offset for each complete cycle
+        return base_note + (cycles * self._repeat_steps)
+
+    @override
+    def get_note(self, str_pos: StringPos) -> Optional[int]:
+        """Get the MIDI note number for a string position.
+
+        Args:
+            str_pos: The string position to convert.
+
+        Returns:
+            The MIDI note number if valid and within MIDI range, None otherwise.
+        """
+        # Check bounds if specified
+        if self._bounds is not None and str_pos not in self._bounds:
+            return None
+
+        # Calculate the base note for this string
+        base_note = self._get_note_for_string_index(str_pos.str_index)
+
+        # Add fret offset
+        note = base_note + str_pos.fret
+
+        # Check MIDI range (0-127)
+        if note < 0 or note > 127:
+            return None
+
+        return note
+
+    @override
+    def get_note_group(self, str_pos: StringPos) -> Optional[NoteGroup]:
+        """Get the note group for a string position.
+
+        For infinite tuning, we don't precompute equivalents since there
+        could be infinitely many. We just return the note with empty equivalents.
+
+        Args:
+            str_pos: The string position to analyze.
+
+        Returns:
+            A NoteGroup with the note and empty equivalents, or None
+            if the position doesn't produce a valid note.
+        """
+        note = self.get_note(str_pos)
+        if note is None:
+            return None
+        else:
+            primary = (
+                str_pos
+                if self._bounds is not None and str_pos in self._bounds
+                else None
+            )
+            # For infinite tuning, we don't compute all equivalents
+            # as there could be infinitely many
+            equivs: List[StringPos] = []
+            return NoteGroup(note, primary, equivs)
+
+
 class NoteHandler(metaclass=ABCMeta):
     """Abstract base class for handling note triggering in different play modes.
 
@@ -727,13 +823,42 @@ class ChokeNoteHandler(NoteHandler):
     active notes on each string.
     """
 
-    def __init__(self, num_strings: int) -> None:
-        """Initialize the choke handler for the specified number of strings.
+    def __init__(self, tuning: List[int], repeat_steps: int) -> None:
+        """Initialize the choke handler for the computed finite string range.
 
         Args:
-            num_strings: The number of strings in the instrument tuning.
+            tuning: Base tuning pattern.
+            repeat_steps: Semitone interval for pattern repetition.
         """
-        self._fingered = [ChokeGroup.empty() for _ in range(num_strings)]
+        # Calculate the finite range of strings that could produce MIDI notes 0-127
+        min_str, max_str = self._calculate_string_range(tuning, repeat_steps)
+        self._min_string = min_str
+        self._max_string = max_str
+        self._fingered = [ChokeGroup.empty() for _ in range(max_str - min_str + 1)]
+
+    def _calculate_string_range(self, tuning: List[int], repeat_steps: int) -> Tuple[int, int]:
+        """Calculate the range of string indices that could produce valid MIDI notes.
+
+        Returns:
+            Tuple of (min_string_index, max_string_index)
+        """
+        min_str, max_str = float('inf'), float('-inf')
+
+        for base_idx, base_note in enumerate(tuning):
+            for fret in range(-12, 25):  # Reasonable fret range
+                if repeat_steps > 0:
+                    # Find cycle range that keeps us in MIDI range [0, 127]
+                    min_cycles = (0 - base_note - fret) / repeat_steps
+                    max_cycles = (127 - base_note - fret) / repeat_steps
+
+                    for cycles in range(int(min_cycles) - 1, int(max_cycles) + 2):
+                        note = base_note + fret + cycles * repeat_steps
+                        if 0 <= note <= 127:
+                            string_idx = cycles * len(tuning) + base_idx
+                            min_str = min(min_str, string_idx)
+                            max_str = max(max_str, string_idx)
+
+        return int(min_str), int(max_str)
 
     @override
     def trigger(self, fret_msg: FretboardMessage) -> List[FretboardMessage]:
@@ -749,7 +874,15 @@ class ChokeNoteHandler(NoteHandler):
             - Hammer-on/pull-off: note-on for new, note-off for previous
             - Movement on same fret: no output (ignored)
         """
-        group = self._fingered[fret_msg.str_pos.str_index]
+        str_index = fret_msg.str_pos.str_index
+
+        # Check if string index is within our computed range
+        if str_index < self._min_string or str_index > self._max_string:
+            return []  # String index outside valid range
+
+        # Convert string index to array index
+        array_index = str_index - self._min_string
+        group = self._fingered[array_index]
         prev_msg = group.max_msg()
 
         group.trigger(fret_msg)
@@ -805,6 +938,8 @@ class FretboardConfig(MappedComponentConfig[BoundedConfig]):
     """The play mode (tap, poly, mono) that determines note behavior."""
     tuning: List[int]
     """List of MIDI note numbers for each open string."""
+    repeat_steps: int
+    """Semitone range for infinite string mapping."""
     min_velocity: int
     """The minimum MIDI velocity for note output."""
     bounds: Optional[StringBounds]
@@ -825,6 +960,7 @@ class FretboardConfig(MappedComponentConfig[BoundedConfig]):
             midi_channel=root_config.config.midi_channel,
             play_mode=root_config.config.play_mode,
             tuning=root_config.config.tuning,
+            repeat_steps=root_config.config.repeat_steps,
             min_velocity=root_config.config.min_velocity,
             bounds=root_config.bounds,
         )
@@ -837,9 +973,9 @@ def create_tuner(config: FretboardConfig) -> Tuner:
         config: The fretboard configuration.
 
     Returns:
-        A FixedTuner configured with the specified tuning and bounds.
+        An InfiniteTuner instance configured for infinite string mapping.
     """
-    return FixedTuner(config.tuning, config.bounds)
+    return InfiniteTuner(config.tuning, config.repeat_steps, config.bounds)
 
 
 def create_chan_mapper(config: FretboardConfig) -> ChannelMapper:
@@ -878,7 +1014,7 @@ def create_handler(config: FretboardConfig) -> NoteHandler:
         MatchException: If the play mode is not recognized.
     """
     if config.play_mode == PlayMode.Tap:  # (or Pick mode when implemented)
-        return ChokeNoteHandler(num_strings=len(config.tuning))
+        return ChokeNoteHandler(config.tuning, config.repeat_steps)
     elif config.play_mode == PlayMode.Poly:
         return PolyNoteHandler()
     elif config.play_mode == PlayMode.Mono:

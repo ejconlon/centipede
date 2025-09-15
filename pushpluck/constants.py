@@ -283,8 +283,8 @@ DISPLAY_MAX_LINE_LEN = DISPLAY_MAX_BLOCKS * DISPLAY_BLOCK_LEN
 DISPLAY_BUFFER_LEN = DISPLAY_MAX_ROWS * DISPLAY_MAX_LINE_LEN
 """Total character capacity of the display buffer."""
 
-STANDARD_TUNING = [40, 45, 50, 55, 59, 64]
-"""Standard guitar tuning in MIDI note numbers (E-A-D-G-B-E)."""
+STANDARD_TUNING = [40, 45, 50, 55, 59]
+"""Guitar tuning without high E in MIDI note numbers (E-A-D-G-B)."""
 
-HARPEJJI_TUNING = [48, 50, 52, 54, 56, 58, 60, 62]
-"""Harpejji tuning in MIDI note numbers starting from C3, whole steps (C-D-E-F#-G#-A#-C-D)."""
+HARPEJJI_TUNING = [48]
+"""Harpejji base tuning starting from C3 (single string for infinite mapping)."""

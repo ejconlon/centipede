@@ -9,7 +9,7 @@ from pushpluck.fretboard import StringPos
 from pushpluck.pos import Pos
 from pushpluck.viewport import Viewport, ViewportConfig
 
-DEFAULT_CONFIG = ViewportConfig(6, Layout.Horiz, 0, 0)
+DEFAULT_CONFIG = ViewportConfig(6, Layout.Horiz, 0, 0, 0)
 SHIFT_CONFIG = replace(DEFAULT_CONFIG, str_offset=1, fret_offset=1)
 VERT_CONFIG = replace(DEFAULT_CONFIG, layout=Layout.Vert)
 

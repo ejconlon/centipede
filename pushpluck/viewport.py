@@ -30,6 +30,8 @@ class ViewportConfig(MappedComponentConfig[Config]):
     """Number of strings in the current instrument tuning."""
     layout: Layout
     """The layout orientation (Horiz or Vert) for the fretboard display."""
+    view_offset: int
+    """String offset for centering/positioning the default view."""
     str_offset: int
     """Offset for scrolling through strings (negative values scroll down)."""
     fret_offset: int
@@ -48,6 +50,7 @@ class ViewportConfig(MappedComponentConfig[Config]):
         return cls(
             num_strings=len(root_config.tuning),
             layout=root_config.layout,
+            view_offset=root_config.view_offset,
             str_offset=root_config.str_offset,
             fret_offset=root_config.fret_offset,
         )
@@ -98,16 +101,9 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
         return Unit()
 
     def _view_str_offset(self) -> int:
-        max_str_dim = (
-            constants.NUM_PAD_ROWS
-            if self._config.layout == Layout.Horiz
-            else constants.NUM_PAD_COLS
-        )
-        offset = 0
-        blanks = max_str_dim - self._config.num_strings
-        if blanks > 0:
-            offset -= blanks // 2
-        return offset
+        # Apply view_offset to shift the string mapping
+        # Negative view_offset shifts strings left (showing higher string indices)
+        return -self._config.view_offset
 
     def _total_str_offset(self) -> int:
         return self._view_str_offset() + self._config.str_offset
@@ -135,10 +131,8 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             fret = pos.row
         str_index += self._total_str_offset()
         fret += self._config.fret_offset
-        if str_index < 0 or str_index >= self._config.num_strings:
-            return None
-        else:
-            return StringPos(str_index=str_index, fret=fret)
+        # For infinite strings, any string index is valid
+        return StringPos(str_index=str_index, fret=fret)
 
     def str_pos_from_input_note(self, note: int) -> Optional[StringPos]:
         """Convert a MIDI note number to a fretboard string position.
@@ -206,11 +200,11 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             else constants.NUM_PAD_ROWS
         )
 
+        # For infinite strings, any string index is valid
         valid_indices: List[int] = []
         for i in range(max_str_dim):
             o = view_offset + i
-            if o >= 0 and o < self._config.num_strings:
-                valid_indices.append(o)
+            valid_indices.append(o)
 
         if len(valid_indices) == 0:
             return None
