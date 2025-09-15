@@ -54,7 +54,7 @@ class Page(Enum):
 
 
 ACTIVE_BUTTONS: List[ButtonCC] = [
-    ButtonCC.Undo,
+    ButtonCC.Accent,
     ButtonCC.Master,
     ButtonCC.Automation,
     ButtonCC.Left,

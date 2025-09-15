@@ -60,7 +60,7 @@ class Plucked(Resettable):
         with self._shadow.context() as push:
             if isinstance(event, PadEvent):
                 self._pads.handle_event(push, self._midi_processed, event)
-            elif isinstance(event, ButtonEvent) and event.button == ButtonCC.Undo:
+            elif isinstance(event, ButtonEvent) and event.button == ButtonCC.Accent:
                 if event.pressed:
                     self.reset()
             elif isinstance(event, ButtonEvent) and event.button == ButtonCC.Master:
@@ -89,7 +89,7 @@ class Plucked(Resettable):
         """Reset the controller to its initial state.
 
         Resets both the menu and pad configurations and redraws the interface.
-        This is typically called on startup or when the Undo button is pressed.
+        This is typically called on startup or when the Accent button is pressed.
         """
         logging.info("plucked resetting")
         self._shadow.reset()
