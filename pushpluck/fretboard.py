@@ -535,7 +535,7 @@ class NoteTracker:
             note = msg.note  # pyright: ignore
             notes = self._notemap.get(channel)
             if notes is not None:
-                notes.remove(note)
+                notes.discard(note)
 
     def record_fx(self, msgs: List[FretboardMessage]) -> NoteEffects:
         """Record the effects of fretboard messages and update visual states.
