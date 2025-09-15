@@ -85,3 +85,7 @@ boot:
 # Start pushpluck
 pushpluck:
   {{python}} -m pushpluck.main
+
+# Watch pushpluck for changes:
+pushpluck-watch:
+   fzf -f "pushpluck/ .py$" | entr -nr just pushpluck
