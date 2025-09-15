@@ -458,7 +458,9 @@ class InfiniteTuner(Tuner):
     octave offsets based on repeat_steps.
     """
 
-    def __init__(self, tuning: List[int], repeat_steps: int, bounds: Optional[StringBounds]) -> None:
+    def __init__(
+        self, tuning: List[int], repeat_steps: int, bounds: Optional[StringBounds]
+    ) -> None:
         """Initialize the infinite tuner with base tuning and repeat pattern.
 
         Args:
@@ -836,13 +838,15 @@ class ChokeNoteHandler(NoteHandler):
         self._max_string = max_str
         self._fingered = [ChokeGroup.empty() for _ in range(max_str - min_str + 1)]
 
-    def _calculate_string_range(self, tuning: List[int], repeat_steps: int) -> Tuple[int, int]:
+    def _calculate_string_range(
+        self, tuning: List[int], repeat_steps: int
+    ) -> Tuple[int, int]:
         """Calculate the range of string indices that could produce valid MIDI notes.
 
         Returns:
             Tuple of (min_string_index, max_string_index)
         """
-        min_str, max_str = float('inf'), float('-inf')
+        min_str, max_str = float("inf"), float("-inf")
 
         for base_idx, base_note in enumerate(tuning):
             for fret in range(-12, 25):  # Reasonable fret range

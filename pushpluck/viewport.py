@@ -123,7 +123,9 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
         """
         # Apply layout transformation to get the "logical" string/fret coordinates
         # The effective layout maps from physical pad position to logical fretboard position
-        logical_row, logical_col = self._config.effective_layout.apply_to_coords(pos.row, pos.col)
+        logical_row, logical_col = self._config.effective_layout.apply_to_coords(
+            pos.row, pos.col
+        )
 
         # In the logical coordinate system: row = string, col = fret
         str_index = logical_row + self._total_str_offset()

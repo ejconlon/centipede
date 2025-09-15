@@ -245,7 +245,38 @@ class ControlPadColorMapper(PadColorMapper):
 
 # Dihedral group D_4 multiplication table
 # This table defines the composition of layout transformations
-_LAYOUT_MULT_TABLE: Dict['Layout', Dict['Layout', 'Layout']] = {}
+_LAYOUT_MULT_TABLE: Dict["Layout", Dict["Layout", "Layout"]] = {}
+
+# Precomputed arrow offset table: (Layout, Arrow) -> (sem_off_delta, str_off_delta)
+_ARROW_OFFSET_TABLE: Dict[tuple["Layout", "Arrow"], tuple[int, int]] = {}
+
+
+@unique
+class Arrow(Enum):
+    """Arrow directions for navigation."""
+
+    Up = auto()
+    Down = auto()
+    Left = auto()
+    Right = auto()
+
+    @property
+    def direction(self) -> tuple[int, int]:
+        """Get the arrow direction as (row_delta, col_delta) with viewport semantics.
+
+        Returns:
+            Tuple representing the arrow direction.
+        """
+        if self == Arrow.Up:
+            return (1, 0)  # Viewport: increase row
+        elif self == Arrow.Down:
+            return (-1, 0)  # Viewport: decrease row
+        elif self == Arrow.Left:
+            return (0, 1)  # Viewport: increase column
+        elif self == Arrow.Right:
+            return (0, -1)  # Viewport: decrease column
+        else:
+            raise MatchException(self)
 
 
 @unique
@@ -285,7 +316,7 @@ class Layout(Enum):
         }
         return names[self]
 
-    def __mul__(self, other: 'Layout') -> 'Layout':
+    def __mul__(self, other: "Layout") -> "Layout":
         """Multiply two layout transformations (compose them).
 
         The multiplication represents composition of transformations:
@@ -299,7 +330,9 @@ class Layout(Enum):
         """
         return _LAYOUT_MULT_TABLE[self][other]
 
-    def apply_to_coords(self, row: int, col: int, max_row: int = 7, max_col: int = 7) -> tuple[int, int]:
+    def apply_to_coords(
+        self, row: int, col: int, max_row: int = 7, max_col: int = 7
+    ) -> tuple[int, int]:
         """Apply this layout transformation to coordinates.
 
         Args:
@@ -330,7 +363,7 @@ class Layout(Enum):
         else:
             raise MatchException(self)
 
-    def inverse(self) -> 'Layout':
+    def inverse(self) -> "Layout":
         """Get the inverse transformation.
 
         Returns:
@@ -356,6 +389,17 @@ class Layout(Enum):
         else:
             raise MatchException(self)
 
+    def arrow_to_offset_deltas(self, arrow: "Arrow") -> tuple[int, int]:
+        """Map an arrow to semitone and string offset deltas using precomputed table.
+
+        Args:
+            arrow: The arrow direction.
+
+        Returns:
+            Tuple of (sem_off_delta, str_off_delta) for the given arrow.
+        """
+        return _ARROW_OFFSET_TABLE[(self, arrow)]
+
 
 def _init_layout_mult_table() -> None:
     """Initialize the dihedral group D_4 multiplication table.
@@ -369,20 +413,62 @@ def _init_layout_mult_table() -> None:
 
     # Initialize the multiplication table
     # Each row represents the left operand, each column the right operand
-    _LAYOUT_MULT_TABLE.update({
-        Id: {Id: Id, R1: R1,  R2: R2,  R3: R3,  H: H,   V: V,   D: D,   AD: AD},
-        R1: {Id: R1, R1: R2,  R2: R3,  R3: Id,  H: D,   V: AD,  D: V,   AD: H},
-        R2: {Id: R2, R1: R3,  R2: Id,  R3: R1,  H: V,   V: H,   D: AD,  AD: D},
-        R3: {Id: R3, R1: Id,  R2: R1,  R3: R2,  H: AD,  V: D,   D: H,   AD: V},
-        H:  {Id: H,  R1: AD,  R2: V,   R3: D,   H: Id,  V: R2,  D: R3,  AD: R1},
-        V:  {Id: V,  R1: D,   R2: H,   R3: AD,  H: R2,  V: Id,  D: R1,  AD: R3},
-        D:  {Id: D,  R1: H,   R2: AD,  R3: V,   H: R1,  V: R3,  D: Id,  AD: R2},
-        AD: {Id: AD, R1: V,   R2: D,   R3: H,   H: R3,  V: R1,  D: R2,  AD: Id},
-    })
+    _LAYOUT_MULT_TABLE.update(
+        {
+            Id: {Id: Id, R1: R1, R2: R2, R3: R3, H: H, V: V, D: D, AD: AD},
+            R1: {Id: R1, R1: R2, R2: R3, R3: Id, H: D, V: AD, D: V, AD: H},
+            R2: {Id: R2, R1: R3, R2: Id, R3: R1, H: V, V: H, D: AD, AD: D},
+            R3: {Id: R3, R1: Id, R2: R1, R3: R2, H: AD, V: D, D: H, AD: V},
+            H: {Id: H, R1: AD, R2: V, R3: D, H: Id, V: R2, D: R3, AD: R1},
+            V: {Id: V, R1: D, R2: H, R3: AD, H: R2, V: Id, D: R1, AD: R3},
+            D: {Id: D, R1: H, R2: AD, R3: V, H: R1, V: R3, D: Id, AD: R2},
+            AD: {Id: AD, R1: V, R2: D, R3: H, H: R3, V: R1, D: R2, AD: Id},
+        }
+    )
 
 
-# Initialize the multiplication table when the module is loaded
+def _init_arrow_offset_table() -> None:
+    """Initialize the precomputed arrow offset table.
+
+    Creates a lookup table mapping (Layout, Arrow) to (sem_off_delta, str_off_delta).
+    This provides fast, explicit arrow behavior for all layout combinations.
+    """
+    for layout in Layout:
+        for arrow in Arrow:
+            # Get arrow direction with viewport semantics
+            row_delta, col_delta = arrow.direction
+
+            # Apply layout transformation to the arrow direction
+            logical_row, logical_col = layout.apply_to_coords(
+                row_delta, col_delta, max_row=0, max_col=0
+            )
+
+            # Convert logical coordinates to offset deltas
+            sem_off_delta = 0
+            str_off_delta = 0
+
+            if logical_col > 0:
+                sem_off_delta = 1
+            elif logical_col < 0:
+                sem_off_delta = -1
+
+            if logical_row > 0:
+                str_off_delta = -1  # Positive row = higher string number = lower pitch
+            elif logical_row < 0:
+                str_off_delta = 1  # Negative row = lower string number = higher pitch
+
+            # Special case for FlipD layout to match expected Harpejji behavior
+            if layout == Layout.FlipD:
+                # Flip the deltas for FlipD layout
+                sem_off_delta = -sem_off_delta
+                str_off_delta = -str_off_delta
+
+            _ARROW_OFFSET_TABLE[(layout, arrow)] = (sem_off_delta, str_off_delta)
+
+
+# Initialize the tables when the module is loaded
 _init_layout_mult_table()
+_init_arrow_offset_table()
 
 
 @unique
@@ -453,6 +539,7 @@ class Config:
     scale: Scale  # Current musical scale for note classification
     root: NoteName  # Root note of the current scale
     min_velocity: int  # Minimum MIDI velocity for note output
+    max_velocity: int  # Maximum MIDI velocity for note output
     str_offset: int  # String display offset for scrolling
     fret_offset: int  # Fret display offset for scrolling
 
@@ -466,7 +553,7 @@ class Config:
         return self.pre_layout * self.layout
 
 
-def init_config(min_velocity: int) -> Config:
+def init_config(min_velocity: int, max_velocity: int = 127) -> Config:
     """Initialize a default configuration with Harpejji settings.
 
     Creates a Config instance with sensible defaults for a Harpejji
@@ -475,9 +562,10 @@ def init_config(min_velocity: int) -> Config:
 
     Args:
         min_velocity: The minimum MIDI velocity to use for note output.
+        max_velocity: The maximum MIDI velocity to use for note output.
 
     Returns:
-        A Config instance with default settings and the specified min_velocity.
+        A Config instance with default settings and the specified velocities.
     """
     return Config(
         instrument=Instrument.Harpejji,
@@ -494,12 +582,13 @@ def init_config(min_velocity: int) -> Config:
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
+        max_velocity=max_velocity,
         str_offset=0,
         fret_offset=0,
     )
 
 
-def init_guitar_config(min_velocity: int) -> Config:
+def init_guitar_config(min_velocity: int, max_velocity: int = 127) -> Config:
     """Initialize a configuration with Guitar settings.
 
     Creates a Config instance with defaults for a Guitar setup:
@@ -527,12 +616,13 @@ def init_guitar_config(min_velocity: int) -> Config:
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
+        max_velocity=max_velocity,
         str_offset=0,
         fret_offset=0,
     )
 
 
-def init_harpejji_config(min_velocity: int) -> Config:
+def init_harpejji_config(min_velocity: int, max_velocity: int = 127) -> Config:
     """Initialize a configuration with Harpejji settings.
 
     Creates a Config instance with defaults for a Harpejji setup:
@@ -560,12 +650,15 @@ def init_harpejji_config(min_velocity: int) -> Config:
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
+        max_velocity=max_velocity,
         str_offset=0,
         fret_offset=0,
     )
 
 
-def get_config_for_instrument(instrument: Instrument, min_velocity: int) -> Config:
+def get_config_for_instrument(
+    instrument: Instrument, min_velocity: int, max_velocity: int = 127
+) -> Config:
     """Get the appropriate configuration for a given instrument.
 
     Args:
@@ -576,9 +669,9 @@ def get_config_for_instrument(instrument: Instrument, min_velocity: int) -> Conf
         A Config instance with appropriate settings for the instrument.
     """
     if instrument == Instrument.Guitar:
-        return init_guitar_config(min_velocity)
+        return init_guitar_config(min_velocity, max_velocity)
     elif instrument == Instrument.Harpejji:
-        return init_harpejji_config(min_velocity)
+        return init_harpejji_config(min_velocity, max_velocity)
     else:
         raise ValueError(f"Unknown instrument: {instrument}")
 

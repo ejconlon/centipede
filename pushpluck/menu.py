@@ -13,11 +13,9 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto, unique
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, cast
 
-from pushpluck import constants
-from pushpluck.config import Config, Instrument, Layout, PlayMode
+from pushpluck.config import Arrow, Config, Instrument, Layout, PlayMode
 from pushpluck.constants import ButtonCC, ButtonIllum, KnobGroup
 from pushpluck.push import ButtonEvent, KnobEvent, PushEvent, PushInterface
-from pushpluck.scale import SCALES, NoteName
 
 N = TypeVar("N")  # Type variable for menu value types
 Y = TypeVar("Y")  # Type variable for configuration structure types
@@ -190,7 +188,9 @@ class InstrumentLens(Lens[Config, Any]):
     def set_value(self, struct: Config, value: Any) -> Config:
         from pushpluck.config import get_config_for_instrument
 
-        new_config = get_config_for_instrument(value, struct.min_velocity)
+        new_config = get_config_for_instrument(
+            value, struct.min_velocity, struct.max_velocity
+        )
         # Keep user-modified settings but reset instrument-specific ones
         return replace(
             new_config,
@@ -200,6 +200,38 @@ class InstrumentLens(Lens[Config, Any]):
             fret_offset=struct.fret_offset,
             midi_channel=struct.midi_channel,
         )
+
+
+class MinVelocityLens(Lens[Config, int]):
+    """Special lens for min_velocity that prevents it from exceeding max_velocity."""
+
+    def get_value(self, struct: Config) -> int:
+        return struct.min_velocity
+
+    def set_value(self, struct: Config, value: int) -> Config:
+        # Ensure min_velocity doesn't exceed max_velocity
+        # If it would, push max_velocity up
+        if value > struct.max_velocity:
+            new_max = min(127, value)
+            return replace(struct, min_velocity=value, max_velocity=new_max)
+        else:
+            return replace(struct, min_velocity=value)
+
+
+class MaxVelocityLens(Lens[Config, int]):
+    """Special lens for max_velocity that prevents it from going below min_velocity."""
+
+    def get_value(self, struct: Config) -> int:
+        return struct.max_velocity
+
+    def set_value(self, struct: Config, value: int) -> Config:
+        # Ensure max_velocity doesn't go below min_velocity
+        # If it would, push min_velocity down
+        if value < struct.min_velocity:
+            new_min = max(0, value)
+            return replace(struct, min_velocity=new_min, max_velocity=value)
+        else:
+            return replace(struct, max_velocity=value)
 
 
 @dataclass(frozen=True, eq=False)
@@ -307,9 +339,6 @@ def default_menu_layout() -> MenuLayout:
                 InstrumentLens(),
             ),
             KnobControl(
-                "MinVel", high_sens, IntValRange(0, 127), DataclassLens("min_velocity")
-            ),
-            KnobControl(
                 "Layout",
                 low_sens,
                 ChoiceValRange.new([v for v in Layout], lambda v: v.display_name),
@@ -327,26 +356,13 @@ def default_menu_layout() -> MenuLayout:
             KnobControl(
                 "StrOff", low_sens, IntValRange(-11, 12), DataclassLens("str_offset")
             ),
-            KnobControl(
-                "Scale",
-                low_sens,
-                ChoiceValRange.new(
-                    SCALES, lambda v: v.name[: constants.DISPLAY_HALF_BLOCK_LEN]
-                ),
-                DataclassLens("scale"),
-            ),
-            KnobControl(
-                "Root",
-                low_sens,
-                ChoiceValRange.new([v for v in NoteName], lambda v: v.name),
-                DataclassLens("root"),
-            ),
         ],
         device_knob_controls_row2=[
-            # Row 2 only has MIDI channel control
             KnobControl(
                 "Channel", low_sens, IntValRange(1, 16), DataclassLens("midi_channel")
             ),
+            KnobControl("MinVel", high_sens, IntValRange(0, 127), MinVelocityLens()),
+            KnobControl("MaxVel", high_sens, IntValRange(0, 127), MaxVelocityLens()),
         ],
     )
 
@@ -482,41 +498,52 @@ class Menu:
                     self._state.shift_semitones(12)
                     updated = True
                 elif event.button == ButtonCC.Left:
-                    # Left arrow: move viewport right (increase column)
-                    # Apply inverse layout to see what this means logically
-                    inverse_layout = self._state.config.effective_layout.inverse()
-                    logical_row, logical_col = inverse_layout.apply_to_coords(0, 1, max_row=0, max_col=0)
-                    if logical_col > 0:  # Logical fret increase
-                        self._state.shift_semitones(1)
-                    elif logical_row > 0:  # Logical string increase
-                        self._state.shift_strings(-1)
+                    # Left arrow: use precomputed table lookup
+                    sem_delta, str_delta = (
+                        self._state.config.effective_layout.arrow_to_offset_deltas(
+                            Arrow.Left
+                        )
+                    )
+                    if sem_delta != 0:
+                        self._state.shift_semitones(sem_delta)
+                    if str_delta != 0:
+                        self._state.shift_strings(str_delta)
                     updated = True
                 elif event.button == ButtonCC.Right:
-                    # Right arrow: move viewport left (decrease column)
-                    inverse_layout = self._state.config.effective_layout.inverse()
-                    logical_row, logical_col = inverse_layout.apply_to_coords(0, -1, max_row=0, max_col=0)
-                    if logical_col < 0:  # Logical fret decrease
-                        self._state.shift_semitones(-1)
-                    elif logical_row < 0:  # Logical string decrease
-                        self._state.shift_strings(1)
+                    # Right arrow: use precomputed table lookup
+                    sem_delta, str_delta = (
+                        self._state.config.effective_layout.arrow_to_offset_deltas(
+                            Arrow.Right
+                        )
+                    )
+                    if sem_delta != 0:
+                        self._state.shift_semitones(sem_delta)
+                    if str_delta != 0:
+                        self._state.shift_strings(str_delta)
                     updated = True
                 elif event.button == ButtonCC.Up:
-                    # Up arrow: move viewport down (increase row)
-                    inverse_layout = self._state.config.effective_layout.inverse()
-                    logical_row, logical_col = inverse_layout.apply_to_coords(1, 0, max_row=0, max_col=0)
-                    if logical_row > 0:  # Logical string increase
-                        self._state.shift_strings(-1)
-                    elif logical_col > 0:  # Logical fret increase
-                        self._state.shift_semitones(1)
+                    # Up arrow: use precomputed table lookup
+                    sem_delta, str_delta = (
+                        self._state.config.effective_layout.arrow_to_offset_deltas(
+                            Arrow.Up
+                        )
+                    )
+                    if sem_delta != 0:
+                        self._state.shift_semitones(sem_delta)
+                    if str_delta != 0:
+                        self._state.shift_strings(str_delta)
                     updated = True
                 elif event.button == ButtonCC.Down:
-                    # Down arrow: move viewport up (decrease row)
-                    inverse_layout = self._state.config.effective_layout.inverse()
-                    logical_row, logical_col = inverse_layout.apply_to_coords(-1, 0, max_row=0, max_col=0)
-                    if logical_row < 0:  # Logical string decrease
-                        self._state.shift_strings(1)
-                    elif logical_col < 0:  # Logical fret decrease
-                        self._state.shift_semitones(-1)
+                    # Down arrow: use precomputed table lookup
+                    sem_delta, str_delta = (
+                        self._state.config.effective_layout.arrow_to_offset_deltas(
+                            Arrow.Down
+                        )
+                    )
+                    if sem_delta != 0:
+                        self._state.shift_semitones(sem_delta)
+                    if str_delta != 0:
+                        self._state.shift_strings(str_delta)
                     updated = True
         elif isinstance(event, KnobEvent):
             if event.group == KnobGroup.Center:
