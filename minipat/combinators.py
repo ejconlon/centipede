@@ -511,7 +511,9 @@ class ControlValElemParser(ElemParser[str, ControlVal], Singleton):
 
 
 class ElemBinder(PatBinder[str, MidiAttrs]):
-    def __init__[V, X](self, parser: ElemParser[str, V], field: MessageField[V, X]) -> None:
+    def __init__[V, X](
+        self, parser: ElemParser[str, V], field: MessageField[V, X]
+    ) -> None:
         self._parser = parser
         self._field = field
 
