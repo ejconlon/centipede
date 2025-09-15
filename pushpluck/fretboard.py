@@ -273,7 +273,7 @@ class SingleChannelMapper(ChannelMapper):
             str_pos: The string position (ignored in this implementation).
 
         Returns:
-            The configured MIDI channel number.
+            The configured MIDI channel number (1-16).
         """
         return self._channel
 
@@ -593,7 +593,9 @@ class NoteTracker:
             for note in notes:
                 # Create a minimal FretboardMessage for note-off
                 # We use StringPos(0, 0) as a placeholder since this is cleanup
-                msg = FrozenMessage(type="note_off", channel=channel, note=note)
+                msg = FrozenMessage(
+                    type="note_off", channel=channel - 1, note=note
+                )  # Convert 1-16 to 0-15
                 fret_msg = FretboardMessage(
                     str_pos=StringPos(str_index=0, fret=0),
                     equivs=[],
@@ -797,6 +799,8 @@ class FretboardConfig(MappedComponentConfig[BoundedConfig]):
 
     chan_mode: ChannelMode
     """How MIDI channels should be assigned (single channel or per-string)."""
+    midi_channel: int
+    """Base MIDI channel (1-16) for note output."""
     play_mode: PlayMode
     """The play mode (tap, poly, mono) that determines note behavior."""
     tuning: List[int]
@@ -818,6 +822,7 @@ class FretboardConfig(MappedComponentConfig[BoundedConfig]):
         """
         return FretboardConfig(
             chan_mode=root_config.config.chan_mode,
+            midi_channel=root_config.config.midi_channel,
             play_mode=root_config.config.play_mode,
             tuning=root_config.config.tuning,
             min_velocity=root_config.config.min_velocity,
@@ -848,10 +853,10 @@ def create_chan_mapper(config: FretboardConfig) -> ChannelMapper:
         channel mode specified in the configuration.
     """
     if config.chan_mode == ChannelMode.Single:
-        return SingleChannelMapper(channel=constants.MIDI_BASE_CHANNEL)
+        return SingleChannelMapper(channel=config.midi_channel)
     else:
         return MultiChannelMapper(
-            base_channel=constants.MIDI_BASE_CHANNEL,
+            base_channel=config.midi_channel,
             min_channel=constants.MIDI_MIN_CHANNEL,
             max_channel=constants.MIDI_MAX_CHANNEL,
         )
@@ -984,12 +989,18 @@ class Fretboard(MappedComponent[BoundedConfig, FretboardConfig, NoteEffects]):
             channel = self._mapper.map_channel(str_pos)
             if note_group is not None and channel is not None:
                 velocity = self._clamp_velocity(velocity)
+                # Debug: Log the channel being used
+                import logging
+
+                logging.debug(
+                    f"Fretboard.trigger: Using channel {channel} (will send as {channel - 1})"
+                )
                 fret_msg = FretboardMessage(
                     str_pos=str_pos,
                     equivs=note_group.equivs,
                     msg=FrozenMessage(
                         type="note_on",
-                        channel=channel,
+                        channel=channel - 1,  # Convert from 1-16 to 0-15 for mido
                         note=note_group.note,
                         velocity=velocity,
                     ),

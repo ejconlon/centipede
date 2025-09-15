@@ -108,6 +108,7 @@ class MappedComponent(Generic[C, X, R], Component[C, R]):
         """
         sub_config = type(self).extract_config(config)
         if sub_config != self._config or reset:
+            self._config = sub_config
             return self.handle_mapped_config(sub_config)
         else:
             return None

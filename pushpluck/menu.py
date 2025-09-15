@@ -63,6 +63,7 @@ ACTIVE_BUTTONS: List[ButtonCC] = [
     ButtonCC.Down,
     ButtonCC.OctaveDown,
     ButtonCC.OctaveUp,
+    ButtonCC.Repeat,
 ]
 
 
@@ -197,6 +198,7 @@ class InstrumentLens(Lens[Config, Any]):
             root=struct.root,
             str_offset=struct.str_offset,
             fret_offset=struct.fret_offset,
+            midi_channel=struct.midi_channel,
         )
 
 
@@ -288,7 +290,8 @@ class DeviceState(Generic[Y, N]):
 
 @dataclass(frozen=True)
 class MenuLayout:
-    device_knob_controls: List[KnobControl[Config, Any]]
+    device_knob_controls_row1: List[KnobControl[Config, Any]]
+    device_knob_controls_row2: List[KnobControl[Config, Any]]
 
 
 def default_menu_layout() -> MenuLayout:
@@ -296,7 +299,7 @@ def default_menu_layout() -> MenuLayout:
     high_sens = 1
     low_sens = 4
     return MenuLayout(
-        device_knob_controls=[
+        device_knob_controls_row1=[
             KnobControl(
                 "Instr",
                 low_sens,
@@ -338,7 +341,13 @@ def default_menu_layout() -> MenuLayout:
                 ChoiceValRange.new([v for v in NoteName], lambda v: v.name),
                 DataclassLens("root"),
             ),
-        ]
+        ],
+        device_knob_controls_row2=[
+            # Row 2 only has MIDI channel control
+            KnobControl(
+                "Channel", low_sens, IntValRange(1, 16), DataclassLens("midi_channel")
+            ),
+        ],
     )
 
 
@@ -346,7 +355,9 @@ def default_menu_layout() -> MenuLayout:
 class MenuState:
     config: Config
     cur_page: Page
-    device_state: DeviceState[Config, Any]
+    device_state_row1: DeviceState[Config, Any]
+    device_state_row2: DeviceState[Config, Any]
+    active_row: int = 0  # 0 for row1 active, 1 for row2 active
 
     def redraw(self, push: PushInterface) -> None:
         # Clear owned components
@@ -360,16 +371,31 @@ class MenuState:
             push.button_set_illum(page.to_button(), illum)
         # Highlight other buttons
         for button in ACTIVE_BUTTONS:
-            push.button_set_illum(button, ButtonIllum.Half)
+            if button == ButtonCC.Repeat:
+                # Highlight Repeat button based on active row
+                illum = ButtonIllum.Full if self.active_row == 1 else ButtonIllum.Half
+                push.button_set_illum(button, illum)
+            else:
+                push.button_set_illum(button, ButtonIllum.Half)
         # Draw page-specific portions
         if self.cur_page == Page.Device:
-            for half_col, state in enumerate(self.device_state.knob_states):
-                push.lcd_display_half_block(
-                    constants.DISPLAY_MAX_ROWS - 1, half_col, state.control.name
-                )
-                push.lcd_display_half_block(
-                    constants.DISPLAY_MAX_ROWS - 2, half_col, state.rendered()
-                )
+            # Display both rows, swapping positions based on active_row
+            if self.active_row == 0:
+                # Row 1 on lines 2&3, Row 2 on lines 0&1
+                for half_col, state in enumerate(self.device_state_row1.knob_states):
+                    push.lcd_display_half_block(3, half_col, state.control.name)
+                    push.lcd_display_half_block(2, half_col, state.rendered())
+                for half_col, state in enumerate(self.device_state_row2.knob_states):
+                    push.lcd_display_half_block(1, half_col, state.control.name)
+                    push.lcd_display_half_block(0, half_col, state.rendered())
+            else:
+                # Row 2 on lines 2&3, Row 1 on lines 0&1 (swapped)
+                for half_col, state in enumerate(self.device_state_row2.knob_states):
+                    push.lcd_display_half_block(3, half_col, state.control.name)
+                    push.lcd_display_half_block(2, half_col, state.rendered())
+                for half_col, state in enumerate(self.device_state_row1.knob_states):
+                    push.lcd_display_half_block(1, half_col, state.control.name)
+                    push.lcd_display_half_block(0, half_col, state.rendered())
         elif self.cur_page == Page.Browse:
             pass
         elif self.cur_page == Page.Scales:
@@ -378,7 +404,8 @@ class MenuState:
             raise ValueError()
 
     def _set_config(self, new_config: Config) -> None:
-        self.device_state.update(new_config)
+        self.device_state_row1.update(new_config)
+        self.device_state_row2.update(new_config)
         self.config = new_config
 
     def shift_semitones(self, diff: int) -> None:
@@ -393,20 +420,32 @@ class MenuState:
 
     def turn_knob(self, offset: int, diff: int) -> bool:
         if self.cur_page == Page.Device:
-            if offset >= 0 and offset < len(self.device_state.knob_states):
-                state = self.device_state.knob_states[offset]
+            # Active row controls the knobs
+            active_device_state = (
+                self.device_state_row1
+                if self.active_row == 0
+                else self.device_state_row2
+            )
+            if offset >= 0 and offset < len(active_device_state.knob_states):
+                state = active_device_state.knob_states[offset]
                 new_config = state.accumulate(self.config, diff)
                 if new_config is not None:
-                    self.config = new_config
+                    self._set_config(new_config)
                     return True
         return False
+
+    def swap_rows(self) -> None:
+        """Swap between row 1 and row 2 controls."""
+        self.active_row = 1 - self.active_row
 
     @classmethod
     def initial(cls, layout: MenuLayout, config: Config) -> MenuState:
         return cls(
             config,
             Page.Device,
-            DeviceState.initial(layout.device_knob_controls, config),
+            DeviceState.initial(layout.device_knob_controls_row1, config),
+            DeviceState.initial(layout.device_knob_controls_row2, config),
+            active_row=0,
         )
 
 
@@ -432,6 +471,10 @@ class Menu:
                     if self._state.cur_page != page:
                         self._state.cur_page = page
                         updated = True
+                elif event.button == ButtonCC.Repeat:
+                    # Swap which row is active (and therefore on top)
+                    self._state.swap_rows()
+                    updated = True
                 elif event.button == ButtonCC.OctaveDown:
                     self._state.shift_semitones(-12)
                     updated = True

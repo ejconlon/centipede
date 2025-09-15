@@ -316,6 +316,7 @@ class Config:
     layout: Layout  # Visual layout orientation (horizontal/vertical)
     play_mode: PlayMode  # How notes are triggered and sustained
     chan_mode: ChannelMode  # MIDI channel usage strategy
+    midi_channel: int  # Base MIDI channel (1-16)
     scale: Scale  # Current musical scale for note classification
     root: NoteName  # Root note of the current scale
     min_velocity: int  # Minimum MIDI velocity for note output
@@ -344,6 +345,7 @@ def init_config(min_velocity: int) -> Config:
         layout=Layout.Vert,
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
+        midi_channel=2,
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
@@ -373,6 +375,7 @@ def init_guitar_config(min_velocity: int) -> Config:
         layout=Layout.Horiz,
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
+        midi_channel=2,
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
@@ -402,6 +405,7 @@ def init_harpejji_config(min_velocity: int) -> Config:
         layout=Layout.Vert,
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
+        midi_channel=2,
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
