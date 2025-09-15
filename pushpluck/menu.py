@@ -312,7 +312,7 @@ def default_menu_layout() -> MenuLayout:
             KnobControl(
                 "Layout",
                 low_sens,
-                ChoiceValRange.new([v for v in Layout], lambda v: v.name),
+                ChoiceValRange.new([v for v in Layout], lambda v: v.display_name),
                 DataclassLens("layout"),
             ),
             KnobControl(
@@ -482,28 +482,41 @@ class Menu:
                     self._state.shift_semitones(12)
                     updated = True
                 elif event.button == ButtonCC.Left:
-                    if self._state.config.layout == Layout.Horiz:
-                        self._state.shift_semitones(-1)
-                    else:
+                    # Left arrow: move viewport right (increase column)
+                    # Apply inverse layout to see what this means logically
+                    inverse_layout = self._state.config.effective_layout.inverse()
+                    logical_row, logical_col = inverse_layout.apply_to_coords(0, 1, max_row=0, max_col=0)
+                    if logical_col > 0:  # Logical fret increase
+                        self._state.shift_semitones(1)
+                    elif logical_row > 0:  # Logical string increase
                         self._state.shift_strings(-1)
                     updated = True
                 elif event.button == ButtonCC.Right:
-                    if self._state.config.layout == Layout.Horiz:
-                        self._state.shift_semitones(1)
-                    else:
+                    # Right arrow: move viewport left (decrease column)
+                    inverse_layout = self._state.config.effective_layout.inverse()
+                    logical_row, logical_col = inverse_layout.apply_to_coords(0, -1, max_row=0, max_col=0)
+                    if logical_col < 0:  # Logical fret decrease
+                        self._state.shift_semitones(-1)
+                    elif logical_row < 0:  # Logical string decrease
                         self._state.shift_strings(1)
                     updated = True
                 elif event.button == ButtonCC.Up:
-                    if self._state.config.layout == Layout.Horiz:
-                        self._state.shift_strings(1)
-                    else:
-                        self._state.shift_semitones(-1)
+                    # Up arrow: move viewport down (increase row)
+                    inverse_layout = self._state.config.effective_layout.inverse()
+                    logical_row, logical_col = inverse_layout.apply_to_coords(1, 0, max_row=0, max_col=0)
+                    if logical_row > 0:  # Logical string increase
+                        self._state.shift_strings(-1)
+                    elif logical_col > 0:  # Logical fret increase
+                        self._state.shift_semitones(1)
                     updated = True
                 elif event.button == ButtonCC.Down:
-                    if self._state.config.layout == Layout.Horiz:
-                        self._state.shift_strings(-1)
-                    else:
-                        self._state.shift_semitones(1)
+                    # Down arrow: move viewport up (decrease row)
+                    inverse_layout = self._state.config.effective_layout.inverse()
+                    logical_row, logical_col = inverse_layout.apply_to_coords(-1, 0, max_row=0, max_col=0)
+                    if logical_row < 0:  # Logical string decrease
+                        self._state.shift_strings(1)
+                    elif logical_col < 0:  # Logical fret decrease
+                        self._state.shift_semitones(-1)
                     updated = True
         elif isinstance(event, KnobEvent):
             if event.group == KnobGroup.Center:

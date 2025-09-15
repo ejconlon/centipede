@@ -9,9 +9,9 @@ from pushpluck.fretboard import StringPos
 from pushpluck.pos import Pos
 from pushpluck.viewport import Viewport, ViewportConfig
 
-DEFAULT_CONFIG = ViewportConfig(6, Layout.Horiz, 0, 0, 0)
+DEFAULT_CONFIG = ViewportConfig(6, Layout.Identity, 0, 0, 0)
 SHIFT_CONFIG = replace(DEFAULT_CONFIG, str_offset=1, fret_offset=1)
-VERT_CONFIG = replace(DEFAULT_CONFIG, layout=Layout.Vert)
+VERT_CONFIG = replace(DEFAULT_CONFIG, effective_layout=Layout.Rot90)
 
 
 class Direction(Enum):
@@ -23,14 +23,14 @@ class Direction(Enum):
 @pytest.mark.parametrize(
     "config, pad_pos, str_pos, direction",
     [
-        (DEFAULT_CONFIG, Pos(0, 0), None, Direction.Forward),
-        (DEFAULT_CONFIG, Pos(1, 1), StringPos(0, 1), Direction.Both),
-        (DEFAULT_CONFIG, Pos(1, -1), StringPos(0, -1), Direction.Forward),
-        (DEFAULT_CONFIG, Pos(6, 2), StringPos(5, 2), Direction.Both),
-        (DEFAULT_CONFIG, Pos(7, 1), None, Direction.Forward),
-        (SHIFT_CONFIG, Pos(0, 0), StringPos(0, 1), Direction.Both),
-        (VERT_CONFIG, Pos(0, 0), None, Direction.Forward),
-        (VERT_CONFIG, Pos(1, 1), StringPos(0, 1), Direction.Both),
+        (DEFAULT_CONFIG, Pos(0, 0), StringPos(0, 0), Direction.Both),
+        (DEFAULT_CONFIG, Pos(1, 1), StringPos(1, 1), Direction.Both),
+        (DEFAULT_CONFIG, Pos(1, -1), StringPos(1, -1), Direction.Forward),
+        (DEFAULT_CONFIG, Pos(6, 2), StringPos(6, 2), Direction.Both),
+        (DEFAULT_CONFIG, Pos(7, 1), StringPos(7, 1), Direction.Both),
+        (SHIFT_CONFIG, Pos(0, 0), StringPos(1, 1), Direction.Both),
+        (VERT_CONFIG, Pos(0, 0), StringPos(0, 7), Direction.Both),
+        (VERT_CONFIG, Pos(1, 1), StringPos(1, 6), Direction.Both),
     ],
 )
 def test_viewport(

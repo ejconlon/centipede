@@ -11,7 +11,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto, unique
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pushpluck import constants
 from pushpluck.base import MatchException
@@ -243,16 +243,146 @@ class ControlPadColorMapper(PadColorMapper):
         return scheme.control_pressed if vis.active else scheme.control
 
 
+# Dihedral group D_4 multiplication table
+# This table defines the composition of layout transformations
+_LAYOUT_MULT_TABLE: Dict['Layout', Dict['Layout', 'Layout']] = {}
+
+
 @unique
 class Layout(Enum):
-    """Defines the layout orientation for the instrument interface.
+    """Defines layout transformations as elements of the dihedral group D_4.
 
-    Determines how the strings and frets are oriented on the display,
-    affecting the visual arrangement of the note grid.
+    The dihedral group D_4 represents the 8 symmetries of a square:
+    4 rotations and 4 reflections. These transformations are applied
+    to the coordinate mapping between pad positions and fretboard coordinates.
     """
 
-    Horiz = auto()  # Horizontal layout (strings horizontal, frets vertical)
-    Vert = auto()  # Vertical layout (strings vertical, frets horizontal)
+    Identity = auto()  # No transformation (0° rotation)
+    Rot90 = auto()  # 90° clockwise rotation
+    Rot180 = auto()  # 180° rotation
+    Rot270 = auto()  # 270° clockwise rotation (90° counter-clockwise)
+    FlipH = auto()  # Horizontal flip (reflect across horizontal axis)
+    FlipV = auto()  # Vertical flip (reflect across vertical axis)
+    FlipD = auto()  # Diagonal flip (reflect across main diagonal)
+    FlipAD = auto()  # Anti-diagonal flip (reflect across anti-diagonal)
+
+    @property
+    def display_name(self) -> str:
+        """Get user-friendly display name for the layout.
+
+        Returns:
+            Human-readable name for menu display.
+        """
+        names = {
+            Layout.Identity: "Normal",
+            Layout.Rot90: "Rot90",
+            Layout.Rot180: "Rot180",
+            Layout.Rot270: "Rot270",
+            Layout.FlipH: "FlipH",
+            Layout.FlipV: "FlipV",
+            Layout.FlipD: "FlipD",
+            Layout.FlipAD: "FlipAD",
+        }
+        return names[self]
+
+    def __mul__(self, other: 'Layout') -> 'Layout':
+        """Multiply two layout transformations (compose them).
+
+        The multiplication represents composition of transformations:
+        (a * b) means "apply b first, then apply a".
+
+        Args:
+            other: The transformation to compose with this one.
+
+        Returns:
+            The composed transformation.
+        """
+        return _LAYOUT_MULT_TABLE[self][other]
+
+    def apply_to_coords(self, row: int, col: int, max_row: int = 7, max_col: int = 7) -> tuple[int, int]:
+        """Apply this layout transformation to coordinates.
+
+        Args:
+            row: The row coordinate (0-based).
+            col: The column coordinate (0-based).
+            max_row: Maximum row index (default 7 for 8x8 grid).
+            max_col: Maximum column index (default 7 for 8x8 grid).
+
+        Returns:
+            Tuple of (new_row, new_col) after transformation.
+        """
+        if self == Layout.Identity:
+            return (row, col)
+        elif self == Layout.Rot90:
+            return (col, max_row - row)
+        elif self == Layout.Rot180:
+            return (max_row - row, max_col - col)
+        elif self == Layout.Rot270:
+            return (max_col - col, row)
+        elif self == Layout.FlipH:
+            return (max_row - row, col)
+        elif self == Layout.FlipV:
+            return (row, max_col - col)
+        elif self == Layout.FlipD:
+            return (col, row)
+        elif self == Layout.FlipAD:
+            return (max_col - col, max_row - row)
+        else:
+            raise MatchException(self)
+
+    def inverse(self) -> 'Layout':
+        """Get the inverse transformation.
+
+        Returns:
+            The layout transformation that undoes this one.
+        """
+        # For the dihedral group, compute the inverse
+        if self == Layout.Identity:
+            return Layout.Identity
+        elif self == Layout.Rot90:
+            return Layout.Rot270
+        elif self == Layout.Rot180:
+            return Layout.Rot180
+        elif self == Layout.Rot270:
+            return Layout.Rot90
+        elif self == Layout.FlipH:
+            return Layout.FlipH  # Reflections are self-inverse
+        elif self == Layout.FlipV:
+            return Layout.FlipV
+        elif self == Layout.FlipD:
+            return Layout.FlipD
+        elif self == Layout.FlipAD:
+            return Layout.FlipAD
+        else:
+            raise MatchException(self)
+
+
+def _init_layout_mult_table() -> None:
+    """Initialize the dihedral group D_4 multiplication table.
+
+    This implements the group operation for the 8 symmetries of a square.
+    The multiplication represents composition: (a * b) means apply b first, then a.
+    """
+    # Import Layout enum values for convenience
+    Id, R1, R2, R3 = Layout.Identity, Layout.Rot90, Layout.Rot180, Layout.Rot270
+    H, V, D, AD = Layout.FlipH, Layout.FlipV, Layout.FlipD, Layout.FlipAD
+
+    # Initialize the multiplication table
+    # Each row represents the left operand, each column the right operand
+    _LAYOUT_MULT_TABLE.update({
+        Id: {Id: Id, R1: R1,  R2: R2,  R3: R3,  H: H,   V: V,   D: D,   AD: AD},
+        R1: {Id: R1, R1: R2,  R2: R3,  R3: Id,  H: D,   V: AD,  D: V,   AD: H},
+        R2: {Id: R2, R1: R3,  R2: Id,  R3: R1,  H: V,   V: H,   D: AD,  AD: D},
+        R3: {Id: R3, R1: Id,  R2: R1,  R3: R2,  H: AD,  V: D,   D: H,   AD: V},
+        H:  {Id: H,  R1: AD,  R2: V,   R3: D,   H: Id,  V: R2,  D: R3,  AD: R1},
+        V:  {Id: V,  R1: D,   R2: H,   R3: AD,  H: R2,  V: Id,  D: R1,  AD: R3},
+        D:  {Id: D,  R1: H,   R2: AD,  R3: V,   H: R1,  V: R3,  D: Id,  AD: R2},
+        AD: {Id: AD, R1: V,   R2: D,   R3: H,   H: R3,  V: R1,  D: R2,  AD: Id},
+    })
+
+
+# Initialize the multiplication table when the module is loaded
+_init_layout_mult_table()
 
 
 @unique
@@ -313,7 +443,8 @@ class Config:
     instrument_name: str  # Name of the instrument (e.g., "Guitar", "Bass")
     tuning_name: str  # Name of the tuning (e.g., "Standard", "Drop D")
     tuning: List[int]  # MIDI note numbers for each string's open note
-    layout: Layout  # Visual layout orientation (horizontal/vertical)
+    pre_layout: Layout  # Instrument-specific layout transformation applied first
+    layout: Layout  # User-selectable layout transformation (defaults to Identity)
     play_mode: PlayMode  # How notes are triggered and sustained
     chan_mode: ChannelMode  # MIDI channel usage strategy
     midi_channel: int  # Base MIDI channel (1-16)
@@ -324,6 +455,15 @@ class Config:
     min_velocity: int  # Minimum MIDI velocity for note output
     str_offset: int  # String display offset for scrolling
     fret_offset: int  # Fret display offset for scrolling
+
+    @property
+    def effective_layout(self) -> Layout:
+        """Get the effective layout by composing pre_layout and layout.
+
+        Returns:
+            The result of pre_layout * layout (pre_layout applied first, then layout).
+        """
+        return self.pre_layout * self.layout
 
 
 def init_config(min_velocity: int) -> Config:
@@ -344,7 +484,8 @@ def init_config(min_velocity: int) -> Config:
         instrument_name="Harpejji",
         tuning_name="Chromatic",
         tuning=constants.HARPEJJI_TUNING,
-        layout=Layout.Vert,
+        pre_layout=Layout.FlipD,  # Harpejji: diagonal flip layout by default
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,
@@ -376,7 +517,8 @@ def init_guitar_config(min_velocity: int) -> Config:
         instrument_name="Guitar",
         tuning_name="Standard",
         tuning=constants.STANDARD_TUNING,
-        layout=Layout.Horiz,
+        pre_layout=Layout.Identity,  # Guitar: horizontal layout is the base
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,
@@ -408,7 +550,8 @@ def init_harpejji_config(min_velocity: int) -> Config:
         instrument_name="Harpejji",
         tuning_name="Chromatic",
         tuning=constants.HARPEJJI_TUNING,
-        layout=Layout.Vert,
+        pre_layout=Layout.FlipD,  # Harpejji: diagonal flip layout by default
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,

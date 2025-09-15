@@ -28,8 +28,8 @@ class ViewportConfig(MappedComponentConfig[Config]):
 
     num_strings: int
     """Number of strings in the current instrument tuning."""
-    layout: Layout
-    """The layout orientation (Horiz or Vert) for the fretboard display."""
+    effective_layout: Layout
+    """The effective layout transformation (pre_layout * layout) for coordinate mapping."""
     view_offset: int
     """String offset for centering/positioning the default view."""
     str_offset: int
@@ -49,7 +49,7 @@ class ViewportConfig(MappedComponentConfig[Config]):
         """
         return cls(
             num_strings=len(root_config.tuning),
-            layout=root_config.layout,
+            effective_layout=root_config.effective_layout,
             view_offset=root_config.view_offset,
             str_offset=root_config.str_offset,
             fret_offset=root_config.fret_offset,
@@ -121,16 +121,14 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             The corresponding StringPos, or None if the pad position
             maps to an invalid or out-of-range string/fret combination.
         """
-        str_index: int
-        fret: int
-        if self._config.layout == Layout.Horiz:
-            str_index = pos.row
-            fret = pos.col
-        else:
-            str_index = pos.col
-            fret = pos.row
-        str_index += self._total_str_offset()
-        fret += self._config.fret_offset
+        # Apply layout transformation to get the "logical" string/fret coordinates
+        # The effective layout maps from physical pad position to logical fretboard position
+        logical_row, logical_col = self._config.effective_layout.apply_to_coords(pos.row, pos.col)
+
+        # In the logical coordinate system: row = string, col = fret
+        str_index = logical_row + self._total_str_offset()
+        fret = logical_col + self._config.fret_offset
+
         # For infinite strings, any string index is valid
         return StringPos(str_index=str_index, fret=fret)
 
@@ -160,16 +158,14 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             The corresponding Pos on the pad grid, or None if the
             string position is outside the current viewport.
         """
-        str_dim = str_pos.str_index - self._total_str_offset()
-        fret_dim = str_pos.fret - self._config.fret_offset
-        row: int
-        col: int
-        if self._config.layout == Layout.Horiz:
-            row = str_dim
-            col = fret_dim
-        else:
-            row = fret_dim
-            col = str_dim
+        # Convert to logical coordinates (before layout transformation)
+        logical_row = str_pos.str_index - self._total_str_offset()
+        logical_col = str_pos.fret - self._config.fret_offset
+
+        # Apply inverse layout transformation to get physical pad position
+        inverse_layout = self._config.effective_layout.inverse()
+        row, col = inverse_layout.apply_to_coords(logical_row, logical_col)
+
         if row < 0 or row >= constants.NUM_PAD_ROWS:
             return None
         elif col < 0 or col >= constants.NUM_PAD_COLS:
@@ -189,16 +185,12 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
             if no valid strings are visible in the current viewport.
         """
         view_offset = self._view_str_offset()
-        max_str_dim = (
-            constants.NUM_PAD_ROWS
-            if self._config.layout == Layout.Horiz
-            else constants.NUM_PAD_COLS
-        )
-        num_frets_bounded = (
-            constants.NUM_PAD_COLS
-            if self._config.layout == Layout.Horiz
-            else constants.NUM_PAD_ROWS
-        )
+
+        # Determine the maximum string and fret dimensions based on effective layout
+        # We need to consider how the layout maps logical coordinates to physical ones
+        # For now, assume both dimensions are bounded by the grid size
+        max_str_dim = constants.NUM_PAD_ROWS
+        num_frets_bounded = constants.NUM_PAD_COLS
 
         # For infinite strings, any string index is valid
         valid_indices: List[int] = []
