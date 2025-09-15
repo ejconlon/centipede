@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
@@ -10,7 +9,9 @@ from functools import partial
 from typing import Any, Callable, Iterable, Optional, Tuple, cast, override
 
 from minipat.common import ONE_HALF, PartialMatchException, ignore_arg
-from spiny import Box, PSeq
+from spiny.arrow import ArrowM
+from spiny.common import Box, Singleton
+from spiny.seq import PSeq
 
 
 class SpeedOp(Enum):
@@ -621,80 +622,27 @@ def pat_bind[T, U](fn: Callable[[T], Pat[U]]) -> Callable[[Pat[T]], Pat[U]]:
     return pat_cata(elim)
 
 
-class PatBinder[T, U](metaclass=ABCMeta):
-    @abstractmethod
-    def bind(self, value: T) -> Pat[U]:
-        raise NotImplementedError()
-
-    @staticmethod
-    def identity() -> PatBinder[T, T]:
-        return _ID_BINDER_INSTANCE
-
-    @staticmethod
-    def mk(fn: Callable[[T], Pat[U]]) -> PatBinder[T, U]:
-        return FnBinder(fn)
-
-    def andThen[V](self, other: PatBinder[U, V]) -> PatBinder[T, V]:
-        return ChainBinder.link(self, other)
-
-
-class FnBinder[T, U](PatBinder[T, U]):
-    def __init__(self, fn: Callable[[T], Pat[U]]) -> None:
-        self._fn = fn
+class PatBinder[T, U](ArrowM[T, U, Pat[U]]):
+    @classmethod
+    @override
+    def pure(cls) -> PatBinder[T, T]:
+        """Create a pure binder that returns patterns unchanged."""
+        return IdPatBinder()
 
     @override
-    def bind(self, value: T) -> Pat[U]:
-        return self._fn(value)
+    def unsafe_bind[FV](self, context: Pat[U], fn: Callable[[U], FV]) -> FV:
+        fn1 = cast(Callable[[U], Pat[Any]], fn)
+        pat1 = pat_bind(fn1)(context)
+        return cast(FV, pat1)
+
+    def bind[V](self, pat: Pat[U], fn: Callable[[U], Pat[V]]) -> Pat[V]:
+        return self.unsafe_bind(pat, fn)
 
 
-class IdBinder[T](PatBinder[T, T]):
+class IdPatBinder[T](PatBinder[T, T], Singleton):
+    """Identity pattern binder that returns values as pure patterns."""
+
     @override
-    def bind(self, value: T) -> Pat[T]:
+    def apply(self, value: T) -> Pat[T]:
+        """Wrap a value in a pure pattern."""
         return Pat.pure(value)
-
-
-_ID_BINDER_INSTANCE: IdBinder[Any] = IdBinder()
-
-
-class ChainBinder[T, V](PatBinder[T, V]):
-    def __init__(self, chain: PSeq[PatBinder[Any, Any]]) -> None:
-        self._chain = chain
-
-    @staticmethod
-    def link[U](b1: PatBinder[T, U], b2: PatBinder[U, V]) -> PatBinder[T, V]:
-        chain: PSeq[PatBinder[Any, Any]]
-        if isinstance(b1, IdBinder):
-            return cast(PatBinder[T, V], b2)
-        elif isinstance(b2, IdBinder):
-            return cast(PatBinder[T, V], b1)
-        elif isinstance(b1, ChainBinder):
-            if isinstance(b2, ChainBinder):
-                chain = b1._chain.concat(b2._chain)
-            else:
-                chain = b1._chain.snoc(b2)
-        else:
-            if isinstance(b2, ChainBinder):
-                chain = b2._chain.cons(b1)
-            else:
-                chain = PSeq.mk([b1, b2])
-        return ChainBinder(chain)
-
-    def _unroll(self, acc: Pat[Any], rest: PSeq[PatBinder[Any, Any]]) -> Pat[Any]:
-        while True:
-            x = rest.uncons()
-            if x is None:
-                break
-            else:
-                binder, next_rest = x
-                acc = binder.bind(acc)
-                rest = next_rest
-        return acc
-
-    @override
-    def bind(self, value: T) -> Pat[V]:
-        x = self._chain.uncons()
-        assert x is not None
-        binder, rest = x
-        acc: Pat[Any] = binder.bind(value)
-        acc = self._unroll(acc, rest)
-        return cast(Pat[V], acc)

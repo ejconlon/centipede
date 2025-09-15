@@ -19,13 +19,13 @@ inspired by concepts from category theory and functional programming:
   enabling non-deterministic computations where each step can produce multiple results.
 
 These abstractions generalize patterns found throughout the codebase:
-- PatBinder in minipat.pat follows the Arrow pattern
-- ElemParser in minipat.combinators follows the Iso pattern
+- PatBinder in minipat.pat follows the ArrowM pattern
+- Element parsers in minipat.combinators use the Iso pattern
 
 Examples:
     Basic arrow composition::
 
-        >>> from minipat.arrow import Arrow
+        >>> from spiny.arrow import Arrow
         >>> double = Arrow.function(lambda x: x * 2)
         >>> add_one = Arrow.function(lambda x: x + 1)
         >>> pipeline = double.and_then(add_one)
@@ -34,7 +34,7 @@ Examples:
 
     Isomorphic transformations::
 
-        >>> from minipat.arrow import Iso
+        >>> from spiny.arrow import Iso
         >>> binary_decimal = Iso.functions(
         ...     lambda n: bin(n)[2:],  # decimal to binary string
         ...     lambda s: int(s, 2)    # binary string to decimal
@@ -46,7 +46,7 @@ Examples:
 
     Monadic computations with SeqArrowM::
 
-        >>> from minipat.arrow import SeqArrowM
+        >>> from spiny.arrow import SeqArrowM
         >>> from spiny import PSeq
         >>> class SplitArrow(SeqArrowM):
         ...     def apply(self, x):
@@ -575,6 +575,7 @@ class ArrowM[A, B, FB](metaclass=ABCMeta):
     Subclasses must implement:
         - apply: Transform input A to monadic result FB.
         - unsafe_bind: Define how to chain computations in the monadic context.
+        - identity: Create an identity arrow for the monad.
 
     Example:
         A parser that might fail could be modeled as ArrowM[str, int, Optional[int]],
@@ -609,6 +610,19 @@ class ArrowM[A, B, FB](metaclass=ABCMeta):
 
         Returns:
             A value in the monadic context F[C]
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def pure(cls) -> ArrowM[A, A, Any]:
+        """Create a pure arrow for this monad.
+
+        The pure arrow wraps values in the monadic context without
+        additional transformation.
+
+        Returns:
+            A pure monadic arrow.
         """
         raise NotImplementedError()
 
@@ -665,6 +679,14 @@ class ChainArrowM[A, C, FC](ArrowM[A, C, FC]):
         """Initialize with a sequence of monadic arrows to compose."""
         self._chain = chain
         self._fn: Optional[Callable[[A], FC]] = None
+
+    @classmethod
+    @override
+    def pure(cls) -> ArrowM[A, A, Any]:
+        """Create a pure arrow by delegating to the first arrow in the chain."""
+        # This shouldn't be called directly on ChainArrowM, but we need to implement it
+        # Delegate to the actual monad type
+        raise NotImplementedError("ChainArrowM.pure should not be called directly")
 
     @staticmethod
     def link[B, FB](k1: ArrowM[A, B, FB], k2: ArrowM[B, C, FC]) -> ArrowM[A, C, FC]:
@@ -746,6 +768,12 @@ class SeqArrowM[A, B](ArrowM[A, B, PSeq[B]]):
         [5, 10, 15]
     """
 
+    @classmethod
+    @override
+    def pure(cls) -> SeqArrowM[A, A]:
+        """Create a pure arrow for the sequence monad."""
+        return IdSeqArrowM()
+
     def unsafe_bind[FC](self, context: PSeq[B], fn: Callable[[B], FC]) -> FC:
         """Bind operation for the sequence monad.
 
@@ -783,3 +811,12 @@ class SeqArrowM[A, B](ArrowM[A, B, PSeq[B]]):
             [1, 10, 2, 20, 3, 30]
         """
         return self.unsafe_bind(context, fn)
+
+
+class IdSeqArrowM[T](SeqArrowM[T, T]):
+    """Identity arrow for the sequence monad."""
+
+    @override
+    def apply(self, value: T) -> PSeq[T]:
+        """Wrap a value in a singleton sequence."""
+        return PSeq.mk([value])

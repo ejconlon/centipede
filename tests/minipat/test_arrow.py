@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-from minipat.arrow import (
+from spiny import PSeq
+from spiny.arrow import (
     Arrow,
     ChainArrow,
     ChainArrowM,
@@ -15,7 +16,6 @@ from minipat.arrow import (
     IsoForwardArrow,
     SeqArrowM,
 )
-from spiny import PSeq
 
 
 class TestArrow:

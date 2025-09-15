@@ -242,7 +242,7 @@ class Stream[T](metaclass=ABCMeta):
         Returns:
             A specialized stream for the pattern
         """
-        return pat_stream(pattern, PatBinder.identity())
+        return pat_stream(pattern, PatBinder.pure())
 
     @staticmethod
     def pat_bind[U](pattern: Pat[T], binder: PatBinder[T, U]) -> Stream[U]:
@@ -1092,12 +1092,12 @@ def pat_stream[T, U](pat: Pat[T], binder: PatBinder[T, U]) -> Stream[U]:
         case PatSilent():
             return Stream.silent()
         case PatPure(val):
-            rep_pat = binder.bind(val)
+            rep_pat = binder.apply(val)
             match rep_pat.unwrap:
                 case PatPure(rep_val):
                     return Stream.pure(rep_val)
                 case _:
-                    return pat_stream(rep_pat, PatBinder.identity())
+                    return pat_stream(rep_pat, PatBinder.pure())
         case PatSeq(pats):
             # Create weighted sequence where each child contributes its weight
             wpats = []
