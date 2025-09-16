@@ -505,6 +505,8 @@ class Instrument(Enum):
     Harpejji = auto()  # Harpejji with vertical chromatic layout
     Chromatic = auto()  # Chromatic layout with half-step between strings
     Fourths = auto()  # Fourths tuning, mimics Push's default pad layout
+    Min3rds = auto()  # Minor thirds (3 semitones) between strings
+    Maj3rds = auto()  # Major thirds (4 semitones) between strings
 
 
 # TODO This needs to be hierarchical
@@ -747,6 +749,84 @@ def init_fourths_config(
     )
 
 
+def init_min3_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
+    """Initialize a configuration with minor thirds tuning.
+
+    Creates a Config instance with minor third (3 semitones) intervals
+    between all strings. Uses the Harpejji-style diagonal flip layout
+    to place C in the lower left corner.
+
+    Args:
+        min_velocity: The minimum MIDI velocity to use for note output.
+        max_velocity: The maximum MIDI velocity to use for note output.
+        output_port: The name of the MIDI output port for processed notes.
+
+    Returns:
+        A Config instance with Min3 settings and the specified parameters.
+    """
+    return Config(
+        instrument=Instrument.Min3rds,
+        instrument_name="Min 3rds",
+        tuning_name="Minor Thirds",
+        tuning=[48],  # Start from C3
+        pre_layout=Layout.FlipD,  # Like Harpejji: diagonal flip to put C in lower left
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
+        play_mode=PlayMode.Tap,
+        chan_mode=ChannelMode.Single,
+        midi_channel=5,
+        repeat_steps=3,  # Minor third = 3 semitones between strings
+        view_offset=0,  # Start from string 0
+        scale=SCALE_LOOKUP["Major"],
+        root=NoteName.C,
+        min_velocity=min_velocity,
+        max_velocity=max_velocity,
+        output_port=output_port,
+        str_offset=0,
+        fret_offset=0,
+    )
+
+
+def init_maj3_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
+    """Initialize a configuration with major thirds tuning.
+
+    Creates a Config instance with major third (4 semitones) intervals
+    between all strings. Uses the Harpejji-style diagonal flip layout
+    to place C in the lower left corner.
+
+    Args:
+        min_velocity: The minimum MIDI velocity to use for note output.
+        max_velocity: The maximum MIDI velocity to use for note output.
+        output_port: The name of the MIDI output port for processed notes.
+
+    Returns:
+        A Config instance with Maj3 settings and the specified parameters.
+    """
+    return Config(
+        instrument=Instrument.Maj3rds,
+        instrument_name="Maj 3rds",
+        tuning_name="Major Thirds",
+        tuning=[48],  # Start from C3
+        pre_layout=Layout.FlipD,  # Like Harpejji: diagonal flip to put C in lower left
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
+        play_mode=PlayMode.Tap,
+        chan_mode=ChannelMode.Single,
+        midi_channel=6,
+        repeat_steps=4,  # Major third = 4 semitones between strings
+        view_offset=0,  # Start from string 0
+        scale=SCALE_LOOKUP["Major"],
+        root=NoteName.C,
+        min_velocity=min_velocity,
+        max_velocity=max_velocity,
+        output_port=output_port,
+        str_offset=0,
+        fret_offset=0,
+    )
+
+
 def get_config_for_instrument(
     instrument: Instrument,
     min_velocity: int,
@@ -770,6 +850,10 @@ def get_config_for_instrument(
         return init_chromatic_config(min_velocity, max_velocity, output_port)
     elif instrument == Instrument.Fourths:
         return init_fourths_config(min_velocity, max_velocity, output_port)
+    elif instrument == Instrument.Min3rds:
+        return init_min3_config(min_velocity, max_velocity, output_port)
+    elif instrument == Instrument.Maj3rds:
+        return init_maj3_config(min_velocity, max_velocity, output_port)
     else:
         raise ValueError(f"Unknown instrument: {instrument}")
 
