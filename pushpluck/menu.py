@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar,
 
 from pushpluck.config import Arrow, Config, Instrument, Layout, PlayMode
 from pushpluck.constants import ButtonCC, ButtonIllum, KnobGroup
+from pushpluck.port_manager import PortManager
 from pushpluck.push import ButtonEvent, KnobEvent, PushEvent, PushInterface
 
 N = TypeVar("N")  # Type variable for menu value types
@@ -146,6 +147,52 @@ class ChoiceValRange(ValRange[N]):
             return new_index, self.options[new_index]
 
 
+class PortValRange(ValRange[str]):
+    """Value range for MIDI output port selection.
+
+    This range dynamically discovers available MIDI output ports and allows
+    cycling through them. The range is updated each time it's accessed to
+    reflect current port availability.
+    """
+
+    def __init__(self):
+        self._port_manager = PortManager()
+
+    def _get_available_ports(self) -> List[str]:
+        """Get the current list of available ports."""
+        return self._port_manager.get_available_port_names()
+
+    def render(self, value: str) -> str:
+        # Show just the port name, truncated if necessary for display
+        if len(value) <= 8:
+            return value
+        else:
+            return value[:8]
+
+    def set_value(self, value: str) -> Optional[int]:
+        available_ports = self._get_available_ports()
+        try:
+            return available_ports.index(value)
+        except ValueError:
+            return None
+
+    def succ(self, index: int) -> Optional[Tuple[int, str]]:
+        available_ports = self._get_available_ports()
+        if index >= len(available_ports) - 1:
+            return None
+        else:
+            new_index = index + 1
+            return new_index, available_ports[new_index]
+
+    def pred(self, index: int) -> Optional[Tuple[int, str]]:
+        available_ports = self._get_available_ports()
+        if index <= 0:
+            return None
+        else:
+            new_index = index - 1
+            return new_index, available_ports[new_index]
+
+
 class Lens(Generic[Y, N], metaclass=ABCMeta):
     @abstractmethod
     def get_value(self, struct: Y) -> N:
@@ -189,7 +236,7 @@ class InstrumentLens(Lens[Config, Any]):
         from pushpluck.config import get_config_for_instrument
 
         new_config = get_config_for_instrument(
-            value, struct.min_velocity, struct.max_velocity
+            value, struct.min_velocity, struct.max_velocity, struct.output_port
         )
         # Keep user-modified settings but reset instrument-specific ones
         return replace(
@@ -358,6 +405,9 @@ def default_menu_layout() -> MenuLayout:
             ),
         ],
         device_knob_controls_row2=[
+            KnobControl(
+                "Port", low_sens, PortValRange(), DataclassLens("output_port")
+            ),
             KnobControl(
                 "Channel", low_sens, IntValRange(1, 16), DataclassLens("midi_channel")
             ),

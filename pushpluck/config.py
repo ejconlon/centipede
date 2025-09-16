@@ -540,6 +540,7 @@ class Config:
     root: NoteName  # Root note of the current scale
     min_velocity: int  # Minimum MIDI velocity for note output
     max_velocity: int  # Maximum MIDI velocity for note output
+    output_port: str  # Name of the MIDI output port for processed notes
     str_offset: int  # String display offset for scrolling
     fret_offset: int  # Fret display offset for scrolling
 
@@ -553,7 +554,7 @@ class Config:
         return self.pre_layout * self.layout
 
 
-def init_config(min_velocity: int, max_velocity: int = 127) -> Config:
+def init_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
     """Initialize a default configuration with Harpejji settings.
 
     Creates a Config instance with sensible defaults for a Harpejji
@@ -563,9 +564,10 @@ def init_config(min_velocity: int, max_velocity: int = 127) -> Config:
     Args:
         min_velocity: The minimum MIDI velocity to use for note output.
         max_velocity: The maximum MIDI velocity to use for note output.
+        output_port: The name of the MIDI output port for processed notes.
 
     Returns:
-        A Config instance with default settings and the specified velocities.
+        A Config instance with default settings and the specified parameters.
     """
     return Config(
         instrument=Instrument.Harpejji,
@@ -583,12 +585,13 @@ def init_config(min_velocity: int, max_velocity: int = 127) -> Config:
         root=NoteName.C,
         min_velocity=min_velocity,
         max_velocity=max_velocity,
+        output_port=output_port,
         str_offset=0,
         fret_offset=0,
     )
 
 
-def init_guitar_config(min_velocity: int, max_velocity: int = 127) -> Config:
+def init_guitar_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
     """Initialize a configuration with Guitar settings.
 
     Creates a Config instance with defaults for a Guitar setup:
@@ -617,12 +620,13 @@ def init_guitar_config(min_velocity: int, max_velocity: int = 127) -> Config:
         root=NoteName.C,
         min_velocity=min_velocity,
         max_velocity=max_velocity,
+        output_port=output_port,
         str_offset=0,
         fret_offset=0,
     )
 
 
-def init_harpejji_config(min_velocity: int, max_velocity: int = 127) -> Config:
+def init_harpejji_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
     """Initialize a configuration with Harpejji settings.
 
     Creates a Config instance with defaults for a Harpejji setup:
@@ -651,13 +655,14 @@ def init_harpejji_config(min_velocity: int, max_velocity: int = 127) -> Config:
         root=NoteName.C,
         min_velocity=min_velocity,
         max_velocity=max_velocity,
+        output_port=output_port,
         str_offset=0,
         fret_offset=0,
     )
 
 
 def get_config_for_instrument(
-    instrument: Instrument, min_velocity: int, max_velocity: int = 127
+    instrument: Instrument, min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
 ) -> Config:
     """Get the appropriate configuration for a given instrument.
 
@@ -669,9 +674,9 @@ def get_config_for_instrument(
         A Config instance with appropriate settings for the instrument.
     """
     if instrument == Instrument.Guitar:
-        return init_guitar_config(min_velocity, max_velocity)
+        return init_guitar_config(min_velocity, max_velocity, output_port)
     elif instrument == Instrument.Harpejji:
-        return init_harpejji_config(min_velocity, max_velocity)
+        return init_harpejji_config(min_velocity, max_velocity, output_port)
     else:
         raise ValueError(f"Unknown instrument: {instrument}")
 

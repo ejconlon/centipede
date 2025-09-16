@@ -695,8 +695,8 @@ class NoteTracker:
                 # Create a minimal FretboardMessage for note-off
                 # We use StringPos(0, 0) as a placeholder since this is cleanup
                 msg = FrozenMessage(
-                    type="note_off", channel=channel - 1, note=note
-                )  # Convert 1-16 to 0-15
+                    type="note_off", channel=channel, note=note
+                )  # Channel already in 0-15 range from _notemap
                 fret_msg = FretboardMessage(
                     str_pos=StringPos(str_index=0, fret=0),
                     equivs=[],

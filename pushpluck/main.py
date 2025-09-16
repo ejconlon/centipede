@@ -12,6 +12,7 @@ from pushpluck import constants
 from pushpluck.config import default_scheme, init_config
 from pushpluck.menu import default_menu_layout
 from pushpluck.plucked import Plucked
+from pushpluck.port_manager import PortManager
 from pushpluck.push import PushOutput, PushPorts, match_event, push_ports_context
 from pushpluck.shadow import PushShadow
 
@@ -31,11 +32,15 @@ def main_with_ports(ports: PushPorts, min_velocity: int) -> None:
     config = init_config(min_velocity)
     push = PushOutput(ports.midi_out)
     shadow = PushShadow(push)
+
+    # Create port manager and ensure pushpluck port is open
+    port_manager = PortManager()
+
     # Start with a clean slate
     logging.info("resetting push")
     push.reset()
     try:
-        plucked = Plucked(shadow, ports.midi_processed, scheme, layout, config)
+        plucked = Plucked(shadow, port_manager, scheme, layout, config)
         logging.info("resetting controller")
         plucked.reset()
         logging.info("controller ready")
@@ -47,12 +52,15 @@ def main_with_ports(ports: PushPorts, min_velocity: int) -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        # Send all notes off
+        # Send all notes off to active port
         logging.info("final all notes off")
-        ports.midi_processed.reset()
+        port_manager.get_active_port().reset()
         # End with a clean slate
         logging.info("final reset of push")
         push.reset()
+        # Close all ports
+        logging.info("closing all MIDI ports")
+        port_manager.close_all()
 
 
 def make_parser() -> ArgumentParser:

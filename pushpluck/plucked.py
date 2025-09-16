@@ -11,8 +11,8 @@ from pushpluck.base import Resettable
 from pushpluck.config import ColorScheme, Config
 from pushpluck.constants import ButtonCC
 from pushpluck.menu import Menu, MenuLayout
-from pushpluck.midi import MidiSink
 from pushpluck.pads import Pads
+from pushpluck.port_manager import PortManager
 from pushpluck.push import ButtonEvent, PadEvent, PushEvent
 from pushpluck.shadow import PushShadow
 
@@ -29,7 +29,7 @@ class Plucked(Resettable):
     def __init__(
         self,
         shadow: PushShadow,
-        midi_processed: MidiSink,
+        port_manager: PortManager,
         scheme: ColorScheme,
         layout: MenuLayout,
         config: Config,
@@ -38,15 +38,18 @@ class Plucked(Resettable):
 
         Args:
             shadow: Push display shadow for efficient updates.
-            midi_processed: MIDI sink for processed note output.
+            port_manager: Port manager for handling MIDI output ports.
             scheme: Color scheme for visual elements.
             layout: Menu layout configuration.
             config: Initial application configuration.
         """
         self._shadow = shadow
-        self._midi_processed = midi_processed
+        self._port_manager = port_manager
         self._pads = Pads.construct(scheme, config)
         self._menu = Menu(layout, config)
+
+        # Set the initial port from config
+        self._port_manager.set_active_port(config.output_port)
 
     def handle_event(self, event: PushEvent) -> None:
         """Handle an event from the Push controller.
@@ -59,7 +62,9 @@ class Plucked(Resettable):
         """
         with self._shadow.context() as push:
             if isinstance(event, PadEvent):
-                self._pads.handle_event(push, self._midi_processed, event)
+                # Use the active port from port manager
+                active_port = self._port_manager.get_active_port()
+                self._pads.handle_event(push, active_port, event)
             elif isinstance(event, ButtonEvent) and event.button == ButtonCC.Accent:
                 if event.pressed:
                     self.reset()
@@ -69,9 +74,16 @@ class Plucked(Resettable):
             else:
                 config = self._menu.handle_event(push, event)
                 if config is not None:
-                    self._pads.handle_config(
-                        push, self._midi_processed, config, reset=False
-                    )
+                    # Handle port changes
+                    current_port = self._port_manager.get_active_port_name()
+                    if config.output_port != current_port:
+                        self._port_manager.set_active_port(config.output_port)
+                        # Clean up unused ports to free resources
+                        self._port_manager.cleanup_unused_ports()
+
+                    # Use the active port for pad updates
+                    active_port = self._port_manager.get_active_port()
+                    self._pads.handle_config(push, active_port, config, reset=False)
 
     def redraw(self) -> None:
         """Redraw the entire Push interface.
@@ -95,4 +107,5 @@ class Plucked(Resettable):
         self._shadow.reset()
         with self._shadow.context() as push:
             config = self._menu.handle_reset(push)
-            self._pads.handle_config(push, self._midi_processed, config, reset=True)
+            active_port = self._port_manager.get_active_port()
+            self._pads.handle_config(push, active_port, config, reset=True)
