@@ -388,7 +388,10 @@ class FixedTuner(Tuner):
                 if str_pos.str_index < 0 or str_pos.str_index >= len(self._tuning):
                     pass
                 else:
-                    lookup[str_pos] = self._tuning[str_pos.str_index] + str_pos.fret
+                    note = self._tuning[str_pos.str_index] + str_pos.fret
+                    # Only include notes within valid MIDI range (0-127)
+                    if 0 <= note <= 127:
+                        lookup[str_pos] = note
         return lookup
 
     def _make_equivs_lookup(self) -> Dict[int, List[StringPos]]:

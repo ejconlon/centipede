@@ -351,10 +351,10 @@ def default_menu_layout() -> MenuLayout:
                 DataclassLens("play_mode"),
             ),
             KnobControl(
-                "SemOff", low_sens, IntValRange(-63, 64), DataclassLens("fret_offset")
+                "SemOff", low_sens, IntValRange(-128, 127), DataclassLens("fret_offset")
             ),
             KnobControl(
-                "StrOff", low_sens, IntValRange(-11, 12), DataclassLens("str_offset")
+                "StrOff", low_sens, IntValRange(-128, 127), DataclassLens("str_offset")
             ),
         ],
         device_knob_controls_row2=[

@@ -9,7 +9,15 @@ from pushpluck.fretboard import StringPos
 from pushpluck.pos import Pos
 from pushpluck.viewport import Viewport, ViewportConfig
 
-DEFAULT_CONFIG = ViewportConfig(6, Layout.Identity, 0, 0, 0)
+DEFAULT_CONFIG = ViewportConfig(
+    num_strings=6,
+    tuning=[40, 45, 50, 55, 59, 64],  # Standard guitar tuning
+    repeat_steps=24,  # Guitar repeat pattern
+    effective_layout=Layout.Identity,
+    view_offset=0,
+    str_offset=0,
+    fret_offset=0,
+)
 SHIFT_CONFIG = replace(DEFAULT_CONFIG, str_offset=1, fret_offset=1)
 VERT_CONFIG = replace(DEFAULT_CONFIG, effective_layout=Layout.Rot90)
 

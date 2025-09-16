@@ -28,6 +28,10 @@ class ViewportConfig(MappedComponentConfig[Config]):
 
     num_strings: int
     """Number of strings in the current instrument tuning."""
+    tuning: List[int]
+    """MIDI note numbers for each string's open note."""
+    repeat_steps: int
+    """Number of semitones before the pattern repeats (for infinite strings)."""
     effective_layout: Layout
     """The effective layout transformation (pre_layout * layout) for coordinate mapping."""
     view_offset: int
@@ -49,6 +53,8 @@ class ViewportConfig(MappedComponentConfig[Config]):
         """
         return cls(
             num_strings=len(root_config.tuning),
+            tuning=root_config.tuning,
+            repeat_steps=root_config.repeat_steps,
             effective_layout=root_config.effective_layout,
             view_offset=root_config.view_offset,
             str_offset=root_config.str_offset,
@@ -108,6 +114,55 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
     def _total_str_offset(self) -> int:
         return self._view_str_offset() + self._config.str_offset
 
+    def _get_note_for_string_index(self, str_index: int) -> int:
+        """Calculate the base MIDI note for a given string index.
+
+        Uses the same logic as InfiniteTuner for infinite string mapping.
+
+        Args:
+            str_index: The string index to calculate the note for.
+
+        Returns:
+            The base MIDI note number for that string.
+        """
+        if not self._config.tuning:
+            raise ValueError("Tuning cannot be empty")
+
+        # Calculate which tuning note and octave offset
+        tuning_index = str_index % len(self._config.tuning)
+        octave_offset = (
+            str_index // len(self._config.tuning)
+        ) * self._config.repeat_steps
+
+        return self._config.tuning[tuning_index] + octave_offset
+
+    def _calculate_midi_note(self, str_pos: StringPos) -> int:
+        """Calculate the MIDI note number for a string position.
+
+        Args:
+            str_pos: The string position to calculate the note for.
+
+        Returns:
+            The calculated MIDI note number (may be outside valid range).
+        """
+        base_note = self._get_note_for_string_index(str_pos.str_index)
+        return base_note + str_pos.fret
+
+    def _is_valid_midi_note(self, str_pos: StringPos) -> bool:
+        """Check if a string position would produce a valid MIDI note.
+
+        Args:
+            str_pos: The string position to validate.
+
+        Returns:
+            True if the position would produce a valid MIDI note (0-127), False otherwise.
+        """
+        try:
+            note = self._calculate_midi_note(str_pos)
+            return 0 <= note <= 127
+        except (ValueError, IndexError):
+            return False
+
     def str_pos_from_pad_pos(self, pos: Pos) -> Optional[StringPos]:
         """Convert a pad position to a fretboard string position.
 
@@ -131,8 +186,14 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
         str_index = logical_row + self._total_str_offset()
         fret = logical_col + self._config.fret_offset
 
-        # For infinite strings, any string index is valid
-        return StringPos(str_index=str_index, fret=fret)
+        # Create the string position
+        str_pos = StringPos(str_index=str_index, fret=fret)
+
+        # Validate that this position would produce a valid MIDI note
+        if self._is_valid_midi_note(str_pos):
+            return str_pos
+        else:
+            return None
 
     def str_pos_from_input_note(self, note: int) -> Optional[StringPos]:
         """Convert a MIDI note number to a fretboard string position.
@@ -178,35 +239,43 @@ class Viewport(MappedComponent[Config, ViewportConfig, Unit]):
     def str_bounds(self) -> Optional[StringBounds]:
         """Calculate the fretboard bounds visible in the current viewport.
 
-        Determines which portion of the fretboard is currently visible
-        on the pad grid, taking into account layout, offsets, and the
-        number of strings in the tuning.
+        Determines which portion of the infinite fretboard is currently visible
+        on the pad grid, taking into account layout, offsets, and coordinate transformations.
+        With infinite strings, the viewport can access any string index by scrolling.
 
         Returns:
-            StringBounds defining the visible fretboard region, or None
-            if no valid strings are visible in the current viewport.
+            StringBounds defining the visible fretboard region.
         """
-        view_offset = self._view_str_offset()
+        # For infinite strings, we need to determine which string indices
+        # correspond to the physical pad positions after layout transformation
+        min_str_index = None
+        max_str_index = None
+        min_fret = None
+        max_fret = None
 
-        # Determine the maximum string and fret dimensions based on effective layout
-        # We need to consider how the layout maps logical coordinates to physical ones
-        # For now, assume both dimensions are bounded by the grid size
-        max_str_dim = constants.NUM_PAD_ROWS
-        num_frets_bounded = constants.NUM_PAD_COLS
+        # Sample all pad positions to find the actual bounds after transformation
+        for row in range(constants.NUM_PAD_ROWS):
+            for col in range(constants.NUM_PAD_COLS):
+                pos = Pos(row=row, col=col)
+                str_pos = self.str_pos_from_pad_pos(pos)
+                if str_pos is not None:
+                    if min_str_index is None or str_pos.str_index < min_str_index:
+                        min_str_index = str_pos.str_index
+                    if max_str_index is None or str_pos.str_index > max_str_index:
+                        max_str_index = str_pos.str_index
+                    if min_fret is None or str_pos.fret < min_fret:
+                        min_fret = str_pos.fret
+                    if max_fret is None or str_pos.fret > max_fret:
+                        max_fret = str_pos.fret
 
-        # For infinite strings, any string index is valid
-        valid_indices: List[int] = []
-        for i in range(max_str_dim):
-            o = view_offset + i
-            valid_indices.append(o)
-
-        if len(valid_indices) == 0:
+        if (
+            min_str_index is None
+            or max_str_index is None
+            or min_fret is None
+            or max_fret is None
+        ):
             return None
-        else:
-            low_str_index = valid_indices[0]
-            high_str_index = valid_indices[-1]
-            low = StringPos(str_index=low_str_index, fret=self._config.fret_offset)
-            high = StringPos(
-                str_index=high_str_index, fret=low.fret + num_frets_bounded - 1
-            )
-            return StringBounds(low, high)
+
+        low = StringPos(str_index=min_str_index, fret=min_fret)
+        high = StringPos(str_index=max_str_index, fret=max_fret)
+        return StringBounds(low, high)
