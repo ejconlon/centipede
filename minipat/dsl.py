@@ -18,7 +18,7 @@ from minipat.combinators import (
     value_stream,
     velocity_stream,
 )
-from minipat.common import CycleDelta, Numeric, numeric_frac
+from minipat.common import CycleDelta, CycleTime, Numeric, numeric_frac
 from minipat.live import LiveSystem, Orbit
 from minipat.messages import MidiAttrs, TimedMessage
 from minipat.midi import start_midi_live_system
@@ -362,7 +362,7 @@ class Nucleus:
             filename=log_path, filemode="w", level=getattr(logging, log_level)
         )
         sys = new_system(sys_name)
-        live = start_midi_live_system(sys, port_name, init_cps)
+        live = start_midi_live_system(sys, port_name, init_cps, init_bpc)
         return Nucleus(sys, live)
 
     def stop(self) -> int:
@@ -407,8 +407,47 @@ class Nucleus:
         """
         return self.live.playing()
 
-    def set_cps(self, cps: Numeric) -> None:
-        self.live.set_cps(numeric_frac(cps))
+    @property
+    def cps(self) -> Fraction:
+        """Get the current cycles per second (tempo)."""
+        return self.live.get_cps()
+
+    @cps.setter
+    def cps(self, value: Numeric) -> None:
+        """Set the cycles per second (tempo)."""
+        self.live.set_cps(numeric_frac(value))
+
+    @property
+    def cycle(self) -> CycleTime:
+        """Get the current cycle position."""
+        return self.live.get_cycle()
+
+    @cycle.setter
+    def cycle(self, value: Numeric) -> None:
+        """Set the current cycle position."""
+        self.live.set_cycle(CycleTime(numeric_frac(value)))
+
+    @property
+    def bpc(self) -> int:
+        """Get the current beats per cycle."""
+        return self.live.get_bpc()
+
+    @bpc.setter
+    def bpc(self, value: int) -> None:
+        """Set the beats per cycle."""
+        self.live.set_bpc(value)
+
+    @property
+    def tempo(self) -> Fraction:
+        """Get the current tempo in beats per minute."""
+        return self.cps * self.bpc * 60
+
+    @tempo.setter
+    def tempo(self, value: Numeric) -> None:
+        """Set the tempo in beats per minute, adjusting cps while keeping bpc fixed."""
+        bpm = numeric_frac(value)
+        new_cps = bpm / (self.bpc * 60)
+        self.cps = new_cps
 
     def once(
         self,

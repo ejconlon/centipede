@@ -37,6 +37,11 @@ To use this, add it to your `lazy.nvim` plugins:
           -- exit_wait: milliseconds to wait for graceful exit (default 1000)
           -- after sending exit command, before forcing termination
           exit_wait = 1000,
+          -- minipat: process-specific options
+          minipat = {
+            -- port: MIDI port name (sets MINIPAT_PORT environment variable, default: "minipat")
+            port = "minipat",
+          },
         }
       }
     },
@@ -49,6 +54,8 @@ The plugin will be lazy-loaded when you open a `*.minipat` file.
 - `:MpQuit` - Quit the minipat instance (exits the REPL)
 - `:MpStop` - Stop minipat playback (stops all sounds)
 - `:MpAt <code>` - Send Python code directly to the running minipat instance
+- `:MpMon [args]` - Monitor MIDI messages (lists devices if no args, otherwise passes args to minipat.mon)
+- `:MpMod` - Monitor the configured minipat MIDI port
 - `:MpHelp` - Show help with current keybindings and configuration
 
 Commands are customizable via the `command_prefix` config option.

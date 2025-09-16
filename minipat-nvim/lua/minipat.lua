@@ -12,6 +12,9 @@ local DEFAULTS = {
     nucleus_var = 'n', -- name of the Nucleus variable in the REPL
     exit_wait = 1000, -- milliseconds to wait for process to exit gracefully
     debug = false, -- set to true to see debug messages
+    minipat = {
+      port = "minipat", -- MIDI port name for minipat (sets MINIPAT_PORT env var)
+    },
   },
   keymaps = {
     send_line = '<C-L>',
@@ -50,6 +53,8 @@ local state = {
   booted = false,
   minipat = nil,
   minipat_process = nil,
+  monitor = nil,
+  monitor_process = nil,
   resolved_python = nil,
   resolved_source_path = nil,
   quit_callback = nil,
@@ -146,9 +151,16 @@ local function boot_minipat(args, extra_args)
   if args.debug then
     print("Executing command: " .. full_cmd .. " in " .. state.resolved_source_path)
   end
+
+  -- Build environment variables
+  local env = { PYTHON_GIL = "0" }
+  if args.minipat and args.minipat.port then
+    env.MINIPAT_PORT = tostring(args.minipat.port)
+  end
+
   local job_id = vim.fn.termopen(full_cmd, {
     cwd = state.resolved_source_path,
-    env = { PYTHON_GIL = "0" },
+    env = env,
     on_exit = function(job_id, exit_code, event_type)
       if args.debug then
         print("Minipat process exited with code: " .. exit_code)
@@ -330,6 +342,8 @@ local function help_minipat(args)
     "  :" .. prefix .. "Quit    - Quit minipat (sends " .. args.config.nucleus_var .. ".exit())",
     "  :" .. prefix .. "Stop    - Stop minipat playback (sends " .. args.config.nucleus_var .. ".stop(immediate=True))",
     "  :" .. prefix .. "At <code> - Send Python code to minipat",
+    "  :" .. prefix .. "Mon     - Monitor MIDI messages",
+    "  :" .. prefix .. "Mod     - Monitor minipat MIDI port",
     "  :" .. prefix .. "Help    - Show this help",
     "",
     "Keybindings (in *." .. args.config.file_ext .. " files):",
@@ -344,6 +358,7 @@ local function help_minipat(args)
     "  Autoclose: " .. tostring(args.config.autoclose),
     "  Nucleus var: " .. args.config.nucleus_var,
     "  Debug mode: " .. tostring(args.config.debug),
+    "  Minipat port: " .. (args.config.minipat and args.config.minipat.port and tostring(args.config.minipat.port) or "(not set)"),
   }
 
   -- Create a floating window for the help text
@@ -388,6 +403,148 @@ local function stop_minipat(config)
   end
 end
 
+local function monitor_midi(args, extra_args)
+  local current_win = vim.api.nvim_get_current_win()
+
+  -- If monitor is already running, switch to its buffer
+  if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
+    local ok = pcall(vim.api.nvim_set_current_buf, state.monitor)
+    if ok then
+      return
+    end
+  end
+
+  -- Resolve source path and python binary if not already done
+  if not state.resolved_python or not state.resolved_source_path then
+    state.resolved_source_path = resolve_source_path(args.source_path)
+    if args.debug then
+      print("Resolved source_path: " .. state.resolved_source_path)
+    end
+    state.resolved_python = get_python_binary(state.resolved_source_path)
+    if args.debug then
+      print("Using python: " .. state.resolved_python)
+    end
+  end
+
+  -- Create new buffer and split
+  vim.cmd(args.split == 'v' and 'vsplit' or 'split')
+  state.monitor = vim.api.nvim_create_buf(false, false)
+  vim.api.nvim_set_current_buf(state.monitor)
+
+  -- Build the command with resolved python binary
+  -- Default to monitoring minipat port if no args, otherwise use args for monitoring
+  local full_cmd = state.resolved_python .. " -m minipat.mon"
+  if extra_args ~= nil and extra_args ~= "" then
+    full_cmd = full_cmd .. " " .. extra_args
+  else
+    local port_name = args.minipat and args.minipat.port or "minipat"
+    full_cmd = full_cmd .. " -p " .. port_name
+  end
+  if args.debug then
+    print("Executing MIDI monitor command: " .. full_cmd .. " in " .. state.resolved_source_path)
+  end
+
+  local job_id = vim.fn.termopen(full_cmd, {
+    cwd = state.resolved_source_path,
+    env = { PYTHON_GIL = "0" },
+    on_exit = function(job_id, exit_code, event_type)
+      if args.debug then
+        print("MIDI monitor process exited with code: " .. exit_code)
+      end
+
+      -- Only close window and delete buffer if autoclose is enabled
+      if args.autoclose then
+        if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
+          if #vim.fn.win_findbuf(state.monitor) > 0 then
+            vim.api.nvim_win_close(vim.fn.win_findbuf(state.monitor)[1], true)
+          end
+          vim.api.nvim_buf_delete(state.monitor, { unload = true })
+        end
+        state.monitor = nil
+      end
+
+      -- Clean up state
+      state.monitor_process = nil
+    end,
+  })
+
+  if job_id <= 0 then
+    vim.notify("Failed to start MIDI monitor process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
+    return
+  end
+
+  state.monitor_process = job_id
+  vim.api.nvim_set_current_win(current_win)
+end
+
+local function monitor_minipat_port(args)
+  local current_win = vim.api.nvim_get_current_win()
+
+  -- If monitor is already running, switch to its buffer
+  if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
+    local ok = pcall(vim.api.nvim_set_current_buf, state.monitor)
+    if ok then
+      return
+    end
+  end
+
+  -- Resolve source path and python binary if not already done
+  if not state.resolved_python or not state.resolved_source_path then
+    state.resolved_source_path = resolve_source_path(args.source_path)
+    if args.debug then
+      print("Resolved source_path: " .. state.resolved_source_path)
+    end
+    state.resolved_python = get_python_binary(state.resolved_source_path)
+    if args.debug then
+      print("Using python: " .. state.resolved_python)
+    end
+  end
+
+  -- Create new buffer and split
+  vim.cmd(args.split == 'v' and 'vsplit' or 'split')
+  state.monitor = vim.api.nvim_create_buf(false, false)
+  vim.api.nvim_set_current_buf(state.monitor)
+
+  -- Build the command to monitor the minipat port
+  local port_name = args.minipat and args.minipat.port or "minipat"
+  local full_cmd = state.resolved_python .. " -m minipat.mon -p " .. port_name
+  if args.debug then
+    print("Executing MIDI monitor command: " .. full_cmd .. " in " .. state.resolved_source_path)
+  end
+
+  local job_id = vim.fn.termopen(full_cmd, {
+    cwd = state.resolved_source_path,
+    env = { PYTHON_GIL = "0" },
+    on_exit = function(job_id, exit_code, event_type)
+      if args.debug then
+        print("MIDI monitor process exited with code: " .. exit_code)
+      end
+
+      -- Only close window and delete buffer if autoclose is enabled
+      if args.autoclose then
+        if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
+          if #vim.fn.win_findbuf(state.monitor) > 0 then
+            vim.api.nvim_win_close(vim.fn.win_findbuf(state.monitor)[1], true)
+          end
+          vim.api.nvim_buf_delete(state.monitor, { unload = true })
+        end
+        state.monitor = nil
+      end
+
+      -- Clean up state
+      state.monitor_process = nil
+    end,
+  })
+
+  if job_id <= 0 then
+    vim.notify("Failed to start MIDI monitor process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
+    return
+  end
+
+  state.monitor_process = job_id
+  vim.api.nvim_set_current_win(current_win)
+end
+
 function M.setup(args)
   args = vim.tbl_deep_extend('force', DEFAULTS, args)
 
@@ -410,6 +567,14 @@ function M.setup(args)
     help_minipat(args)
   end
 
+  local mon_fn = function(fn_args)
+    monitor_midi(args.config, fn_args['args'])
+  end
+
+  local mod_fn = function()
+    monitor_minipat_port(args.config)
+  end
+
   local enter_fn = function()
     vim.cmd('set ft=python')
     vim.api.nvim_buf_set_option(0, 'commentstring', '# %s')
@@ -423,6 +588,8 @@ function M.setup(args)
   vim.api.nvim_create_user_command(prefix .. 'Quit', function() quit_minipat(args.config) end, { desc = 'quits Minipat instance' })
   vim.api.nvim_create_user_command(prefix .. 'Stop', function() stop_minipat(args.config) end, { desc = 'stops Minipat playback' })
   vim.api.nvim_create_user_command(prefix .. 'At', at_fn, { desc = 'send code to Minipat instance', nargs = '+' })
+  vim.api.nvim_create_user_command(prefix .. 'Mon', mon_fn, { desc = 'monitor MIDI messages', nargs = '*' })
+  vim.api.nvim_create_user_command(prefix .. 'Mod', mod_fn, { desc = 'monitor minipat MIDI port' })
   vim.api.nvim_create_user_command(prefix .. 'Help', help_fn, { desc = 'show Minipat help and keybindings' })
   vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWinEnter' }, {
     pattern = { '*.' .. args.config.file_ext },

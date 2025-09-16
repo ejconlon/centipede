@@ -82,6 +82,10 @@ fluid:
 boot:
   {{python}} -i -m minipat.boot
 
+# Monitor minipat MIDI port
+mon:
+  {{python}} -m minipat.mon -p minipat
+
 # Start pushpluck
 pushpluck:
   {{python}} -m pushpluck.main

@@ -83,6 +83,9 @@ class Timing:
     cps: Fraction
     """Current cycles per second (tempo)."""
 
+    beats_per_cycle: int
+    """Number of beats in one cycle."""
+
     generations_per_cycle: int
     """Number of event generations to calculate per cycle."""
 
@@ -93,9 +96,12 @@ class Timing:
     """Amount of wall time it's appropriate to sleep when polling."""
 
     @staticmethod
-    def initial(cps: Optional[Fraction]) -> Timing:
+    def initial(
+        cps: Optional[Fraction], beats_per_cycle: Optional[int] = None
+    ) -> Timing:
         """Create a Timing instance with default values."""
         cps = cps if cps is not None else _DEFAULT_CPS
+        beats_per_cycle = beats_per_cycle if beats_per_cycle is not None else 4
         generations_per_cycle = _DEFAULT_GENERATIONS_PER_CYCLE
         wait_factor = _DEFAULT_WAIT_FACTOR
         sleep_interval = _calculate_sleep_interval(
@@ -105,6 +111,7 @@ class Timing:
         )
         return Timing(
             cps=cps,
+            beats_per_cycle=beats_per_cycle,
             generations_per_cycle=generations_per_cycle,
             wait_factor=wait_factor,
             sleep_interval=sleep_interval,
@@ -118,6 +125,22 @@ class Timing:
         )
         return Timing(
             cps=cps,
+            beats_per_cycle=self.beats_per_cycle,
+            generations_per_cycle=self.generations_per_cycle,
+            wait_factor=self.wait_factor,
+            sleep_interval=sleep_interval,
+        )
+
+    def set_beats_per_cycle(self, beats_per_cycle: int) -> Timing:
+        """Create a new Timing with updated beats per cycle."""
+        sleep_interval = _calculate_sleep_interval(
+            cps=self.cps,
+            generations_per_cycle=self.generations_per_cycle,
+            wait_factor=self.wait_factor,
+        )
+        return Timing(
+            cps=self.cps,
+            beats_per_cycle=beats_per_cycle,
             generations_per_cycle=self.generations_per_cycle,
             wait_factor=self.wait_factor,
             sleep_interval=sleep_interval,
@@ -671,6 +694,7 @@ class LiveSystem[T, U]:
         processor: Processor[T, U],
         backend_sender: Sender[BackendMessage[U]],
         cps: Optional[Fraction] = None,
+        beats_per_cycle: Optional[int] = None,
     ) -> LiveSystem[T, U]:
         """Create and start the live pattern system.
 
@@ -679,12 +703,12 @@ class LiveSystem[T, U]:
             processor: Processor for transforming pattern events.
             backend_sender: Sender for backend messages.
             cps: Starting CPS (optional)
-            env: Environment configuration (optional).
+            beats_per_cycle: Beats per cycle (optional)
 
         Returns:
             A started LiveSystem instance.
         """
-        timing = Timing.initial(cps)
+        timing = Timing.initial(cps, beats_per_cycle)
 
         logger = logging.getLogger("minipat")
         logger.info("Starting live pattern system")
@@ -758,6 +782,35 @@ class LiveSystem[T, U]:
         self._transport_sender.send(TransportSetTiming(timing))
         self._backend_sender.send(BackendTiming(timing))
 
+    def get_cps(self) -> Fraction:
+        """Get the current cycles per second (tempo).
+
+        Returns:
+            The current tempo in cycles per second.
+        """
+        with self._transport_state_mutex as ts:
+            return ts.timing.cps
+
+    def set_bpc(self, bpc: int) -> None:
+        """Set the beats per cycle.
+
+        Args:
+            bpc: The new beats per cycle.
+        """
+        # Update here and forward updates to transport and backend actors
+        timing = self._timing.set_beats_per_cycle(bpc)
+        self._transport_sender.send(TransportSetTiming(timing))
+        self._backend_sender.send(BackendTiming(timing))
+
+    def get_bpc(self) -> int:
+        """Get the current beats per cycle.
+
+        Returns:
+            The current beats per cycle.
+        """
+        with self._transport_state_mutex as ts:
+            return ts.timing.beats_per_cycle
+
     def set_cycle(self, cycle: CycleTime) -> None:
         """Set the current cycle position.
 
@@ -765,6 +818,15 @@ class LiveSystem[T, U]:
             cycle: The cycle position to set.
         """
         self._transport_sender.send(TransportSetCycle(cycle))
+
+    def get_cycle(self) -> CycleTime:
+        """Get the current cycle position.
+
+        Returns:
+            The current cycle position.
+        """
+        with self._transport_state_mutex as ts:
+            return ts.current_cycle
 
     def play(self, playing: bool = True) -> None:
         """Start pattern playback."""

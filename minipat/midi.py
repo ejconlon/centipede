@@ -421,7 +421,10 @@ class MidiNursery(Nursery[BackendMessage[TimedMessage]]):
 
 
 def start_midi_live_system(
-    system: System, out_port_name: str, cps: Optional[Fraction] = None
+    system: System,
+    out_port_name: str,
+    cps: Optional[Fraction] = None,
+    beats_per_cycle: Optional[int] = None,
 ) -> LiveSystem[MidiAttrs, TimedMessage]:
     """Start a LiveSystem with MIDI components.
 
@@ -435,6 +438,7 @@ def start_midi_live_system(
         system: The actor system to use
         out_port_name: Name of the MIDI output port
         cps: Optional initial cycles per second (default ~120 BPM)
+        beats_per_cycle: Optional beats per cycle (default 4)
 
     Returns:
         A started LiveSystem configured for MIDI output.
@@ -445,7 +449,7 @@ def start_midi_live_system(
     output = mido.open_output(name=out_port_name, virtual=virtual)  # pyright: ignore
 
     # Create shared timing configuration
-    timing = Timing.initial(cps)
+    timing = Timing.initial(cps, beats_per_cycle)
 
     backend_sender = system.spawn_nursery("midi_output", MidiNursery(timing, output))
 
