@@ -503,6 +503,8 @@ class Instrument(Enum):
 
     Guitar = auto()  # Guitar with standard horizontal layout
     Harpejji = auto()  # Harpejji with vertical chromatic layout
+    Chromatic = auto()  # Chromatic layout with half-step between strings
+    Fourths = auto()  # Fourths tuning, mimics Push's default pad layout
 
 
 # TODO This needs to be hierarchical
@@ -554,7 +556,9 @@ class Config:
         return self.pre_layout * self.layout
 
 
-def init_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
+def init_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
     """Initialize a default configuration with Guitar settings.
 
     Creates a Config instance with sensible defaults for a Guitar
@@ -591,7 +595,9 @@ def init_config(min_velocity: int, max_velocity: int = 127, output_port: str = "
     )
 
 
-def init_guitar_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
+def init_guitar_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
     """Initialize a configuration with Guitar settings.
 
     Creates a Config instance with defaults for a Guitar setup:
@@ -626,7 +632,9 @@ def init_guitar_config(min_velocity: int, max_velocity: int = 127, output_port: 
     )
 
 
-def init_harpejji_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
+def init_harpejji_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
     """Initialize a configuration with Harpejji settings.
 
     Creates a Config instance with defaults for a Harpejji setup:
@@ -661,8 +669,89 @@ def init_harpejji_config(min_velocity: int, max_velocity: int = 127, output_port
     )
 
 
+def init_chromatic_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
+    """Initialize a configuration with Chromatic settings.
+
+    Creates a Config instance with defaults for a Chromatic setup:
+    half-step tuning (chromatic scale), horizontal layout, tap mode,
+    single channel, C major scale, and appropriate display offsets.
+
+    Args:
+        min_velocity: The minimum MIDI velocity to use for note output.
+        max_velocity: The maximum MIDI velocity to use for note output.
+        output_port: The name of the MIDI output port for processed notes.
+
+    Returns:
+        A Config instance with Chromatic settings and the specified parameters.
+    """
+    return Config(
+        instrument=Instrument.Chromatic,
+        instrument_name="Chromatic",
+        tuning_name="Chromatic",
+        tuning=[60],  # Start from C4 (middle C)
+        pre_layout=Layout.Identity,  # Chromatic: horizontal layout
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
+        play_mode=PlayMode.Tap,
+        chan_mode=ChannelMode.Single,
+        midi_channel=3,
+        repeat_steps=1,  # Chromatic: half-step between strings
+        view_offset=0,  # Start from string 0
+        scale=SCALE_LOOKUP["Chromatic"],
+        root=NoteName.C,
+        min_velocity=min_velocity,
+        max_velocity=max_velocity,
+        output_port=output_port,
+        str_offset=0,
+        fret_offset=0,
+    )
+
+
+def init_fourths_config(
+    min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+) -> Config:
+    """Initialize a configuration with Fourths tuning settings.
+
+    Creates a Config instance with defaults for a Fourths setup that
+    mimics the Push's default pad layout: perfect fourth intervals,
+    horizontal layout, tap mode, single channel, C major scale.
+
+    Args:
+        min_velocity: The minimum MIDI velocity to use for note output.
+        max_velocity: The maximum MIDI velocity to use for note output.
+        output_port: The name of the MIDI output port for processed notes.
+
+    Returns:
+        A Config instance with Fourths settings and the specified parameters.
+    """
+    return Config(
+        instrument=Instrument.Fourths,
+        instrument_name="Fourths",
+        tuning_name="Fourths",
+        tuning=[60],  # Start from C4 (middle C)
+        pre_layout=Layout.Identity,  # Fourths: horizontal layout
+        layout=Layout.Identity,  # User-selectable layout starts as Identity
+        play_mode=PlayMode.Tap,
+        chan_mode=ChannelMode.Single,
+        midi_channel=4,
+        repeat_steps=5,  # Fourths: perfect fourth (5 semitones) between strings
+        view_offset=0,  # Start from string 0
+        scale=SCALE_LOOKUP["Major"],
+        root=NoteName.C,
+        min_velocity=min_velocity,
+        max_velocity=max_velocity,
+        output_port=output_port,
+        str_offset=0,
+        fret_offset=0,
+    )
+
+
 def get_config_for_instrument(
-    instrument: Instrument, min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck"
+    instrument: Instrument,
+    min_velocity: int,
+    max_velocity: int = 127,
+    output_port: str = "pushpluck",
 ) -> Config:
     """Get the appropriate configuration for a given instrument.
 
@@ -677,6 +766,10 @@ def get_config_for_instrument(
         return init_guitar_config(min_velocity, max_velocity, output_port)
     elif instrument == Instrument.Harpejji:
         return init_harpejji_config(min_velocity, max_velocity, output_port)
+    elif instrument == Instrument.Chromatic:
+        return init_chromatic_config(min_velocity, max_velocity, output_port)
+    elif instrument == Instrument.Fourths:
+        return init_fourths_config(min_velocity, max_velocity, output_port)
     else:
         raise ValueError(f"Unknown instrument: {instrument}")
 

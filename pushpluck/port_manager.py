@@ -39,7 +39,9 @@ class PortManager:
             self._ports[default_port_name] = default_port
             logging.info(f"Created virtual MIDI output port: {default_port_name}")
         except Exception as e:
-            logging.error(f"Failed to create default MIDI output port {default_port_name}: {e}")
+            logging.error(
+                f"Failed to create default MIDI output port {default_port_name}: {e}"
+            )
             raise
 
     def get_available_port_names(self) -> List[str]:
@@ -135,7 +137,10 @@ class PortManager:
         ports_to_close = []
 
         for port_name in self._ports:
-            if port_name != self._active_port_name and port_name != self._default_port_name:
+            if (
+                port_name != self._active_port_name
+                and port_name != self._default_port_name
+            ):
                 ports_to_close.append(port_name)
 
         for port_name in ports_to_close:

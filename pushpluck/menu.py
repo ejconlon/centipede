@@ -13,10 +13,12 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto, unique
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, TypeVar, cast
 
+from pushpluck import constants
 from pushpluck.config import Arrow, Config, Instrument, Layout, PlayMode
 from pushpluck.constants import ButtonCC, ButtonIllum, KnobGroup
 from pushpluck.port_manager import PortManager
 from pushpluck.push import ButtonEvent, KnobEvent, PushEvent, PushInterface
+from pushpluck.scale import SCALES, NoteName
 
 N = TypeVar("N")  # Type variable for menu value types
 Y = TypeVar("Y")  # Type variable for configuration structure types
@@ -90,6 +92,7 @@ class ValRange(Generic[N], metaclass=ABCMeta):
 class IntValRange(ValRange[int]):
     min_val: int
     max_val: int
+    wrap: bool  # Whether to wrap around at boundaries
 
     def render(self, value: int) -> str:
         return str(value)
@@ -98,14 +101,28 @@ class IntValRange(ValRange[int]):
         return value if value >= self.min_val and value <= self.max_val else None
 
     def succ(self, index: int) -> Optional[Tuple[int, int]]:
-        if index < self.min_val or index >= self.max_val:
+        if index >= self.max_val:
+            if self.wrap:
+                # Wrap around to minimum
+                new_index = self.min_val
+                return new_index, new_index
+            else:
+                return None
+        elif index < self.min_val:
             return None
         else:
             new_index = index + 1
             return new_index, new_index
 
     def pred(self, index: int) -> Optional[Tuple[int, int]]:
-        if index <= self.min_val or index > self.max_val:
+        if index <= self.min_val:
+            if self.wrap:
+                # Wrap around to maximum
+                new_index = self.max_val
+                return new_index, new_index
+            else:
+                return None
+        elif index > self.max_val:
             return None
         else:
             new_index = index - 1
@@ -115,15 +132,18 @@ class IntValRange(ValRange[int]):
 @dataclass(frozen=True, eq=False)
 class ChoiceValRange(ValRange[N]):
     @classmethod
-    def new(cls, options: List[N], renderer: Callable[[N], str]) -> ChoiceValRange[N]:
+    def new(
+        cls, options: List[N], renderer: Callable[[N], str], wrap: bool
+    ) -> ChoiceValRange[N]:
         options_dict = {i: n for i, n in enumerate(options)}
         rev_options_dict = {renderer(n): i for i, n in enumerate(options)}
-        return cls(len(options), options_dict, rev_options_dict, renderer)
+        return cls(len(options), options_dict, rev_options_dict, renderer, wrap)
 
     length: int
     options: Dict[int, N]
     rev_options: Dict[str, int]
     renderer: Callable[[N], str]
+    wrap: bool  # Whether to wrap around at boundaries
 
     def render(self, value: N) -> str:
         return self.renderer(value)
@@ -134,14 +154,24 @@ class ChoiceValRange(ValRange[N]):
 
     def succ(self, index: int) -> Optional[Tuple[int, N]]:
         if index >= len(self.options) - 1:
-            return None
+            if self.wrap:
+                # Wrap around to the beginning
+                new_index = 0
+                return new_index, self.options[new_index]
+            else:
+                return None
         else:
             new_index = index + 1
             return new_index, self.options[new_index]
 
     def pred(self, index: int) -> Optional[Tuple[int, N]]:
         if index <= 0:
-            return None
+            if self.wrap:
+                # Wrap around to the end
+                new_index = len(self.options) - 1
+                return new_index, self.options[new_index]
+            else:
+                return None
         else:
             new_index = index - 1
             return new_index, self.options[new_index]
@@ -155,8 +185,9 @@ class PortValRange(ValRange[str]):
     reflect current port availability.
     """
 
-    def __init__(self):
+    def __init__(self, wrap: bool):
         self._port_manager = PortManager()
+        self.wrap = wrap
 
     def _get_available_ports(self) -> List[str]:
         """Get the current list of available ports."""
@@ -179,7 +210,12 @@ class PortValRange(ValRange[str]):
     def succ(self, index: int) -> Optional[Tuple[int, str]]:
         available_ports = self._get_available_ports()
         if index >= len(available_ports) - 1:
-            return None
+            if self.wrap:
+                # Wrap around to the beginning
+                new_index = 0
+                return new_index, available_ports[new_index]
+            else:
+                return None
         else:
             new_index = index + 1
             return new_index, available_ports[new_index]
@@ -187,7 +223,12 @@ class PortValRange(ValRange[str]):
     def pred(self, index: int) -> Optional[Tuple[int, str]]:
         available_ports = self._get_available_ports()
         if index <= 0:
-            return None
+            if self.wrap:
+                # Wrap around to the end
+                new_index = len(available_ports) - 1
+                return new_index, available_ports[new_index]
+            else:
+                return None
         else:
             new_index = index - 1
             return new_index, available_ports[new_index]
@@ -382,37 +423,70 @@ def default_menu_layout() -> MenuLayout:
             KnobControl(
                 "Instr",
                 low_sens,
-                ChoiceValRange.new([v for v in Instrument], lambda v: v.name),
+                ChoiceValRange.new(
+                    [v for v in Instrument], lambda v: v.name, wrap=True
+                ),
                 InstrumentLens(),
             ),
             KnobControl(
                 "Layout",
                 low_sens,
-                ChoiceValRange.new([v for v in Layout], lambda v: v.display_name),
+                ChoiceValRange.new(
+                    [v for v in Layout], lambda v: v.display_name, wrap=True
+                ),
                 DataclassLens("layout"),
             ),
             KnobControl(
                 "Mode",
                 low_sens,
-                ChoiceValRange.new([v for v in PlayMode], lambda v: v.name),
+                ChoiceValRange.new([v for v in PlayMode], lambda v: v.name, wrap=True),
                 DataclassLens("play_mode"),
             ),
             KnobControl(
-                "SemOff", low_sens, IntValRange(-128, 127), DataclassLens("fret_offset")
+                "SemOff",
+                low_sens,
+                IntValRange(-128, 127, wrap=False),
+                DataclassLens("fret_offset"),
             ),
             KnobControl(
-                "StrOff", low_sens, IntValRange(-128, 127), DataclassLens("str_offset")
+                "StrOff",
+                low_sens,
+                IntValRange(-128, 127, wrap=False),
+                DataclassLens("str_offset"),
+            ),
+            KnobControl(
+                "Scale",
+                low_sens,
+                ChoiceValRange.new(
+                    SCALES,
+                    lambda v: v.name[: constants.DISPLAY_HALF_BLOCK_LEN],
+                    wrap=True,
+                ),
+                DataclassLens("scale"),
+            ),
+            KnobControl(
+                "Root",
+                low_sens,
+                ChoiceValRange.new([v for v in NoteName], lambda v: v.name, wrap=True),
+                DataclassLens("root"),
             ),
         ],
         device_knob_controls_row2=[
             KnobControl(
-                "Port", low_sens, PortValRange(), DataclassLens("output_port")
+                "Port", low_sens, PortValRange(wrap=True), DataclassLens("output_port")
             ),
             KnobControl(
-                "Channel", low_sens, IntValRange(1, 16), DataclassLens("midi_channel")
+                "Channel",
+                low_sens,
+                IntValRange(1, 16, wrap=True),
+                DataclassLens("midi_channel"),
             ),
-            KnobControl("MinVel", high_sens, IntValRange(0, 127), MinVelocityLens()),
-            KnobControl("MaxVel", high_sens, IntValRange(0, 127), MaxVelocityLens()),
+            KnobControl(
+                "MinVel", high_sens, IntValRange(0, 127, wrap=False), MinVelocityLens()
+            ),
+            KnobControl(
+                "MaxVel", high_sens, IntValRange(0, 127, wrap=False), MaxVelocityLens()
+            ),
         ],
     )
 

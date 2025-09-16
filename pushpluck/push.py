@@ -381,7 +381,9 @@ class PushInterface(Resettable, metaclass=ABCMeta):
         half = half_col % 2
         assert row >= 0 and row < constants.DISPLAY_MAX_ROWS
         assert block_col >= 0 and block_col < constants.DISPLAY_MAX_BLOCKS
-        assert len(text) <= constants.DISPLAY_HALF_BLOCK_LEN
+        # Truncate text if it's too long
+        if len(text) > constants.DISPLAY_HALF_BLOCK_LEN:
+            text = text[: constants.DISPLAY_HALF_BLOCK_LEN]
         offset: int
         just_text: str
         if half == 0:
