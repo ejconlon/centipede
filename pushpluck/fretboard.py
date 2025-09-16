@@ -476,6 +476,25 @@ class InfiniteTuner(Tuner):
         self._tuning = tuning
         self._repeat_steps = repeat_steps
         self._bounds = bounds
+        self._equivs_lookup = self._make_equivs_lookup()
+
+    def _make_equivs_lookup(self) -> Dict[int, List[StringPos]]:
+        """Build a lookup table from MIDI notes to equivalent string positions.
+
+        Returns:
+            Dictionary mapping MIDI note numbers to lists of StringPos instances
+            that produce that note within the bounds.
+        """
+        lookup: Dict[int, List[StringPos]] = {}
+        if self._bounds is not None:
+            for str_pos in self._bounds:
+                note = self.get_note(str_pos)
+                if note is not None:
+                    if note in lookup:
+                        lookup[note].append(str_pos)
+                    else:
+                        lookup[note] = [str_pos]
+        return lookup
 
     def _get_note_for_string_index(self, str_index: int) -> int:
         """Calculate the MIDI note for any string index.
@@ -525,14 +544,13 @@ class InfiniteTuner(Tuner):
     def get_note_group(self, str_pos: StringPos) -> Optional[NoteGroup]:
         """Get the note group for a string position.
 
-        For infinite tuning, we don't precompute equivalents since there
-        could be infinitely many. We just return the note with empty equivalents.
+        Returns the note and all equivalent positions within the current bounds.
 
         Args:
             str_pos: The string position to analyze.
 
         Returns:
-            A NoteGroup with the note and empty equivalents, or None
+            A NoteGroup with the note and equivalent positions, or None
             if the position doesn't produce a valid note.
         """
         note = self.get_note(str_pos)
@@ -544,9 +562,11 @@ class InfiniteTuner(Tuner):
                 if self._bounds is not None and str_pos in self._bounds
                 else None
             )
-            # For infinite tuning, we don't compute all equivalents
-            # as there could be infinitely many
-            equivs: List[StringPos] = []
+            equivs = (
+                self._equivs_lookup[note]
+                if note is not None and note in self._equivs_lookup
+                else []
+            )
             return NoteGroup(note, primary, equivs)
 
 

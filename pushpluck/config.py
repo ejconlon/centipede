@@ -555,11 +555,11 @@ class Config:
 
 
 def init_config(min_velocity: int, max_velocity: int = 127, output_port: str = "pushpluck") -> Config:
-    """Initialize a default configuration with Harpejji settings.
+    """Initialize a default configuration with Guitar settings.
 
-    Creates a Config instance with sensible defaults for a Harpejji
-    setup: whole-step tuning, vertical layout, tap mode, single channel,
-    C major scale, and no display offsets.
+    Creates a Config instance with sensible defaults for a Guitar
+    setup: standard tuning, rotated layout, tap mode, single channel,
+    C major scale, and appropriate display offsets.
 
     Args:
         min_velocity: The minimum MIDI velocity to use for note output.
@@ -570,17 +570,17 @@ def init_config(min_velocity: int, max_velocity: int = 127, output_port: str = "
         A Config instance with default settings and the specified parameters.
     """
     return Config(
-        instrument=Instrument.Harpejji,
-        instrument_name="Harpejji",
-        tuning_name="Chromatic",
-        tuning=constants.HARPEJJI_TUNING,
-        pre_layout=Layout.FlipD,  # Harpejji: diagonal flip layout by default
+        instrument=Instrument.Guitar,
+        instrument_name="Guitar",
+        tuning_name="Standard",
+        tuning=constants.STANDARD_TUNING,
+        pre_layout=Layout.Rot90,  # Guitar: rotated 90 degrees clockwise
         layout=Layout.Identity,  # User-selectable layout starts as Identity
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
         midi_channel=2,
-        repeat_steps=2,  # Harpejji: whole steps between strings
-        view_offset=0,  # Harpejji: start from string 0
+        repeat_steps=24,  # Guitar: high E - low E interval (2 octaves)
+        view_offset=1,  # Guitar: center the 5-string pattern (access to low B and high A)
         scale=SCALE_LOOKUP["Major"],
         root=NoteName.C,
         min_velocity=min_velocity,
@@ -609,7 +609,7 @@ def init_guitar_config(min_velocity: int, max_velocity: int = 127, output_port: 
         instrument_name="Guitar",
         tuning_name="Standard",
         tuning=constants.STANDARD_TUNING,
-        pre_layout=Layout.Identity,  # Guitar: horizontal layout is the base
+        pre_layout=Layout.Rot90,  # Guitar: rotated 90 degrees clockwise
         layout=Layout.Identity,  # User-selectable layout starts as Identity
         play_mode=PlayMode.Tap,
         chan_mode=ChannelMode.Single,
@@ -696,8 +696,8 @@ def default_scheme() -> ColorScheme:
         member_note=COLORS["White"],
         other_note=COLORS["Black"],
         primary_note=COLORS["Green"],
-        disabled_note=COLORS["Red"],
-        linked_note=COLORS["Lime"],
+        disabled_note=COLORS["Orange"],
+        linked_note=COLORS["Red"],
         misc_pressed=COLORS["Sky"],
         control=COLORS["Yellow"],
         control_pressed=COLORS["Pink"],
