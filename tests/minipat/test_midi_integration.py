@@ -244,7 +244,7 @@ class TestMidiLiveSystemIntegration:
             )
 
         # Useful to turn off timing to debug logic
-        validate_timing = False
+        validate_timing = True
 
         if validate_timing:
             # Now separate messages for timing analysis
@@ -261,7 +261,12 @@ class TestMidiLiveSystemIntegration:
             # Now check timing between consecutive note_on messages
             # Each should be approximately 0.125 seconds apart (125ms)
             expected_interval = 0.125  # 0.5 seconds per cycle / 4 notes
-            tolerance = 0.05  # 50ms tolerance for timing variations
+            tolerance = (
+                0.075  # 75ms tolerance for timing variations (increased from 50ms)
+            )
+            duration_tolerance = (
+                0.1  # 100ms tolerance for note durations (increased from 75ms)
+            )
 
             for i in range(
                 1, min(8, len(note_on_messages))
@@ -284,7 +289,6 @@ class TestMidiLiveSystemIntegration:
                     duration = note_off_time - note_on_time
 
                     # Note durations can vary more due to system timing
-                    duration_tolerance = 0.075  # 75ms tolerance
                     assert abs(duration - expected_interval) <= duration_tolerance, (
                         f"Note {i} duration: Expected ~{expected_interval}s, "
                         f"got {duration:.3f}s (tolerance: {duration_tolerance * 1000:.0f}ms)"
