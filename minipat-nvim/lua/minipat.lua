@@ -17,6 +17,16 @@ local DEFAULTS = {
       bpm = 120, -- Initial BPM for minipat (sets MINIPAT_BPM env var)
       bpc = 4, -- Initial beats per cycle for minipat (sets MINIPAT_BPC env var)
     },
+    backend = {
+      enabled = false, -- Enable custom backend process
+      command = nil, -- Custom backend command to run (e.g., "my-backend --port 8080")
+      cwd = nil, -- Working directory for backend (defaults to source_path)
+      env = {}, -- Additional environment variables for backend
+      pidfile = nil, -- Path to pidfile for tracking backend process (defaults to /tmp/minipat-backend.pid)
+      autostart = true, -- Start backend automatically when plugin loads
+      autostop = true, -- Stop backend when Neovim exits
+      restart_on_exit = false, -- Restart backend if it exits unexpectedly
+    },
   },
   keymaps = {
     send_line = "<C-L>",
@@ -71,6 +81,10 @@ local state = {
   group_hidden = false,
   group_split_dir = "v", -- Direction for the group split
   group_win = nil, -- Main group window
+  -- Backend process management
+  backend_process = nil,
+  backend_pidfile = nil,
+  backend_restart_timer = nil,
 }
 
 -- Helper function to check if a file exists
@@ -155,6 +169,59 @@ local function resolve_source_path(source_path)
   end
 end
 
+-- Resolve backend configuration paths and set defaults
+local function resolve_backend_config(backend_config, source_path)
+  if not backend_config.enabled then
+    return backend_config
+  end
+
+  local resolved_config = vim.tbl_deep_extend("force", {}, backend_config)
+
+  -- Set default working directory to source_path if not specified
+  if not resolved_config.cwd then
+    resolved_config.cwd = source_path
+  elseif not vim.fn.fnamemodify(resolved_config.cwd, ":p") == resolved_config.cwd then
+    -- Relative path - make it relative to source_path
+    resolved_config.cwd = source_path .. "/" .. resolved_config.cwd
+  end
+
+  -- Set default pidfile path if not specified
+  if not resolved_config.pidfile then
+    resolved_config.pidfile = "/tmp/minipat-backend.pid"
+  elseif not vim.fn.fnamemodify(resolved_config.pidfile, ":p") == resolved_config.pidfile then
+    -- Relative path - make it relative to cwd
+    resolved_config.pidfile = resolved_config.cwd .. "/" .. resolved_config.pidfile
+  end
+
+  return resolved_config
+end
+
+-- Validate backend configuration
+local function validate_backend_config(backend_config)
+  if not backend_config.enabled then
+    return true, nil
+  end
+
+  if not backend_config.command or backend_config.command == "" then
+    return false, "Backend enabled but no command specified"
+  end
+
+  -- Check if cwd exists
+  if backend_config.cwd and not dir_exists(backend_config.cwd) then
+    return false, "Backend working directory does not exist: " .. backend_config.cwd
+  end
+
+  -- Check if pidfile directory exists
+  if backend_config.pidfile then
+    local pidfile_dir = vim.fn.fnamemodify(backend_config.pidfile, ":h")
+    if not dir_exists(pidfile_dir) then
+      return false, "Backend pidfile directory does not exist: " .. pidfile_dir
+    end
+  end
+
+  return true, nil
+end
+
 -- Get the python binary from source_path/.venv
 local function get_python_binary(source_path)
   local venv_path = source_path .. "/.venv"
@@ -184,6 +251,181 @@ local function get_python_binary(source_path)
 
   -- Fallback to system python
   return "python"
+end
+
+-- Read PID from pidfile
+local function read_pidfile(pidfile_path)
+  if not file_exists(pidfile_path) then
+    return nil
+  end
+
+  local f = io.open(pidfile_path, "r")
+  if not f then
+    return nil
+  end
+
+  local pid_str = f:read("*all")
+  f:close()
+
+  if not pid_str or pid_str == "" then
+    return nil
+  end
+
+  local pid = tonumber(pid_str:match("(%d+)"))
+  return pid
+end
+
+-- Write PID to pidfile
+local function write_pidfile(pidfile_path, pid)
+  local pidfile_dir = vim.fn.fnamemodify(pidfile_path, ":h")
+  if not dir_exists(pidfile_dir) then
+    vim.fn.mkdir(pidfile_dir, "p")
+  end
+
+  local f = io.open(pidfile_path, "w")
+  if not f then
+    return false
+  end
+
+  f:write(tostring(pid) .. "\n")
+  f:close()
+  return true
+end
+
+-- Remove pidfile
+local function remove_pidfile(pidfile_path)
+  if file_exists(pidfile_path) then
+    os.remove(pidfile_path)
+  end
+end
+
+-- Check if process is running
+local function is_process_running(pid)
+  if not pid then
+    return false
+  end
+
+  -- Use kill -0 to check if process exists
+  local result = vim.fn.system("kill -0 " .. pid .. " 2>/dev/null")
+  return vim.v.shell_error == 0
+end
+
+-- Start backend process
+local function start_backend(backend_config, debug)
+  if not backend_config.enabled or not backend_config.command then
+    return
+  end
+
+  -- Check if backend is already running
+  if state.backend_pidfile then
+    local existing_pid = read_pidfile(state.backend_pidfile)
+    if existing_pid and is_process_running(existing_pid) then
+      if debug then
+        print("Backend process already running with PID: " .. existing_pid)
+      end
+      return
+    end
+  end
+
+  if debug then
+    print("Starting backend: " .. backend_config.command .. " in " .. backend_config.cwd)
+  end
+
+  -- Build environment
+  local env = vim.tbl_extend("force", vim.fn.environ(), backend_config.env or {})
+
+  -- Start the backend process
+  local job_id = vim.fn.jobstart(backend_config.command, {
+    cwd = backend_config.cwd,
+    env = env,
+    detach = true, -- Detach from Neovim
+    on_exit = function(job_id, exit_code, event_type)
+      if debug then
+        print("Backend process exited with code: " .. exit_code)
+      end
+
+      -- Clean up pidfile
+      if state.backend_pidfile then
+        remove_pidfile(state.backend_pidfile)
+      end
+
+      -- Clean up state
+      state.backend_process = nil
+
+      -- Restart if configured to do so and exit was unexpected
+      if backend_config.restart_on_exit and exit_code ~= 0 then
+        if debug then
+          print("Restarting backend process in 5 seconds...")
+        end
+        state.backend_restart_timer = vim.defer_fn(function()
+          start_backend(backend_config, debug)
+          state.backend_restart_timer = nil
+        end, 5000)
+      end
+    end,
+  })
+
+  if job_id <= 0 then
+    vim.notify("Failed to start backend process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
+    return
+  end
+
+  state.backend_process = job_id
+  state.backend_pidfile = backend_config.pidfile
+
+  -- Write pidfile
+  if backend_config.pidfile then
+    if not write_pidfile(backend_config.pidfile, job_id) then
+      vim.notify("Failed to write backend pidfile: " .. backend_config.pidfile, vim.log.levels.WARN)
+    end
+  end
+
+  if debug then
+    print("Backend started with job_id: " .. job_id)
+  end
+end
+
+-- Stop backend process
+local function stop_backend(backend_config, debug)
+  if not backend_config.enabled then
+    return
+  end
+
+  -- Cancel restart timer if active
+  if state.backend_restart_timer then
+    state.backend_restart_timer:close()
+    state.backend_restart_timer = nil
+  end
+
+  -- Stop process by PID from pidfile first
+  if state.backend_pidfile then
+    local pid = read_pidfile(state.backend_pidfile)
+    if pid and is_process_running(pid) then
+      if debug then
+        print("Stopping backend process PID: " .. pid)
+      end
+      vim.fn.system("kill " .. pid)
+      -- Give it time to exit gracefully
+      vim.defer_fn(function()
+        if is_process_running(pid) then
+          if debug then
+            print("Force killing backend process PID: " .. pid)
+          end
+          vim.fn.system("kill -9 " .. pid)
+        end
+      end, 3000)
+    end
+    remove_pidfile(state.backend_pidfile)
+  end
+
+  -- Stop job if we have a job_id
+  if state.backend_process then
+    vim.fn.jobstop(state.backend_process)
+  end
+
+  -- Clean up state
+  state.backend_process = nil
+  state.backend_pidfile = nil
 end
 
 local function boot_minipat(args, extra_args)
@@ -406,6 +648,10 @@ local function help_minipat(args)
     "  :" .. prefix .. "Show    - Show all minipat buffers",
     "  :" .. prefix .. "Config  - Edit the minipat configuration file",
     "  :" .. prefix .. "Help    - Show this help",
+    "  :" .. prefix .. "BackendStart   - Start the backend process",
+    "  :" .. prefix .. "BackendStop    - Stop the backend process",
+    "  :" .. prefix .. "BackendRestart - Restart the backend process",
+    "  :" .. prefix .. "BackendStatus  - Show backend process status",
     "",
     "Keybindings (in *." .. args.config.file_ext .. " files):",
     "  " .. args.keymaps.send_line .. "  - Send current line to minipat",
@@ -442,6 +688,15 @@ local function help_minipat(args)
     "  Log level: " .. (args.config.minipat and args.config.minipat.log_level or "(not set)"),
     "  BPM: " .. (args.config.minipat and args.config.minipat.bpm and tostring(args.config.minipat.bpm) or "(not set)"),
     "  BPC: " .. (args.config.minipat and args.config.minipat.bpc and tostring(args.config.minipat.bpc) or "(not set)"),
+    "",
+    "Backend Config:",
+    "  Enabled: " .. (args.config.backend and tostring(args.config.backend.enabled) or "false"),
+    "  Command: " .. (args.config.backend and args.config.backend.command or "(not set)"),
+    "  Working directory: " .. (args.config.backend and args.config.backend.cwd or "(not set)"),
+    "  Pidfile: " .. (args.config.backend and args.config.backend.pidfile or "(not set)"),
+    "  Autostart: " .. (args.config.backend and tostring(args.config.backend.autostart) or "false"),
+    "  Autostop: " .. (args.config.backend and tostring(args.config.backend.autostop) or "false"),
+    "  Restart on exit: " .. (args.config.backend and tostring(args.config.backend.restart_on_exit) or "false"),
   }
 
   -- Create a floating window for the help text
@@ -920,6 +1175,19 @@ end
 function M.setup(args)
   args = vim.tbl_deep_extend("force", DEFAULTS, args)
 
+  -- Resolve and validate backend configuration
+  local resolved_source_path = resolve_source_path(args.config.source_path)
+  local backend_config = resolve_backend_config(args.config.backend, resolved_source_path)
+  local backend_valid, backend_error = validate_backend_config(backend_config)
+
+  if not backend_valid then
+    vim.notify("Backend configuration error: " .. backend_error, vim.log.levels.ERROR)
+    backend_config.enabled = false
+  end
+
+  -- Store resolved backend config for later use
+  args.config.backend = backend_config
+
   local boot_fn = function(fn_args)
     local extra_args = fn_args and fn_args["args"] or nil
     boot_minipat_repl(args.config, extra_args)
@@ -987,6 +1255,52 @@ function M.setup(args)
     open_config()
   end
 
+  local backend_start_fn = function()
+    if not backend_config.enabled then
+      vim.notify("Backend is not enabled in configuration", vim.log.levels.WARN)
+      return
+    end
+    start_backend(backend_config, args.config.debug)
+  end
+
+  local backend_stop_fn = function()
+    if not backend_config.enabled then
+      vim.notify("Backend is not enabled in configuration", vim.log.levels.WARN)
+      return
+    end
+    stop_backend(backend_config, args.config.debug)
+  end
+
+  local backend_restart_fn = function()
+    if not backend_config.enabled then
+      vim.notify("Backend is not enabled in configuration", vim.log.levels.WARN)
+      return
+    end
+    vim.notify("Restarting backend...", vim.log.levels.INFO)
+    stop_backend(backend_config, args.config.debug)
+    vim.defer_fn(function()
+      start_backend(backend_config, args.config.debug)
+    end, 1000)
+  end
+
+  local backend_status_fn = function()
+    if not backend_config.enabled then
+      vim.notify("Backend is not enabled in configuration", vim.log.levels.INFO)
+      return
+    end
+
+    local pid = nil
+    if state.backend_pidfile then
+      pid = read_pidfile(state.backend_pidfile)
+    end
+
+    local running = pid and is_process_running(pid)
+    local status = running and "running" or "stopped"
+    local pid_info = pid and (" (PID: " .. pid .. ")") or ""
+
+    vim.notify("Backend status: " .. status .. pid_info, vim.log.levels.INFO)
+  end
+
   local enter_fn = function()
     vim.cmd("set ft=python")
     vim.api.nvim_buf_set_option(0, "commentstring", "# %s")
@@ -1025,6 +1339,10 @@ function M.setup(args)
   vim.api.nvim_create_user_command(prefix .. "Show", show_fn, { desc = "show minipat buffer group" })
   vim.api.nvim_create_user_command(prefix .. "Config", config_fn, { desc = "edit minipat config file" })
   vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "show Minipat help and keybindings" })
+  vim.api.nvim_create_user_command(prefix .. "BackendStart", backend_start_fn, { desc = "start backend process" })
+  vim.api.nvim_create_user_command(prefix .. "BackendStop", backend_stop_fn, { desc = "stop backend process" })
+  vim.api.nvim_create_user_command(prefix .. "BackendRestart", backend_restart_fn, { desc = "restart backend process" })
+  vim.api.nvim_create_user_command(prefix .. "BackendStatus", backend_status_fn, { desc = "show backend process status" })
 
   -- Set up global keymaps
   local leader_prefix = args.global_keymaps.leader_prefix
@@ -1066,6 +1384,23 @@ function M.setup(args)
     pattern = { "*." .. args.config.file_ext },
     callback = enter_fn,
   })
+
+  -- Backend lifecycle management
+  if backend_config.enabled then
+    -- Start backend if autostart is enabled
+    if backend_config.autostart then
+      start_backend(backend_config, args.config.debug)
+    end
+
+    -- Stop backend when Neovim exits if autostop is enabled
+    if backend_config.autostop then
+      vim.api.nvim_create_autocmd("VimLeavePre", {
+        callback = function()
+          stop_backend(backend_config, args.config.debug)
+        end,
+      })
+    end
+  end
 end
 
 return M

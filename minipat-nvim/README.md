@@ -62,6 +62,10 @@ The plugin will be lazy-loaded when you open a `*.minipat` file.
 - `:MpShow` - Show all minipat buffers
 - `:MpConfig` - Edit the minipat configuration file
 - `:MpHelp` - Show help with current keybindings and configuration
+- `:MpBackendStart` - Start the backend process
+- `:MpBackendStop` - Stop the backend process
+- `:MpBackendRestart` - Restart the backend process
+- `:MpBackendStatus` - Show backend process status
 
 Commands are customizable via the `command_prefix` config option.
 
@@ -128,6 +132,49 @@ These map to environment variables:
 - `minipat.log_level` → `MINIPAT_LOG_LEVEL`
 - `minipat.bpm` → `MINIPAT_BPM`
 - `minipat.bpc` → `MINIPAT_BPC`
+
+### Backend Configuration
+
+The `backend` table allows you to configure a custom backend process that runs alongside minipat:
+
+```lua
+backend = {
+  enabled = true,                              -- Enable custom backend process
+  command = "my-backend --port 8080",          -- Command to run (required if enabled)
+  cwd = nil,                                   -- Working directory (defaults to source_path)
+  env = { MY_VAR = "value" },                  -- Additional environment variables
+  pidfile = "/tmp/my-backend.pid",             -- Path to pidfile (defaults to /tmp/minipat-backend.pid)
+  autostart = true,                            -- Start backend when plugin loads
+  autostop = true,                             -- Stop backend when Neovim exits
+  restart_on_exit = false,                     -- Restart backend if it exits unexpectedly
+}
+```
+
+#### Backend Configuration Options
+
+- `enabled` (default: false) - Enable/disable the backend functionality
+- `command` (required if enabled) - Shell command to start the backend process
+- `cwd` (default: source_path) - Working directory for the backend process
+  - Relative paths are resolved relative to `source_path`
+  - Absolute paths are used as-is
+- `env` (default: {}) - Additional environment variables to pass to the backend
+- `pidfile` (default: "/tmp/minipat-backend.pid") - Path to store the backend process ID
+  - Relative paths are resolved relative to `cwd`
+  - Used for process tracking and cleanup
+- `autostart` (default: true) - Automatically start the backend when the plugin loads
+- `autostop` (default: true) - Automatically stop the backend when Neovim exits
+- `restart_on_exit` (default: false) - Restart the backend if it exits unexpectedly (non-zero exit code)
+
+#### Backend Process Management
+
+The plugin provides commands to manage the backend process lifecycle:
+
+- `:MpBackendStart` - Start the backend (if not already running)
+- `:MpBackendStop` - Stop the backend process
+- `:MpBackendRestart` - Stop and restart the backend
+- `:MpBackendStatus` - Check if the backend is running
+
+The backend process is tracked using pidfiles and can be managed independently of the minipat REPL.
 
 ### Key Mappings Configuration
 

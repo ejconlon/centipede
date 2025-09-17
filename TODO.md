@@ -22,12 +22,6 @@ Next available task ID: {#10}
 
 ### Upcoming
 
-- **Add optional "backend" config to specify backend command** {#2} {plugin} {neovim} {config}
-  - Allow users to configure a custom backend process command
-  - Add this process to the plugin lifecycle management
-  - Use pidfiles to control execution and track process state
-  - Enable integration with external tools and custom backends
-
 - **Add new minipat pane for backend output streams** {#3} {plugin} {neovim} {ui}
   - Create a dedicated pane to display stdout/stderr from the backend command
   - Provide real-time monitoring of backend process output
@@ -48,6 +42,12 @@ Next available task ID: {#10}
 - **Documentation updates for new features** {#9} {docs}
 
 ### Done
+
+- **Add optional "backend" config to specify backend command** {#2} {plugin} {neovim} {config}
+  - Allow users to configure a custom backend process command
+  - Add this process to the plugin lifecycle management
+  - Use pidfiles to control execution and track process state
+  - Enable integration with external tools and custom backends
 
 - **Add "kit" functionality for drum sound patterns** {#5} {patterns} {nucleus} {drums}
   - Implement sound pattern mapping from string identifiers to MIDI parameters
