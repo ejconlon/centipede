@@ -12,6 +12,7 @@ from minipat.combinators import (
     channel_stream,
     combine_all,
     control_stream,
+    kit_stream_with_kit,
     midinote_stream,
     note_stream,
     program_stream,
@@ -19,6 +20,7 @@ from minipat.combinators import (
     velocity_stream,
 )
 from minipat.common import CycleDelta, CycleTime, Numeric, numeric_frac
+from minipat.kit import DEFAULT_KIT, Kit, make_drum_sound
 from minipat.live import LiveSystem, Orbit
 from minipat.messages import MidiAttrs, TimedMessage
 from minipat.midi import start_midi_live_system
@@ -485,6 +487,41 @@ def midinote(pat_str: str) -> Flow:
     return Flow(midinote_stream(pat_str))
 
 
+def kit(pat_str: str) -> Flow:
+    """Create a flow from drum kit sound identifiers using the default kit.
+
+    Creates a Flow from drum sound identifiers using the default drum kit mapping.
+    Supports all standard drum notation like "bd" for bass drum, "sd" for snare, etc.
+
+    DEPRECATED: Use nucleus.kit() instead for better control over drum kit state.
+
+    Args:
+        pat_str: Pattern string containing drum sound identifiers
+
+    Returns:
+        A Flow containing MIDI note attributes for drum sounds
+
+    Examples:
+        kit("bd sd bd sd")       # Bass drum, snare, bass drum, snare
+        kit("bd ~ sd ~")         # Bass drum, rest, snare, rest
+        kit("[bd,sd,hh]")        # Bass drum + snare + hi-hat (simultaneous)
+        kit("hh*8")              # Hi-hat repeated 8 times
+        kit("bd sd:2 hh:3")      # Different speeds for each element
+
+    Recommended usage:
+        n = Nucleus.boot()
+        n.kit("bd sd bd sd")     # Use nucleus method instead
+    """
+    import warnings
+
+    warnings.warn(
+        "Global kit() function is deprecated. Use nucleus.kit() method instead for better control over drum kit state.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return Flow(kit_stream_with_kit(pat_str, DEFAULT_KIT))
+
+
 def vel(pat_str: str) -> Flow:
     """Create a flow from velocity values.
 
@@ -586,8 +623,8 @@ class Nucleus:
     """The core control system for minipat.
 
     The Nucleus manages the entire minipat system, including timing, playback,
-    and orbit management. Create one with Nucleus.boot() and use it to control
-    your live coding session.
+    orbit management, and all global state for minipat (including drum kits).
+    Create one with Nucleus.boot() and use it to control your live coding session.
 
     Properties:
         running: True if the system is running
@@ -596,6 +633,7 @@ class Nucleus:
         tempo: Get/set beats per minute (alternative tempo control)
         cycle: Get/set current cycle position
         bpc: Get/set beats per cycle
+        drum_kit: Get/set the current drum kit
 
     Examples:
         # Boot the system
@@ -607,7 +645,11 @@ class Nucleus:
 
         # Play patterns on orbits
         n[0] = note("c4 d4 e4 f4")  # Orbit 0
-        n[1] = note("c2 ~ c2 ~")    # Orbit 1
+        n[1] = kit("bd ~ sd ~")     # Orbit 1 with drums
+
+        # Manage drum kit
+        n.add_drum_sound("crash2", 49)
+        sounds = n.list_drum_sounds()
 
         # Control orbits
         n[0].mute()      # Mute orbit 0
@@ -620,6 +662,7 @@ class Nucleus:
 
     sys: System
     live: LiveSystem[MidiAttrs, TimedMessage]
+    _kit: Kit
 
     @staticmethod
     def boot(
@@ -648,7 +691,8 @@ class Nucleus:
         )
         sys = new_system(sys_name)
         live = start_midi_live_system(sys, port_name, init_cps, init_bpc)
-        return Nucleus(sys, live)
+        kit = DEFAULT_KIT  # Use default kit
+        return Nucleus(sys, live, kit)
 
     def stop(self) -> int:
         self.live.panic()
@@ -808,6 +852,108 @@ class Nucleus:
 
     def __or__(self, flow: Flow) -> None:
         self.once(flow)
+
+    @property
+    def drum_kit(self) -> Kit:
+        """Get the current drum kit.
+
+        Returns:
+            The currently active Kit instance
+        """
+        return self._kit
+
+    @drum_kit.setter
+    def drum_kit(self, kit: Kit) -> None:
+        """Set the current drum kit.
+
+        Args:
+            kit: The Kit instance to make active
+        """
+        self._kit = kit
+
+    def add_drum_sound(
+        self,
+        identifier: str,
+        note: int,
+        velocity: Optional[int] = None,
+        channel: Optional[int] = None,
+    ) -> None:
+        """Add a new drum sound to the current kit.
+
+        Args:
+            identifier: String identifier for the drum sound
+            note: MIDI note number (0-127)
+            velocity: Optional default velocity (0-127)
+            channel: Optional default channel (0-15)
+
+        Raises:
+            ValueError: If note, velocity, or channel values are out of range
+
+        Example:
+            n.add_drum_sound("crash2", 49, 100)
+            n[0] = kit("bd crash2 sd")
+        """
+        sound = make_drum_sound(note, velocity, channel)
+        self._kit = self._kit.put(identifier, sound)
+
+    def remove_drum_sound(self, identifier: str) -> bool:
+        """Remove a drum sound from the current kit.
+
+        Args:
+            identifier: String identifier for the drum sound to remove
+
+        Returns:
+            True if the sound was removed, False if it wasn't found
+
+        Example:
+            n.remove_drum_sound("crash2")
+        """
+        if self._kit.contains(identifier):
+            self._kit = self._kit.remove(identifier)
+            return True
+        return False
+
+    def list_drum_sounds(self) -> Kit:
+        """List all drum sounds in the current kit.
+
+        Returns:
+            Kit mapping identifiers to Sound objects
+
+        Example:
+            sounds = n.list_drum_sounds()
+            for name, sound in sounds.items():
+                print(f"{name}: {sound.note}")
+        """
+        return self._kit
+
+    def reset_kit(self) -> None:
+        """Reset the current drum kit to the default kit.
+
+        Example:
+            n.reset_kit()  # Back to default drum sounds
+        """
+        self._kit = DEFAULT_KIT
+
+    def kit(self, pat_str: str) -> Flow:
+        """Create a flow from drum kit sound identifiers using this nucleus's kit.
+
+        Creates a Flow from drum sound identifiers using this nucleus's drum kit mapping.
+        Supports all standard drum notation like "bd" for bass drum, "sd" for snare, etc.
+
+        Args:
+            pat_str: Pattern string containing drum sound identifiers
+
+        Returns:
+            A Flow containing MIDI note attributes for drum sounds
+
+        Examples:
+            n.kit("bd sd bd sd")       # Bass drum, snare, bass drum, snare
+            n.kit("bd ~ sd ~")         # Bass drum, rest, snare, rest
+            n.kit("[bd,sd,hh]")        # Bass drum + snare + hi-hat (simultaneous)
+            n.kit("hh*8")              # Hi-hat repeated 8 times
+            n.kit("bd sd:2 hh:3")      # Different speeds for each element
+        """
+        return Flow(kit_stream_with_kit(pat_str, self._kit))
 
 
 @dataclass(frozen=True, eq=False)

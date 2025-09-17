@@ -1,11 +1,12 @@
 # Project TODOs
 
-This file tracks project tasks. We are maintaining 4 "lanes" of tasks in this file:
+This file tracks project tasks. We are maintaining several "lanes" of tasks in this file:
 
 - Active: tasks currently in progress
-- Upcoming: future tasks from next priority to last priority
-- Done: finished tasks from most recent to least recent
-- Archive: unscheduled tasks from most recent to least recent
+- Review: tasks for review on the way from Active to Done
+- Upcoming: future Active tasks from next priority to last priority
+- Done: finished Review tasks from most recent to least recent
+- Archive: unscheduled Upcoming tasks from most recent to least recent
 
 Work on tasks in the Active lane. Move tasks from one lane to the other as their state changes.
 
@@ -17,12 +18,7 @@ Next available task ID: {#10}
 
 ### Active
 
-- **Add "kit" functionality for drum sound patterns** {#5} {patterns} {nucleus} {drums}
-  - Implement sound pattern mapping from string identifiers to MIDI parameters
-  - Support drum kit notation (e.g., "bd" → bass drum, "sd" → snare drum, "hh" → hi-hat)
-  - Create well-typed mapping to (channel, note, velocity, duration) tuples
-  - Enable pattern sequences using drum sound names instead of raw MIDI values
-  - Consider extensible kit definitions for different drum machines/samples
+### Review
 
 ### Upcoming
 
@@ -52,6 +48,13 @@ Next available task ID: {#10}
 - **Documentation updates for new features** {#9} {docs}
 
 ### Done
+
+- **Add "kit" functionality for drum sound patterns** {#5} {patterns} {nucleus} {drums}
+  - Implement sound pattern mapping from string identifiers to MIDI parameters
+  - Support drum kit notation (e.g., "bd" → bass drum, "sd" → snare drum, "hh" → hi-hat)
+  - Create well-typed mapping to (channel, note, velocity, duration) tuples
+  - Enable pattern sequences using drum sound names instead of raw MIDI values
+  - Consider extensible kit definitions for different drum machines/samples
 
 - **Investigate timing issues in test_midi_integration** {#1} {testing} {midi} {timing}
   - The test occasionally fails due to timing variations in note durations
