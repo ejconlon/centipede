@@ -40,7 +40,7 @@ def _init() -> None:
     print(f"Exit with {name}.exit() or <C-d><C-c>")
     n = Nucleus.boot()
     globals()[name] = n
-    n.play()
+    n.playing = True
 
 
 def _cleanup() -> None:

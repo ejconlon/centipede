@@ -1,7 +1,5 @@
 local M = {}
 
-local treesitter = require("vim.treesitter")
-
 local DEFAULTS = {
   config = {
     source_path = nil, -- Optional path to minipat project root
@@ -22,9 +20,20 @@ local DEFAULTS = {
   },
   keymaps = {
     send_line = "<C-L>",
-    send_node = "<Leader>s",
     send_visual = "<C-L>",
-    stop = "<C-H>",
+    panic = "<C-H>",
+  },
+  global_keymaps = {
+    leader_prefix = "<localleader>p",
+    boot = "b",     -- <localleader>pb
+    quit = "q",     -- <localleader>pq
+    stop = "s",     -- <localleader>ps
+    monitor = "m",  -- <localleader>pm (monitor minipat port)
+    logs = "l",     -- <localleader>pl
+    hide = "h",     -- <localleader>ph
+    show = "w",     -- <localleader>pw (show)
+    config = "c",   -- <localleader>pc
+    help = "?",     -- <localleader>p?
   },
 }
 
@@ -34,22 +43,15 @@ local KEYMAPS = {
     action = "Vy<cmd>lua require('minipat').send_reg()<CR><ESC>",
     description = "send line to Minipat",
   },
-  send_node = {
-    mode = "n",
-    action = function()
-      M.send_node()
-    end,
-    description = "send treesitter node to Minipat",
-  },
   send_visual = {
     mode = "v",
     action = "y<cmd>lua require('minipat').send_reg()<CR>",
     description = "send selection to Minipat",
   },
-  stop = {
+  panic = {
     mode = "n",
     action = nil, -- Will be set dynamically with config
-    description = "send stop command to Minipat",
+    description = "send panic command to Minipat",
   },
 }
 
@@ -356,10 +358,10 @@ end
 
 local function key_map(key, mapping, config)
   local action = KEYMAPS[key].action
-  -- Special handling for stop command to use nucleus_var
-  if key == "stop" then
+  -- Special handling for panic command to use nucleus_var
+  if key == "panic" then
     action = function()
-      M.send(config.minipat.nucleus_var .. ".stop(immediate=True)")
+      M.send(config.minipat.nucleus_var .. ".panic()")
     end
   end
   vim.keymap.set(KEYMAPS[key].mode, mapping, action, {
@@ -383,36 +385,6 @@ function M.send_reg(register)
   M.send(text)
 end
 
-function M.send_node()
-  local node = treesitter.get_node_at_cursor(0)
-  local root
-  if node then
-    root = treesitter.get_root_for_node(node)
-  end
-  if not root then
-    return
-  end
-  local parent
-  if node then
-    parent = node:parent()
-  end
-  while node ~= nil and node ~= root do
-    local t = node:type()
-    if t == "top_splice" then
-      break
-    end
-    node = parent
-    if node then
-      parent = node:parent()
-    end
-  end
-  if not node then
-    return
-  end
-  local start_row, start_col, end_row, end_col = treesitter.get_node_range(node)
-  local text = table.concat(vim.api.nvim_buf_get_text(0, start_row, start_col, end_row, end_col, {}), "\n")
-  M.send(text)
-end
 
 local function help_minipat(args)
   local prefix = args.config.command_prefix
@@ -429,22 +401,33 @@ local function help_minipat(args)
       .. args.config.minipat.nucleus_var
       .. ".stop(immediate=True))",
     "  :" .. prefix .. "At <code> - Send Python code to minipat",
-    "  :" .. prefix .. "Mon     - Monitor MIDI messages",
+    "  :" .. prefix .. "Mon     - Toggle MIDI monitor",
     "  :" .. prefix .. "Mod     - Monitor minipat MIDI port",
-    "  :" .. prefix .. "Logs    - Open minipat log file",
+    "  :" .. prefix .. "Logs    - Toggle minipat log file",
     "  :" .. prefix .. "Hide    - Hide minipat buffer group",
     "  :" .. prefix .. "Show    - Show minipat buffer group",
+    "  :" .. prefix .. "Config  - Edit minipat config file",
     "  :" .. prefix .. "Help    - Show this help",
     "",
     "Keybindings (in *." .. args.config.file_ext .. " files):",
     "  " .. args.keymaps.send_line .. "  - Send current line to minipat",
-    "  " .. args.keymaps.send_node .. "  - Send treesitter node to minipat",
     "  " .. args.keymaps.send_visual .. "  - (Visual mode) Send selection to minipat",
     "  "
-      .. args.keymaps.stop
-      .. "  - Send stop command ("
+      .. args.keymaps.panic
+      .. "  - Panic (pause, reset cycle, clear patterns) - "
       .. args.config.minipat.nucleus_var
-      .. ".stop(immediate=True))",
+      .. ".panic()",
+    "",
+    "Global Keybindings:",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.boot .. "  - Boot minipat REPL",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.quit .. "  - Quit minipat",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.stop .. "  - Stop minipat playback",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor .. "  - Monitor minipat port",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs .. "  - Open log file",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.hide .. "  - Hide buffer group",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.show .. "  - Show buffer group",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.config .. "  - Edit config file",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.help .. "  - Show this help",
     "",
     "Configuration:",
     "  Source path: " .. (args.config.source_path or "(auto-detected)"),
@@ -503,13 +486,34 @@ local function stop_minipat(config)
   end
 end
 
-local function monitor_midi(args, extra_args)
+local function monitor_midi(args)
   local original_win = vim.api.nvim_get_current_win()
 
-  -- If monitor is already running, switch to its buffer
+  -- If monitor is already running, toggle its visibility
   if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
-    local ok = pcall(vim.api.nvim_set_current_buf, state.monitor)
-    if ok then
+    local wins = vim.fn.win_findbuf(state.monitor)
+    if #wins > 0 then
+      -- Buffer is visible, hide it
+      for _, win in ipairs(wins) do
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, false)
+        end
+      end
+      return
+    else
+      -- Buffer exists but not visible, show it in group
+      if ensure_group_visible(args) then
+        local group_buffers = get_group_buffers()
+        if #group_buffers > 0 then
+          vim.api.nvim_set_current_win(state.group_win)
+          vim.cmd(args.split == "v" and "vsplit" or "split")
+        end
+      else
+        vim.api.nvim_set_current_win(original_win)
+        create_group_split(args)
+      end
+      vim.api.nvim_set_current_buf(state.monitor)
+      vim.api.nvim_set_current_win(original_win)
       return
     end
   end
@@ -590,10 +594,31 @@ local function open_logs(args)
   local original_win = vim.api.nvim_get_current_win()
   local log_path = args.minipat and args.minipat.log_path or "/tmp/minipat.log"
 
-  -- If logs buffer is already open, switch to it
+  -- If logs buffer is already open, toggle its visibility
   if state.logs and vim.api.nvim_buf_is_valid(state.logs) then
-    local ok = pcall(vim.api.nvim_set_current_buf, state.logs)
-    if ok then
+    local wins = vim.fn.win_findbuf(state.logs)
+    if #wins > 0 then
+      -- Buffer is visible, hide it
+      for _, win in ipairs(wins) do
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, false)
+        end
+      end
+      return
+    else
+      -- Buffer exists but not visible, show it in group
+      if ensure_group_visible(args) then
+        local group_buffers = get_group_buffers()
+        if #group_buffers > 0 then
+          vim.api.nvim_set_current_win(state.group_win)
+          vim.cmd(args.split == "v" and "vsplit" or "split")
+        end
+      else
+        vim.api.nvim_set_current_win(original_win)
+        create_group_split(args)
+      end
+      vim.api.nvim_set_current_buf(state.logs)
+      vim.api.nvim_set_current_win(original_win)
       return
     end
   end
@@ -862,11 +887,76 @@ local function show_group(args)
   end
 end
 
+local function open_config()
+  local config_path = vim.fn.stdpath("config") .. "/lua/plugins/minipat.lua"
+  local config_dir = vim.fn.fnamemodify(config_path, ":h")
+
+  -- Create directory if it doesn't exist
+  if not dir_exists(config_dir) then
+    vim.fn.mkdir(config_dir, "p")
+  end
+
+  -- Create file with basic template if it doesn't exist
+  if not file_exists(config_path) then
+    local template = {
+      "return {",
+      "  {",
+      '    dir = "minipat-nvim",',
+      "    lazy = true,",
+      '    ft = { "minipat" },',
+      "    init = function()",
+      '      vim.filetype.add({ extension = { minipat = "minipat" } })',
+      "    end,",
+      "    opts = {",
+      "      config = {",
+      '        -- source_path = nil,  -- path to minipat source (nil = parent of plugin)',
+      '        -- command_prefix = "Mp",  -- prefix for commands like :MpBoot',
+      "        -- autoclose = true,  -- auto-close REPL buffer on exit",
+      '        -- split = "v",  -- split direction: "v" (vertical) or "h" (horizontal)',
+      "        -- exit_wait = 500,  -- ms to wait for graceful exit",
+      "        -- debug = false,  -- show debug messages",
+      "        minipat = {",
+      '          nucleus_var = "n",  -- nucleus variable name',
+      '          port = "minipat",  -- MIDI port name (MINIPAT_PORT)',
+      '          log_path = "/tmp/minipat.log",  -- log file path (MINIPAT_LOG_PATH)',
+      '          log_level = "INFO",  -- log level (MINIPAT_LOG_LEVEL)',
+      "          bpm = 120,  -- initial BPM (MINIPAT_BPM)",
+      "          bpc = 4,  -- beats per cycle (MINIPAT_BPC)",
+      "        },",
+      "      },",
+      "      keymaps = {",
+      '        send_line = "<C-L>",  -- send current line',
+      '        send_visual = "<C-L>",  -- send selection (visual mode)',
+      '        panic = "<C-H>",  -- panic: pause, reset cycle, clear patterns',
+      "      },",
+      "      global_keymaps = {",
+      '        leader_prefix = "<localleader>p",',
+      '        boot = "b",  -- <localleader>pb',
+      '        quit = "q",  -- <localleader>pq',
+      '        stop = "s",  -- <localleader>ps',
+      '        monitor = "m",  -- <localleader>pm',
+      '        logs = "l",  -- <localleader>pl',
+      '        hide = "h",  -- <localleader>ph',
+      '        show = "w",  -- <localleader>pw',
+      '        config = "c",  -- <localleader>pc',
+      '        help = "?",  -- <localleader>p?',
+      "      },",
+      "    },",
+      "  },",
+      "}",
+    }
+    vim.fn.writefile(template, config_path)
+  end
+
+  vim.cmd("edit " .. vim.fn.fnameescape(config_path))
+end
+
 function M.setup(args)
   args = vim.tbl_deep_extend("force", DEFAULTS, args)
 
   local boot_fn = function(fn_args)
-    boot_minipat_repl(args.config, fn_args["args"])
+    local extra_args = fn_args and fn_args["args"] or nil
+    boot_minipat_repl(args.config, extra_args)
   end
 
   local at_fn = function(fn_args)
@@ -884,8 +974,8 @@ function M.setup(args)
     help_minipat(args)
   end
 
-  local mon_fn = function(fn_args)
-    monitor_midi(args.config, fn_args["args"])
+  local mon_fn = function()
+    monitor_midi(args.config)
   end
 
   local mod_fn = function()
@@ -902,6 +992,10 @@ function M.setup(args)
 
   local show_fn = function()
     show_group(args.config)
+  end
+
+  local config_fn = function()
+    open_config()
   end
 
   local enter_fn = function()
@@ -934,12 +1028,28 @@ function M.setup(args)
     stop_minipat(args.config)
   end, { desc = "stops Minipat playback" })
   vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "send code to Minipat instance", nargs = "+" })
-  vim.api.nvim_create_user_command(prefix .. "Mon", mon_fn, { desc = "monitor MIDI messages", nargs = "*" })
+  vim.api.nvim_create_user_command(prefix .. "Mon", mon_fn, { desc = "toggle MIDI monitor" })
   vim.api.nvim_create_user_command(prefix .. "Mod", mod_fn, { desc = "monitor minipat MIDI port" })
   vim.api.nvim_create_user_command(prefix .. "Logs", logs_fn, { desc = "open minipat log file" })
   vim.api.nvim_create_user_command(prefix .. "Hide", hide_fn, { desc = "hide minipat buffer group" })
   vim.api.nvim_create_user_command(prefix .. "Show", show_fn, { desc = "show minipat buffer group" })
+  vim.api.nvim_create_user_command(prefix .. "Config", config_fn, { desc = "edit minipat config file" })
   vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "show Minipat help and keybindings" })
+
+  -- Set up global keymaps
+  local leader_prefix = args.global_keymaps.leader_prefix
+  if leader_prefix then
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.boot, boot_fn, { desc = "Boot minipat REPL" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.quit, function() quit_minipat(args.config) end, { desc = "Quit minipat" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.stop, function() stop_minipat(args.config) end, { desc = "Stop minipat playback" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.monitor, function() monitor_minipat_port(args.config) end, { desc = "Monitor minipat port" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.logs, logs_fn, { desc = "Open minipat log file" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, hide_fn, { desc = "Hide minipat buffer group" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.show, show_fn, { desc = "Show minipat buffer group" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, config_fn, { desc = "Edit minipat config" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.help, help_fn, { desc = "Show minipat help" })
+  end
+
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
     pattern = { "*." .. args.config.file_ext },
     callback = enter_fn,

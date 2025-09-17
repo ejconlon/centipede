@@ -8,7 +8,7 @@ which is MIT-licensed.
 To use this, add it to your `lazy.nvim` plugins:
 
     {
-      dir = 'minipat-nvim',
+      dir = 'path/to/minipat-nvim',
       lazy = true,
       ft = { 'minipat' },
       dependencies = {
@@ -54,11 +54,99 @@ The plugin will be lazy-loaded when you open a `*.minipat` file.
 - `:MpQuit` - Quit the minipat instance (exits the REPL)
 - `:MpStop` - Stop minipat playback (stops all sounds)
 - `:MpAt <code>` - Send Python code directly to the running minipat instance
-- `:MpMon [args]` - Monitor MIDI messages (lists devices if no args, otherwise passes args to minipat.mon)
+- `:MpMon` - Toggle MIDI monitor for all ports (no arguments)
 - `:MpMod` - Monitor the configured minipat MIDI port
+- `:MpLogs` - Toggle log viewer with tail -f behavior
+- `:MpHide` - Hide all minipat buffers (REPL, monitor, logs)
+- `:MpShow` - Show all minipat buffers
+- `:MpConfig` - Edit the minipat configuration file
 - `:MpHelp` - Show help with current keybindings and configuration
 
 Commands are customizable via the `command_prefix` config option.
+
+## Key Mappings
+
+### Global Key Mappings
+
+By default, global keymaps are available under `<localleader>p`:
+
+- `<localleader>pb` - Boot minipat REPL
+- `<localleader>pq` - Quit minipat instance
+- `<localleader>ps` - Stop playback
+- `<localleader>pm` - Toggle MIDI monitor
+- `<localleader>pl` - Toggle log viewer
+- `<localleader>ph` - Hide all minipat buffers
+- `<localleader>pw` - Show all minipat buffers
+- `<localleader>pc` - Edit configuration
+- `<localleader>p?` - Show help
+
+Global keymaps can be customized via the `global_keymaps` config option.
+
+### Buffer-Specific Key Mappings
+
+In `*.minipat` files:
+
+- `<C-L>` - Send the current line/selection to minipat
+- `<C-H>` - Panic (pause, reset cycle, clear patterns)
+
+Buffer keymaps can be customized via the `keymaps` config option.
+
+## Configuration Options
+
+The plugin offers extensive configuration options:
+
+### Basic Configuration
+
+- `command_prefix` (default: "Mp") - Prefix for all commands
+- `autoclose` (default: true) - Auto-close REPL buffer when minipat exits
+- `nucleus_var` (default: "n") - Name of the nucleus variable in minipat
+- `exit_wait` (default: 1000) - Milliseconds to wait for graceful exit
+
+### Source Path
+
+- `source_path` (default: nil) - Path to minipat source directory
+  - nil: uses parent directory of plugin
+  - relative path: relative to plugin directory
+  - absolute path: used as-is
+
+### Log Configuration
+
+- `log_path` (default: "/tmp/minipat.log") - Path to minipat log file
+- `log_level` (default: "INFO") - Python logging level
+
+### Process Configuration
+
+The `minipat` table contains process-specific options:
+
+- `port` (default: "minipat") - MIDI port name
+- `bpm` (default: 120) - Initial tempo in beats per minute
+- `bpc` (default: 4) - Initial beats per cycle
+
+These map to environment variables:
+- `minipat.port` → `MINIPAT_PORT`
+- `minipat.bpm` → `MINIPAT_BPM`
+- `minipat.bpc` → `MINIPAT_BPC`
+
+### Key Mappings Configuration
+
+#### Buffer Keymaps (`keymaps` table)
+
+- `send_line` (default: "<C-L>") - Send current line to minipat
+- `send_visual` (default: "<C-L>") - Send selection to minipat (visual mode)
+- `panic` (default: "<C-H>") - Panic (pause, reset cycle, clear patterns)
+
+#### Global Keymaps (`global_keymaps` table)
+
+- `leader_prefix` (default: "<localleader>p") - Prefix for global keymaps
+- `boot` (default: "b") - Boot minipat
+- `quit` (default: "q") - Quit minipat
+- `stop` (default: "s") - Stop playback
+- `monitor` (default: "m") - Toggle MIDI monitor
+- `logs` (default: "l") - Toggle log viewer
+- `hide` (default: "h") - Hide minipat buffers
+- `show` (default: "w") - Show minipat buffers
+- `config` (default: "c") - Edit configuration
+- `help` (default: "?") - Show help
 
 ## Source Path and Virtual Environment
 

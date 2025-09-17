@@ -29,98 +29,318 @@ from spiny import PSeq
 
 @dataclass(frozen=True, eq=False)
 class Flow:
+    """A musical flow containing MIDI events over time.
+
+    Flows are the core building blocks for creating patterns in minipat.
+    They can be combined, transformed, and played on orbits.
+
+    Examples:
+        # Create flows from patterns
+        melody = note("c4 d4 e4 f4")
+        rhythm = midinote("36 ~ 42 ~")
+
+        # Combine flows
+        combined = melody | rhythm  # parallel
+        sequence = melody & rhythm  # sequential
+
+        # Transform flows
+        fast_melody = melody * 2    # double speed
+        quiet = melody >> vel("64")
+    """
+
     stream: Stream[MidiAttrs]
 
     @staticmethod
     def silent() -> Flow:
-        """Create a silent flow."""
+        """Create a silent flow with no events.
+
+        Returns:
+            A flow that produces no sound.
+
+        Example:
+            silent_beat = Flow.silent()
+        """
         return Flow(Stream.silent())
 
     @staticmethod
     def pure(val: MidiAttrs) -> Flow:
-        """Create a flow with a single value."""
+        """Create a flow with a single MIDI event.
+
+        Args:
+            val: MIDI attributes for the event.
+
+        Returns:
+            A flow containing one event.
+
+        Example:
+            single_note = Flow.pure(MidiAttrs(note=60, velocity=100))
+        """
         return Flow(Stream.pure(val))
 
     @staticmethod
     def seqs(*flows: Flow) -> Flow:
-        """Create a sequential flow."""
+        """Create a sequential flow that plays flows one after another.
+
+        Args:
+            *flows: Flows to play in sequence.
+
+        Returns:
+            A flow that plays each input flow sequentially.
+
+        Example:
+            sequence = Flow.seqs(note("c4"), note("d4"), note("e4"))
+            # Equivalent to: note("c4") & note("d4") & note("e4")
+        """
         streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.seq(streams))
 
     @staticmethod
     def pars(*flows: Flow) -> Flow:
-        """Create a parallel flow."""
+        """Create a parallel flow that plays flows simultaneously.
+
+        Args:
+            *flows: Flows to play in parallel.
+
+        Returns:
+            A flow that plays all input flows at the same time.
+
+        Example:
+            chord = Flow.pars(note("c4"), note("e4"), note("g4"))
+            # Equivalent to: note("c4") | note("e4") | note("g4")
+        """
         streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.par(streams))
 
     @staticmethod
     def rands(*flows: Flow) -> Flow:
-        """Create a random choice flow."""
+        """Create a flow that randomly chooses between input flows.
+
+        Args:
+            *flows: Flows to choose from randomly.
+
+        Returns:
+            A flow that randomly selects one of the input flows each cycle.
+
+        Example:
+            random_notes = Flow.rands(note("c4"), note("d4"), note("e4"))
+            # Randomly plays c4, d4, or e4 each cycle
+        """
         streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.rand(streams))
 
     @staticmethod
     def alts(*flows: Flow) -> Flow:
-        """Create an alternating flow."""
+        """Create a flow that alternates between input flows.
+
+        Args:
+            *flows: Flows to alternate between.
+
+        Returns:
+            A flow that cycles through input flows, one per cycle.
+
+        Example:
+            alternating = Flow.alts(note("c4"), note("d4"))
+            # Plays c4 on cycle 1, d4 on cycle 2, c4 on cycle 3, etc.
+            # Equivalent to: note("c4") ^ note("d4")
+        """
         streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.alt(streams))
 
     @staticmethod
     def polys(*flows: Flow) -> Flow:
-        """Create a polymetric flow."""
+        """Create a polymetric flow with different cycle lengths.
+
+        Args:
+            *flows: Flows to play polymetrically.
+
+        Returns:
+            A flow where each input flow cycles at its own rate.
+
+        Example:
+            poly = Flow.polys(note("c4 d4"), note("e4 f4 g4"))
+            # First flow cycles every 2 beats, second every 3 beats
+        """
         streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.poly(streams, None))
 
     @staticmethod
     def polysubs(subdiv: int, *flows: Flow) -> Flow:
-        """Create a polymetric flow with subdivision."""
+        """Create a polymetric flow with subdivision.
+
+        Args:
+            subdiv: Number of subdivisions per cycle.
+            *flows: Flows to play polymetrically.
+
+        Returns:
+            A polymetric flow with specified subdivision.
+
+        Example:
+            poly_sub = Flow.polysubs(4, note("c4 d4"), note("e4 f4 g4"))
+            # Subdivides each cycle into 4 parts
+        """
         streams = PSeq.mk(flow.stream for flow in flows)
         return Flow(Stream.poly(streams, subdiv))
 
     @staticmethod
     def combines(*flows: Flow) -> Flow:
-        """Combine all flows"""
+        """Combine flows by merging their MIDI attributes.
+
+        Args:
+            *flows: Flows to combine.
+
+        Returns:
+            A flow with merged MIDI attributes from all inputs.
+
+        Example:
+            combined = Flow.combines(note("c4 d4"), vel("80 100"))
+            # Combines note patterns with velocity patterns
+            # Equivalent to: note("c4 d4") >> vel("80 100")
+        """
         streams = [flow.stream for flow in flows]
         return Flow(combine_all(streams))
 
     @staticmethod
     def pat(pattern: Pat[MidiAttrs]) -> Flow:
-        """Create a flow from a pattern."""
+        """Create a flow from a pattern object.
+
+        Args:
+            pattern: A pattern object containing MIDI attributes.
+
+        Returns:
+            A flow that plays the pattern.
+
+        Example:
+            # Usually used internally; prefer note(), vel() etc.
+            flow = Flow.pat(some_pattern)
+        """
         return Flow(Stream.pat(pattern))
 
     def euc(self, hits: int, steps: int, rotation: int = 0) -> Flow:
-        """Create a Euclidean rhythm flow."""
+        """Apply Euclidean rhythm to this flow.
+
+        Args:
+            hits: Number of hits (active beats).
+            steps: Total number of steps in the rhythm.
+            rotation: Number of steps to rotate the pattern (default: 0).
+
+        Returns:
+            A flow with Euclidean rhythm applied.
+
+        Example:
+            kick = note("c1").euc(3, 8)  # 3 hits over 8 steps
+            # Creates rhythm: X..X..X. where X = hit, . = rest
+        """
         return Flow(Stream.euc(self.stream, hits, steps, rotation))
 
     def _speed(self, operator: SpeedOp, factor: Fraction) -> Flow:
         return Flow(Stream.speed(self.stream, operator, factor))
 
     def fast(self, factor: Numeric) -> Flow:
-        """Speed events up by a factor"""
+        """Speed up events by a factor.
+
+        Args:
+            factor: Speed multiplier (2 = twice as fast).
+
+        Returns:
+            A flow with events sped up.
+
+        Example:
+            fast_melody = note("c4 d4 e4 f4").fast(2)
+            # Plays twice as fast
+            # Equivalent to: note("c4 d4 e4 f4") * 2
+        """
         return self._speed(SpeedOp.Fast, numeric_frac(factor))
 
     def slow(self, factor: Numeric) -> Flow:
-        """Slow events down by a factor"""
+        """Slow down events by a factor.
+
+        Args:
+            factor: Slowdown factor (2 = half as fast).
+
+        Returns:
+            A flow with events slowed down.
+
+        Example:
+            slow_melody = note("c4 d4 e4 f4").slow(2)
+            # Plays twice as slow
+            # Equivalent to: note("c4 d4 e4 f4") / 2
+        """
         return self._speed(SpeedOp.Slow, numeric_frac(factor))
 
     def stretch(self, count: Numeric) -> Flow:
-        """Create a stretched flow."""
+        """Stretch the flow over a longer duration.
+
+        Args:
+            count: Stretch factor (2 = twice as long).
+
+        Returns:
+            A flow stretched to the specified duration.
+
+        Example:
+            stretched = note("c4 d4").stretch(2)
+            # Takes 2 cycles instead of 1
+        """
         return Flow(Stream.stretch(self.stream, numeric_frac(count)))
 
     def prob(self, chance: Numeric) -> Flow:
-        """Create a probabilistic flow."""
+        """Make events in the flow probabilistic.
+
+        Args:
+            chance: Probability of each event occurring (0.0-1.0).
+
+        Returns:
+            A flow where events occur randomly based on probability.
+
+        Example:
+            sparse_hits = note("c1").prob(0.5)
+            # Each note has 50% chance of playing
+        """
         return Flow(Stream.prob(self.stream, numeric_frac(chance)))
 
     def repeat(self, count: Numeric) -> Flow:
-        """Create a repeat flow."""
+        """Repeat each event in the flow.
+
+        Args:
+            count: Number of times to repeat each event.
+
+        Returns:
+            A flow with repeated events.
+
+        Example:
+            repeated = note("c4 d4").repeat(3)
+            # Becomes: c4 c4 c4 d4 d4 d4
+            # Equivalent to: note("c4 d4") ** 3
+        """
         return Flow(Stream.repeat(self.stream, numeric_frac(count)))
 
     def map(self, func: Callable[[MidiAttrs], MidiAttrs]) -> Flow:
-        """Map a function over the flow values."""
+        """Transform each event in the flow with a function.
+
+        Args:
+            func: Function that takes MidiAttrs and returns modified MidiAttrs.
+
+        Returns:
+            A flow with transformed events.
+
+        Example:
+            # Transpose all notes up by an octave
+            transposed = note("c4 d4").map(lambda m: m.with_note(m.note + 12))
+        """
         return Flow(self.stream.map(func))
 
     def filter(self, predicate: Callable[[MidiAttrs], bool]) -> Flow:
-        """Filter events in a flow based on a predicate."""
+        """Filter events in the flow based on a condition.
+
+        Args:
+            predicate: Function that returns True to keep events.
+
+        Returns:
+            A flow containing only events that match the predicate.
+
+        Example:
+            # Keep only high velocity notes
+            loud_only = flow.filter(lambda m: m.velocity > 100)
+        """
         return Flow(self.stream.filter(predicate))
 
     def bind(self, merge_strat: MergeStrat, func: Callable[[MidiAttrs], Flow]) -> Flow:
@@ -141,15 +361,45 @@ class Flow:
         return Flow(self.stream.apply(merge_strat, func, other.stream))
 
     def shift(self, delta: CycleDelta) -> Flow:
-        """Shift flow events in time by a delta."""
+        """Shift all events in time by a specified amount.
+
+        Args:
+            delta: Time offset to apply (positive = later, negative = earlier).
+
+        Returns:
+            A flow with time-shifted events.
+
+        Example:
+            delayed = note("c4 d4").shift(0.25)  # Quarter beat later
+        """
         return Flow(self.stream.shift(delta))
 
     def early(self, delta: CycleDelta) -> Flow:
-        """Shift flow events earlier in time."""
+        """Shift events earlier in time.
+
+        Args:
+            delta: Amount to shift earlier (positive value).
+
+        Returns:
+            A flow with events shifted earlier.
+
+        Example:
+            early_beat = note("c1").early(0.1)  # Play 0.1 beats early
+        """
         return self.shift(CycleDelta(-delta))
 
     def late(self, delta: CycleDelta) -> Flow:
-        """Shift flow events later in time."""
+        """Shift events later in time.
+
+        Args:
+            delta: Amount to shift later (positive value).
+
+        Returns:
+            A flow with events shifted later.
+
+        Example:
+            late_beat = note("c1").late(0.1)  # Play 0.1 beats late
+        """
         return self.shift(delta)
 
     def par(self, other: Flow) -> Flow:
@@ -331,8 +581,43 @@ def channel(pat_str: str) -> Flow:
     return Flow(channel_stream(pat_str))
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class Nucleus:
+    """The core control system for minipat.
+
+    The Nucleus manages the entire minipat system, including timing, playback,
+    and orbit management. Create one with Nucleus.boot() and use it to control
+    your live coding session.
+
+    Properties:
+        running: True if the system is running
+        playing: Get/set playback state (True = playing, False = paused)
+        cps: Get/set cycles per second (tempo control)
+        tempo: Get/set beats per minute (alternative tempo control)
+        cycle: Get/set current cycle position
+        bpc: Get/set beats per cycle
+
+    Examples:
+        # Boot the system
+        n = Nucleus.boot()
+
+        # Control playback
+        n.playing = True
+        n.tempo = 140  # Set to 140 BPM
+
+        # Play patterns on orbits
+        n[0] = note("c4 d4 e4 f4")  # Orbit 0
+        n[1] = note("c2 ~ c2 ~")    # Orbit 1
+
+        # Control orbits
+        n[0].mute()      # Mute orbit 0
+        n[1].solo()      # Solo orbit 1
+
+        # Stop everything and exit
+        n.panic()        # Emergency stop
+        n.exit()         # Shutdown
+    """
+
     sys: System
     live: LiveSystem[MidiAttrs, TimedMessage]
 
@@ -379,18 +664,23 @@ class Nucleus:
         ret = self.stop()
         sys.exit(ret)
 
-    def play(self) -> None:
-        self.live.play()
-
-    def pause(self) -> None:
-        self.live.pause()
-
     def panic(self) -> None:
+        """Emergency stop - pause, reset cycle, and clear all patterns.
+
+        This immediately stops all sounds, resets the cycle position to 0,
+        and clears all orbit patterns. The system remains running.
+        """
         self.live.panic()
 
     def clear(self) -> None:
+        """Clear all orbit patterns.
+
+        Removes all patterns from all orbits but keeps them playing.
+        Use this to clear everything and start fresh.
+        """
         self.live.clear_orbits()
 
+    @property
     def running(self) -> bool:
         """Check if the actor system is currently running.
 
@@ -399,17 +689,33 @@ class Nucleus:
         """
         return self.sys.running()
 
+    @property
     def playing(self) -> bool:
-        """Check if the pattern system is currently playing.
+        """True if patterns are currently playing, False if paused.
 
-        Returns:
-            True if playback is active, False if paused or stopped.
+        Examples:
+            n.playing = True     # Start playback
+            n.playing = False    # Pause playback
+            if n.playing: print("Music is playing")
         """
         return self.live.playing()
 
+    @playing.setter
+    def playing(self, value: bool) -> None:
+        """Set the playing state (True to play, False to pause)."""
+        self.live.play(value)
+
     @property
     def cps(self) -> Fraction:
-        """Get the current cycles per second (tempo)."""
+        """Cycles per second (tempo control).
+
+        This is the fundamental tempo unit in minipat. Higher values = faster.
+        Prefer using .tempo for BPM-based control.
+
+        Examples:
+            n.cps = 2.0      # 2 cycles per second
+            current = n.cps  # Get current CPS
+        """
         return self.live.get_cps()
 
     @cps.setter
@@ -419,7 +725,16 @@ class Nucleus:
 
     @property
     def cycle(self) -> CycleTime:
-        """Get the current cycle position."""
+        """Current cycle position.
+
+        Cycles are the fundamental time unit. Use this to jump to specific
+        positions or reset the timeline.
+
+        Examples:
+            n.cycle = 0      # Reset to beginning
+            n.cycle = 4.5    # Jump to middle of cycle 5
+            pos = n.cycle    # Get current position
+        """
         return self.live.get_cycle()
 
     @cycle.setter
@@ -429,7 +744,16 @@ class Nucleus:
 
     @property
     def bpc(self) -> int:
-        """Get the current beats per cycle."""
+        """Beats per cycle.
+
+        Defines how many beats fit in one cycle. This affects how tempo
+        relates to BPM: BPM = CPS * BPC * 60.
+
+        Examples:
+            n.bpc = 4        # 4/4 time
+            n.bpc = 3        # 3/4 time
+            beats = n.bpc    # Get current BPC
+        """
         return self.live.get_bpc()
 
     @bpc.setter
@@ -439,7 +763,16 @@ class Nucleus:
 
     @property
     def tempo(self) -> Fraction:
-        """Get the current tempo in beats per minute."""
+        """Tempo in beats per minute (BPM).
+
+        This is the most familiar tempo control. Setting this adjusts CPS
+        while keeping beats per cycle constant.
+
+        Examples:
+            n.tempo = 120    # Standard tempo
+            n.tempo = 140    # Faster tempo
+            bpm = n.tempo    # Get current BPM
+        """
         return self.cps * self.bpc * 60
 
     @tempo.setter
@@ -479,6 +812,28 @@ class Nucleus:
 
 @dataclass(frozen=True, eq=False)
 class Orbital:
+    """A single orbit (channel) for playing patterns.
+
+    Orbits are independent channels that can each play one pattern.
+    Access them through the Nucleus using n[orbit_number].
+
+    Methods:
+        once(flow): Play a flow once
+        every(flow): Set the repeating pattern for this orbit
+        mute(): Mute this orbit
+        unmute(): Unmute this orbit
+        solo(): Solo this orbit (mute all others)
+        unsolo(): Unsolo this orbit
+        clear(): Remove the pattern from this orbit
+
+    Examples:
+        n[0].every(note("c4 d4 e4 f4"))    # Set repeating pattern
+        n[0].once(note("c5"))             # Play once
+        n[0].mute()                       # Mute orbit
+        n[0].solo()                       # Solo orbit
+        n[0].clear()                      # Clear pattern
+    """
+
     nucleus: Nucleus
     num: Orbit
 
@@ -488,26 +843,82 @@ class Orbital:
         length: Optional[CycleDelta] = None,
         aligned: Optional[bool] = None,
     ) -> None:
+        """Play a flow once on this orbit.
+
+        Args:
+            flow: The flow to play.
+            length: Duration in cycles (default: flow's natural length).
+            aligned: Whether to align to cycle boundaries (default: True).
+
+        Example:
+            n[0].once(note("c4 d4 e4"))  # Play melody once
+            n[0] | note("c5")            # Shorthand using | operator
+        """
         self.nucleus.live.once(
             flow.stream, length=length, aligned=aligned, orbit=self.num
         )
 
     def every(self, flow: Flow) -> None:
+        """Set the repeating pattern for this orbit.
+
+        Args:
+            flow: The flow to repeat continuously.
+
+        Example:
+            n[0].every(note("c4 d4 e4 f4"))  # Repeating melody
+            n[0] = note("c4 d4 e4 f4")       # Shorthand using assignment
+        """
         self.nucleus.live.set_orbit(self.num, flow.stream)
 
-    def solo(self) -> None:
-        self.nucleus.live.solo(self.num)
+    def mute(self, value: bool = True) -> None:
+        """Mute this orbit.
 
-    def unsolo(self) -> None:
-        self.nucleus.live.unsolo(self.num)
+        Args:
+            value: True to mute, False to unmute (default: True).
 
-    def mute(self) -> None:
-        self.nucleus.live.mute(self.num)
+        Example:
+            n[0].mute()        # Mute orbit 0
+            n[0].mute(False)   # Unmute orbit 0
+        """
+        self.nucleus.live.mute(self.num, value)
 
     def unmute(self) -> None:
-        self.nucleus.live.unmute(self.num)
+        """Unmute this orbit.
+
+        Example:
+            n[0].unmute()  # Make orbit 0 audible again
+        """
+        self.nucleus.live.mute(self.num, False)
+
+    def solo(self, value: bool = True) -> None:
+        """Solo this orbit (mute all others).
+
+        Args:
+            value: True to solo, False to unsolo (default: True).
+
+        Example:
+            n[0].solo()        # Solo orbit 0 (mute others)
+            n[0].solo(False)   # Unsolo orbit 0
+        """
+        self.nucleus.live.solo(self.num, value)
+
+    def unsolo(self) -> None:
+        """Unsolo this orbit.
+
+        Example:
+            n[0].unsolo()  # Remove solo from orbit 0
+        """
+        self.nucleus.live.solo(self.num, False)
 
     def clear(self) -> None:
+        """Remove the pattern from this orbit.
+
+        The orbit will become silent but remain available for new patterns.
+
+        Example:
+            n[0].clear()  # Stop orbit 0
+            del n[0]      # Shorthand using del
+        """
         self.nucleus.live.set_orbit(self.num, None)
 
     def __matmul__(self, flow: Flow) -> None:

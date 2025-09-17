@@ -955,6 +955,7 @@ class LiveSystem[T, U]:
         )
 
     def panic(self) -> None:
-        """Emergency stop - clear all patterns and stop playback."""
+        """Emergency stop - pause, reset cycle, and clear all patterns."""
         self.pause()
+        self.set_cycle(CycleTime(ZERO))
         self.clear_orbits()
