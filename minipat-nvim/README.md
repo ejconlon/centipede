@@ -52,8 +52,9 @@ The plugin will be lazy-loaded when you open a `*.minipat` file.
 
 - `:MpBoot` - Boot the minipat REPL
 - `:MpQuit` - Quit the minipat instance (exits the REPL)
-- `:MpStop` - Stop minipat playback (stops all sounds)
-- `:MpAt <code>` - Send Python code directly to the running minipat instance
+- `:MpStop` - Panic minipat (pause, reset cycle, clear patterns)
+- `:MpToggle` - Toggle playback (toggles n.playing property)
+- `:MpAt <code>` - Send Python code to minipat (boots minipat if not running)
 - `:MpMon` - Toggle MIDI monitor for all ports (no arguments)
 - `:MpMod` - Monitor the configured minipat MIDI port
 - `:MpLogs` - Toggle log viewer with tail -f behavior
@@ -68,17 +69,19 @@ Commands are customizable via the `command_prefix` config option.
 
 ### Global Key Mappings
 
-By default, global keymaps are available under `<localleader>p`:
+By default, global keymaps are available under `<localleader>n`:
 
-- `<localleader>pb` - Boot minipat REPL
-- `<localleader>pq` - Quit minipat instance
-- `<localleader>ps` - Stop playback
-- `<localleader>pm` - Toggle MIDI monitor
-- `<localleader>pl` - Toggle log viewer
-- `<localleader>ph` - Hide all minipat buffers
-- `<localleader>pw` - Show all minipat buffers
-- `<localleader>pc` - Edit configuration
-- `<localleader>p?` - Show help
+- `<localleader>nb` - Boot minipat REPL
+- `<localleader>nq` - Quit minipat instance
+- `<localleader>np` - Panic (stop playback)
+- `<localleader>nk` - Toggle playback (n.playing)
+- `<localleader>nm` - Toggle MIDI monitor
+- `<localleader>nl` - Toggle log viewer
+- `<localleader>nh` - Hide all minipat buffers
+- `<localleader>nw` - Show all minipat buffers
+- `<localleader>nc` - Edit configuration
+- `<localleader>n?` - Show help
+- `<localleader>nn` - Send code to minipat (MpAt command)
 
 Global keymaps can be customized via the `global_keymaps` config option.
 
@@ -109,21 +112,20 @@ The plugin offers extensive configuration options:
   - relative path: relative to plugin directory
   - absolute path: used as-is
 
-### Log Configuration
-
-- `log_path` (default: "/tmp/minipat.log") - Path to minipat log file
-- `log_level` (default: "INFO") - Python logging level
-
 ### Process Configuration
 
 The `minipat` table contains process-specific options:
 
 - `port` (default: "minipat") - MIDI port name
+- `log_path` (default: "/tmp/minipat.log") - Path to minipat log file
+- `log_level` (default: "INFO") - Python logging level
 - `bpm` (default: 120) - Initial tempo in beats per minute
 - `bpc` (default: 4) - Initial beats per cycle
 
 These map to environment variables:
 - `minipat.port` → `MINIPAT_PORT`
+- `minipat.log_path` → `MINIPAT_LOG_PATH`
+- `minipat.log_level` → `MINIPAT_LOG_LEVEL`
 - `minipat.bpm` → `MINIPAT_BPM`
 - `minipat.bpc` → `MINIPAT_BPC`
 
@@ -137,16 +139,18 @@ These map to environment variables:
 
 #### Global Keymaps (`global_keymaps` table)
 
-- `leader_prefix` (default: "<localleader>p") - Prefix for global keymaps
+- `leader_prefix` (default: "<localleader>n") - Prefix for global keymaps
 - `boot` (default: "b") - Boot minipat
 - `quit` (default: "q") - Quit minipat
-- `stop` (default: "s") - Stop playback
+- `panic` (default: "p") - Panic (stop playback)
+- `toggle` (default: "k") - Toggle playback (n.playing)
 - `monitor` (default: "m") - Toggle MIDI monitor
 - `logs` (default: "l") - Toggle log viewer
 - `hide` (default: "h") - Hide minipat buffers
 - `show` (default: "w") - Show minipat buffers
 - `config` (default: "c") - Edit configuration
 - `help` (default: "?") - Show help
+- `at` (default: "n") - Send code to minipat (MpAt)
 
 ## Source Path and Virtual Environment
 

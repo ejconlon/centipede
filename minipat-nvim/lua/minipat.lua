@@ -24,16 +24,18 @@ local DEFAULTS = {
     panic = "<C-H>",
   },
   global_keymaps = {
-    leader_prefix = "<localleader>p",
-    boot = "b",     -- <localleader>pb
-    quit = "q",     -- <localleader>pq
-    stop = "s",     -- <localleader>ps
-    monitor = "m",  -- <localleader>pm (monitor minipat port)
-    logs = "l",     -- <localleader>pl
-    hide = "h",     -- <localleader>ph
-    show = "w",     -- <localleader>pw (show)
-    config = "c",   -- <localleader>pc
-    help = "?",     -- <localleader>p?
+    leader_prefix = "<localleader>n",
+    boot = "b", -- <localleader>nb
+    quit = "q", -- <localleader>nq
+    panic = "p", -- <localleader>np
+    toggle = "k", -- <localleader>nk
+    monitor = "m", -- <localleader>nm
+    logs = "l", -- <localleader>nl
+    hide = "h", -- <localleader>nh
+    show = "w", -- <localleader>nw
+    config = "c", -- <localleader>nc
+    help = "?", -- <localleader>n?
+    at = "n", -- <localleader>nn
   },
 }
 
@@ -385,7 +387,6 @@ function M.send_reg(register)
   M.send(text)
 end
 
-
 local function help_minipat(args)
   local prefix = args.config.command_prefix
   local help_text = {
@@ -395,18 +396,15 @@ local function help_minipat(args)
     "Commands:",
     "  :" .. prefix .. "Boot    - Boot the minipat REPL",
     "  :" .. prefix .. "Quit    - Quit minipat (sends " .. args.config.minipat.nucleus_var .. ".exit())",
-    "  :"
-      .. prefix
-      .. "Stop    - Stop minipat playback (sends "
-      .. args.config.minipat.nucleus_var
-      .. ".stop(immediate=True))",
-    "  :" .. prefix .. "At <code> - Send Python code to minipat",
-    "  :" .. prefix .. "Mon     - Toggle MIDI monitor",
-    "  :" .. prefix .. "Mod     - Monitor minipat MIDI port",
-    "  :" .. prefix .. "Logs    - Toggle minipat log file",
-    "  :" .. prefix .. "Hide    - Hide minipat buffer group",
-    "  :" .. prefix .. "Show    - Show minipat buffer group",
-    "  :" .. prefix .. "Config  - Edit minipat config file",
+    "  :" .. prefix .. "Stop    - Panic minipat (sends " .. args.config.minipat.nucleus_var .. ".panic())",
+    "  :" .. prefix .. "Toggle  - Toggle playback (sends " .. args.config.minipat.nucleus_var .. ".playing = not " .. args.config.minipat.nucleus_var .. ".playing)",
+    "  :" .. prefix .. "At <code> - Send Python code to minipat (boots if needed)",
+    "  :" .. prefix .. "Mon     - Toggle MIDI monitor for all ports",
+    "  :" .. prefix .. "Mod     - Monitor the configured minipat MIDI port",
+    "  :" .. prefix .. "Logs    - Toggle log viewer with tail -f behavior",
+    "  :" .. prefix .. "Hide    - Hide all minipat buffers (REPL, monitor, logs)",
+    "  :" .. prefix .. "Show    - Show all minipat buffers",
+    "  :" .. prefix .. "Config  - Edit the minipat configuration file",
     "  :" .. prefix .. "Help    - Show this help",
     "",
     "Keybindings (in *." .. args.config.file_ext .. " files):",
@@ -421,13 +419,15 @@ local function help_minipat(args)
     "Global Keybindings:",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.boot .. "  - Boot minipat REPL",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.quit .. "  - Quit minipat",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.stop .. "  - Stop minipat playback",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.panic .. "  - Panic minipat (stop playback)",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.toggle .. "  - Toggle playback (n.playing)",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor .. "  - Monitor minipat port",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs .. "  - Open log file",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.hide .. "  - Hide buffer group",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.show .. "  - Show buffer group",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.config .. "  - Edit config file",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.help .. "  - Show this help",
+    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.at .. "  - Send code to minipat (MpAt)",
     "",
     "Configuration:",
     "  Source path: " .. (args.config.source_path or "(auto-detected)"),
@@ -901,47 +901,13 @@ local function open_config()
     local template = {
       "return {",
       "  {",
-      '    dir = "minipat-nvim",',
+      '    dir = "path/to/minipat-nvim",',
       "    lazy = true,",
       '    ft = { "minipat" },',
       "    init = function()",
       '      vim.filetype.add({ extension = { minipat = "minipat" } })',
       "    end,",
-      "    opts = {",
-      "      config = {",
-      '        -- source_path = nil,  -- path to minipat source (nil = parent of plugin)',
-      '        -- command_prefix = "Mp",  -- prefix for commands like :MpBoot',
-      "        -- autoclose = true,  -- auto-close REPL buffer on exit",
-      '        -- split = "v",  -- split direction: "v" (vertical) or "h" (horizontal)',
-      "        -- exit_wait = 500,  -- ms to wait for graceful exit",
-      "        -- debug = false,  -- show debug messages",
-      "        minipat = {",
-      '          nucleus_var = "n",  -- nucleus variable name',
-      '          port = "minipat",  -- MIDI port name (MINIPAT_PORT)',
-      '          log_path = "/tmp/minipat.log",  -- log file path (MINIPAT_LOG_PATH)',
-      '          log_level = "INFO",  -- log level (MINIPAT_LOG_LEVEL)',
-      "          bpm = 120,  -- initial BPM (MINIPAT_BPM)",
-      "          bpc = 4,  -- beats per cycle (MINIPAT_BPC)",
-      "        },",
-      "      },",
-      "      keymaps = {",
-      '        send_line = "<C-L>",  -- send current line',
-      '        send_visual = "<C-L>",  -- send selection (visual mode)',
-      '        panic = "<C-H>",  -- panic: pause, reset cycle, clear patterns',
-      "      },",
-      "      global_keymaps = {",
-      '        leader_prefix = "<localleader>p",',
-      '        boot = "b",  -- <localleader>pb',
-      '        quit = "q",  -- <localleader>pq',
-      '        stop = "s",  -- <localleader>ps',
-      '        monitor = "m",  -- <localleader>pm',
-      '        logs = "l",  -- <localleader>pl',
-      '        hide = "h",  -- <localleader>ph',
-      '        show = "w",  -- <localleader>pw',
-      '        config = "c",  -- <localleader>pc',
-      '        help = "?",  -- <localleader>p?',
-      "      },",
-      "    },",
+      "    opts = {},",
       "  },",
       "}",
     }
@@ -961,12 +927,35 @@ function M.setup(args)
 
   local at_fn = function(fn_args)
     if not state.booted then
-      vim.notify("Minipat is not booted. Run :" .. args.config.command_prefix .. "Boot first", vim.log.levels.ERROR)
-      return
+      local notify_id = vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
+      boot_minipat_repl(args.config, nil)
+      -- Give minipat a moment to boot before sending code
+      vim.defer_fn(function()
+        vim.notify("", vim.log.levels.INFO, { replace = notify_id })
+        local code = fn_args["args"]
+        if code and code ~= "" then
+          M.send(code)
+        end
+      end, 1000) -- Wait 1 second for boot
+    else
+      local code = fn_args["args"]
+      if code and code ~= "" then
+        M.send(code)
+      end
     end
-    local code = fn_args["args"]
-    if code and code ~= "" then
-      M.send(code)
+  end
+
+  local toggle_fn = function()
+    if not state.booted then
+      local notify_id = vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
+      boot_minipat_repl(args.config, nil)
+      -- Give minipat a moment to boot before toggling
+      vim.defer_fn(function()
+        vim.notify("", vim.log.levels.INFO, { replace = notify_id })
+        M.send(args.config.minipat.nucleus_var .. ".playing = not " .. args.config.minipat.nucleus_var .. ".playing")
+      end, 1000) -- Wait 1 second for boot
+    else
+      M.send(args.config.minipat.nucleus_var .. ".playing = not " .. args.config.minipat.nucleus_var .. ".playing")
     end
   end
 
@@ -1027,6 +1016,7 @@ function M.setup(args)
   vim.api.nvim_create_user_command(prefix .. "Stop", function()
     stop_minipat(args.config)
   end, { desc = "stops Minipat playback" })
+  vim.api.nvim_create_user_command(prefix .. "Toggle", toggle_fn, { desc = "toggle minipat playback (n.playing)" })
   vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "send code to Minipat instance", nargs = "+" })
   vim.api.nvim_create_user_command(prefix .. "Mon", mon_fn, { desc = "toggle MIDI monitor" })
   vim.api.nvim_create_user_command(prefix .. "Mod", mod_fn, { desc = "monitor minipat MIDI port" })
@@ -1040,14 +1030,36 @@ function M.setup(args)
   local leader_prefix = args.global_keymaps.leader_prefix
   if leader_prefix then
     vim.keymap.set("n", leader_prefix .. args.global_keymaps.boot, boot_fn, { desc = "Boot minipat REPL" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.quit, function() quit_minipat(args.config) end, { desc = "Quit minipat" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.stop, function() stop_minipat(args.config) end, { desc = "Stop minipat playback" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.monitor, function() monitor_minipat_port(args.config) end, { desc = "Monitor minipat port" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.quit, function()
+      quit_minipat(args.config)
+    end, { desc = "Quit minipat" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.panic, function()
+      stop_minipat(args.config)
+    end, { desc = "Panic minipat (stop playback)" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.toggle, toggle_fn, { desc = "Toggle minipat playback" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.monitor, function()
+      monitor_minipat_port(args.config)
+    end, { desc = "Monitor minipat port" })
     vim.keymap.set("n", leader_prefix .. args.global_keymaps.logs, logs_fn, { desc = "Open minipat log file" })
     vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, hide_fn, { desc = "Hide minipat buffer group" })
     vim.keymap.set("n", leader_prefix .. args.global_keymaps.show, show_fn, { desc = "Show minipat buffer group" })
     vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, config_fn, { desc = "Edit minipat config" })
     vim.keymap.set("n", leader_prefix .. args.global_keymaps.help, help_fn, { desc = "Show minipat help" })
+    vim.keymap.set("n", leader_prefix .. args.global_keymaps.at, function()
+      local code = vim.fn.input("Minipat code: ")
+      if code and code ~= "" then
+        if not state.booted then
+          vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
+          boot_minipat_repl(args.config, nil)
+          -- Give minipat a moment to boot before sending code
+          vim.defer_fn(function()
+            M.send(code)
+          end, 1000) -- Wait 1 second for boot
+        else
+          M.send(code)
+        end
+      end
+    end, { desc = "Send code to minipat (MpAt)" })
   end
 
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
