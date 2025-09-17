@@ -811,6 +811,15 @@ class LiveSystem[T, U]:
         with self._transport_state_mutex as ts:
             return ts.timing.beats_per_cycle
 
+    def get_gpc(self) -> int:
+        """Get the current generations per cycle.
+
+        Returns:
+            The current generations per cycle.
+        """
+        with self._transport_state_mutex as ts:
+            return ts.timing.generations_per_cycle
+
     def set_cycle(self, cycle: CycleTime) -> None:
         """Set the current cycle position.
 
