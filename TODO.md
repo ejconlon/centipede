@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#10}
+Next available task ID: {#12}
 
 ### Active
 
@@ -34,9 +34,11 @@ Next available task ID: {#10}
 
 ### Upcoming
 
+- {#11} Add Cheatsheet (c) group to minipat-nvim that opens buffer containing CHEATSHEET.md
 
 ### Done
 
+- {#10} Create CHEATSHEET.md with examples of minipat dsl
 - {#4} Add commands to manage backend pane and process {plugin} {neovim} {commands}
   - Commands to start/stop/restart the backend process
   - Commands to show/hide/toggle the backend output pane
