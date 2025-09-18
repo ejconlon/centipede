@@ -42,6 +42,7 @@ local DEFAULTS = {
     autoclose = true, -- Close the buffer on exit
     exit_wait = 500, -- milliseconds to wait for process to exit gracefully
     debug = false, -- set to true to see debug messages
+    cheatsheet_path = nil, -- Optional path to custom cheatsheet file (defaults to CHEATSHEET.md in source_path)
     minipat = {
       nucleus_var = "n", -- name of the Nucleus variable in the REPL
       port = "minipat", -- MIDI port name for minipat (sets MINIPAT_PORT env var)
@@ -645,10 +646,24 @@ local function start_buffer_component(component, args)
   if component == "cheatsheet" then
     -- Find and open the cheatsheet file
     local resolved_source_path = state.resolved_source_path or resolve_source_path(args.config.source_path)
-    local cheatsheet_path = resolved_source_path .. "/CHEATSHEET.md"
+    local cheatsheet_path
+
+    if args.config.cheatsheet_path then
+      -- Use custom cheatsheet path
+      if vim.fn.fnamemodify(args.config.cheatsheet_path, ":p") == args.config.cheatsheet_path then
+        -- Absolute path
+        cheatsheet_path = args.config.cheatsheet_path
+      else
+        -- Relative path - make it relative to source_path
+        cheatsheet_path = resolved_source_path .. "/" .. args.config.cheatsheet_path
+      end
+    else
+      -- Default to CHEATSHEET.md in source_path
+      cheatsheet_path = resolved_source_path .. "/CHEATSHEET.md"
+    end
 
     if not file_exists(cheatsheet_path) then
-      vim.notify("CHEATSHEET.md not found at: " .. cheatsheet_path, vim.log.levels.WARN)
+      vim.notify("Cheatsheet not found at: " .. cheatsheet_path, vim.log.levels.WARN)
       vim.api.nvim_set_current_win(original_win)
       return nil
     end
@@ -991,6 +1006,7 @@ local function help_minipat()
     "",
     "Configuration:",
     "  Source path: " .. (current_config.config.source_path or "(auto-detected)"),
+    "  Cheatsheet path: " .. (current_config.config.cheatsheet_path or "(default: CHEATSHEET.md in source_path)"),
     "  Split mode: "
       .. (window.get_split_direction(current_config.config.split) == "v" and "vertical" or "horizontal")
       .. (current_config.config.split == nil and " (auto)" or ""),
