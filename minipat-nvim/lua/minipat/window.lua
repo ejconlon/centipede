@@ -57,9 +57,9 @@ end
 -- Window Reflow and Equalization
 -- ==============================================================================
 
-function M.reflow_windows_in_group(state)
+function M.reflow_windows_in_group(subprocesses)
   -- Get all windows displaying group buffers
-  local group_buffers = M.get_group_buffers(state)
+  local group_buffers = M.get_group_buffers(subprocesses)
   if #group_buffers == 0 then
     return
   end
@@ -136,11 +136,11 @@ function M.reflow_windows_in_group(state)
   end
 end
 
-function M.equalize_group_windows(state)
+function M.equalize_group_windows(win_state)
   -- Use vim's built-in equalize functionality as a fallback
-  if state.group_win and vim.api.nvim_win_is_valid(state.group_win) then
+  if win_state.group_win and vim.api.nvim_win_is_valid(win_state.group_win) then
     local current_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(state.group_win)
+    vim.api.nvim_set_current_win(win_state.group_win)
     vim.cmd("wincmd =")
     if vim.api.nvim_win_is_valid(current_win) then
       vim.api.nvim_set_current_win(current_win)
@@ -152,9 +152,9 @@ end
 -- Group Window Management
 -- ==============================================================================
 
-function M.get_group_buffers(state)
+function M.get_group_buffers(subprocesses)
   local buffers = {}
-  for _, subprocess in pairs(state.subprocesses) do
+  for _, subprocess in pairs(subprocesses) do
     if subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
       table.insert(buffers, subprocess.buffer)
     end
@@ -162,41 +162,41 @@ function M.get_group_buffers(state)
   return buffers
 end
 
-function M.create_group_split(state, args)
+function M.create_group_split(win_state, args)
   local win_valid = false
-  if state.group_win then
-    local ok, valid = pcall(vim.api.nvim_win_is_valid, state.group_win)
+  if win_state.group_win then
+    local ok, valid = pcall(vim.api.nvim_win_is_valid, win_state.group_win)
     win_valid = ok and valid
   end
 
-  if state.group_hidden or (state.group_win and win_valid) then
-    return state.group_win
+  if win_state.group_hidden or (win_state.group_win and win_valid) then
+    return win_state.group_win
   end
 
   local subprocess_split_dir = M.get_split_direction(args.config.split)
   local opposite_dir = M.get_opposite_split(subprocess_split_dir)
-  state.group_split_dir = opposite_dir
+  win_state.group_split_dir = opposite_dir
 
   local split_cmd = M.create_split_command(opposite_dir, true)
   pcall(vim.cmd, split_cmd)
-  state.group_win = vim.api.nvim_get_current_win()
+  win_state.group_win = vim.api.nvim_get_current_win()
 
-  return state.group_win
+  return win_state.group_win
 end
 
-function M.ensure_group_visible(state, args)
-  if state.group_hidden then
+function M.ensure_group_visible(win_state, args)
+  if win_state.group_hidden then
     return false
   end
 
   local win_valid = false
-  if state.group_win then
-    local ok, valid = pcall(vim.api.nvim_win_is_valid, state.group_win)
+  if win_state.group_win then
+    local ok, valid = pcall(vim.api.nvim_win_is_valid, win_state.group_win)
     win_valid = ok and valid
   end
 
-  if not state.group_win or not win_valid then
-    M.create_group_split(state, args)
+  if not win_state.group_win or not win_valid then
+    M.create_group_split(win_state, args)
   end
 
   return true
@@ -206,8 +206,8 @@ end
 -- Subprocess Visibility Management
 -- ==============================================================================
 
-function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
-  local subprocess = state.subprocesses[name]
+function M.toggle_subprocess_visibility(name, subprocesses, win_state, args, start_component_fn)
+  local subprocess = subprocesses[name]
   if not subprocess or not subprocess.buffer or not vim.api.nvim_buf_is_valid(subprocess.buffer) then
     start_component_fn(name, args)
     return "started"
@@ -222,16 +222,16 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
     end
     -- Reflow remaining windows after hiding
     vim.defer_fn(function()
-      M.reflow_windows_in_group(state)
+      M.reflow_windows_in_group(subprocesses)
     end, 100)
     return "hidden"
   else
-    if state.group_hidden then
-      state.group_hidden = false
+    if win_state.group_hidden then
+      win_state.group_hidden = false
     end
     local original_win = vim.api.nvim_get_current_win()
-    if M.ensure_group_visible(state, args) then
-      local group_buffers = M.get_group_buffers(state)
+    if M.ensure_group_visible(win_state, args) then
+      local group_buffers = M.get_group_buffers(subprocesses)
       local visible_buffers = {}
       for _, buf in ipairs(group_buffers) do
         local wins = vim.fn.win_findbuf(buf)
@@ -252,8 +252,8 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
 
       if split_from_win then
         vim.api.nvim_set_current_win(split_from_win)
-      elseif state.group_win and vim.api.nvim_win_is_valid(state.group_win) then
-        vim.api.nvim_set_current_win(state.group_win)
+      elseif win_state.group_win and vim.api.nvim_win_is_valid(win_state.group_win) then
+        vim.api.nvim_set_current_win(win_state.group_win)
       end
 
       if #visible_buffers > 0 then
@@ -263,7 +263,7 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
       vim.api.nvim_set_current_buf(subprocess.buffer)
       -- Reflow windows after showing
       vim.defer_fn(function()
-        M.reflow_windows_in_group(state)
+        M.reflow_windows_in_group(subprocesses)
       end, 100)
     end
     safe_set_current_win(original_win)
@@ -271,11 +271,11 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
   end
 end
 
-function M.hide_all_except(keep_component, state, args, start_component_fn, components)
+function M.hide_all_except(keep_component, subprocesses, win_state, args, start_component_fn, components)
   local hidden_count = 0
   for _, component in ipairs(components) do
     if component ~= keep_component then
-      local subprocess = state.subprocesses[component]
+      local subprocess = subprocesses[component]
       if subprocess and subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
         local wins = vim.fn.win_findbuf(subprocess.buffer)
         if #wins > 0 then
@@ -290,11 +290,11 @@ function M.hide_all_except(keep_component, state, args, start_component_fn, comp
     end
   end
 
-  local kept_subprocess = state.subprocesses[keep_component]
+  local kept_subprocess = subprocesses[keep_component]
   if kept_subprocess and kept_subprocess.buffer and vim.api.nvim_buf_is_valid(kept_subprocess.buffer) then
     local wins = vim.fn.win_findbuf(kept_subprocess.buffer)
     if #wins == 0 then
-      M.toggle_subprocess_visibility(keep_component, state, args, start_component_fn)
+      M.toggle_subprocess_visibility(keep_component, subprocesses, win_state, args, start_component_fn)
     end
   else
     start_component_fn(keep_component, args)
@@ -303,21 +303,21 @@ function M.hide_all_except(keep_component, state, args, start_component_fn, comp
   -- Reflow windows after hiding all except the kept component
   if hidden_count > 0 then
     vim.defer_fn(function()
-      M.reflow_windows_in_group(state)
+      M.reflow_windows_in_group(subprocesses)
     end, 50)
   end
 
   return hidden_count
 end
 
-function M.show_all_started(state, args, start_component_fn, components)
+function M.show_all_started(subprocesses, win_state, args, start_component_fn, components)
   local shown_count = 0
   for _, component in ipairs(components) do
-    local subprocess = state.subprocesses[component]
+    local subprocess = subprocesses[component]
     if subprocess and subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
       local wins = vim.fn.win_findbuf(subprocess.buffer)
       if #wins == 0 then
-        local result = M.toggle_subprocess_visibility(component, state, args, start_component_fn)
+        local result = M.toggle_subprocess_visibility(component, subprocesses, win_state, args, start_component_fn)
         if result == "shown" then
           shown_count = shown_count + 1
         end
@@ -328,25 +328,25 @@ function M.show_all_started(state, args, start_component_fn, components)
   -- Reflow windows after showing all started components
   if shown_count > 0 then
     vim.defer_fn(function()
-      M.reflow_windows_in_group(state)
+      M.reflow_windows_in_group(subprocesses)
     end, 100) -- Slightly longer delay since multiple windows may be created
   end
 
   return shown_count
 end
 
-function M.show_group(state, args, start_component_fn)
-  if not state.group_hidden then
+function M.show_group(subprocesses, win_state, args, start_component_fn)
+  if not win_state.group_hidden then
     return
   end
 
   local shown_count = 0
-  for _, component in ipairs(state.previously_visible_components) do
-    local subprocess = state.subprocesses[component]
+  for _, component in ipairs(win_state.previously_visible_components) do
+    local subprocess = subprocesses[component]
     if subprocess and subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
       local wins = vim.fn.win_findbuf(subprocess.buffer)
       if #wins == 0 then
-        local result = M.toggle_subprocess_visibility(component, state, args, start_component_fn)
+        local result = M.toggle_subprocess_visibility(component, subprocesses, win_state, args, start_component_fn)
         if result == "shown" then
           shown_count = shown_count + 1
         end
@@ -357,30 +357,30 @@ function M.show_group(state, args, start_component_fn)
   -- Reflow windows after showing the group
   if shown_count > 0 then
     vim.defer_fn(function()
-      M.reflow_windows_in_group(state)
+      M.reflow_windows_in_group(subprocesses)
     end, 100)
   end
 end
 
-function M.hide_group(state, components)
-  if state.group_hidden then
+function M.hide_group(subprocesses, win_state, components)
+  if win_state.group_hidden then
     return
   end
 
   -- Remember which components are currently visible
-  state.previously_visible_components = {}
+  win_state.previously_visible_components = {}
   for _, component in ipairs(components) do
-    local subprocess = state.subprocesses[component]
+    local subprocess = subprocesses[component]
     if subprocess and subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
       local wins = vim.fn.win_findbuf(subprocess.buffer)
       if #wins > 0 then
-        table.insert(state.previously_visible_components, component)
+        table.insert(win_state.previously_visible_components, component)
       end
     end
   end
 
   -- Find all windows displaying group buffers and close them
-  local group_buffers = M.get_group_buffers(state)
+  local group_buffers = M.get_group_buffers(subprocesses)
   for _, buf in ipairs(group_buffers) do
     local wins = vim.fn.win_findbuf(buf)
     for _, win in ipairs(wins) do
@@ -391,17 +391,17 @@ function M.hide_group(state, components)
   end
 
   -- Close the main group window if it exists
-  if state.group_win and vim.api.nvim_win_is_valid(state.group_win) then
-    vim.api.nvim_win_close(state.group_win, false)
+  if win_state.group_win and vim.api.nvim_win_is_valid(win_state.group_win) then
+    vim.api.nvim_win_close(win_state.group_win, false)
   end
 
-  state.group_hidden = true
-  state.group_win = nil
+  win_state.group_hidden = true
+  win_state.group_win = nil
 end
 
-function M.toggle_all_buffers(state, args, start_component_fn, components)
+function M.toggle_all_buffers(subprocesses, win_state, args, start_component_fn, components)
   local any_visible = false
-  local buffers = M.get_group_buffers(state)
+  local buffers = M.get_group_buffers(subprocesses)
 
   for _, buf in ipairs(buffers) do
     local wins = vim.fn.win_findbuf(buf)
@@ -411,11 +411,11 @@ function M.toggle_all_buffers(state, args, start_component_fn, components)
     end
   end
 
-  if any_visible or (state.group_win and vim.api.nvim_win_is_valid(state.group_win)) then
-    M.hide_group(state, components)
+  if any_visible or (win_state.group_win and vim.api.nvim_win_is_valid(win_state.group_win)) then
+    M.hide_group(subprocesses, win_state, components)
     return "hidden"
   else
-    M.show_group(state, args, start_component_fn)
+    M.show_group(subprocesses, win_state, args, start_component_fn)
     return "shown"
   end
 end

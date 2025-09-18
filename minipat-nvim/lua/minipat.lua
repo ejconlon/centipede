@@ -144,11 +144,13 @@ local state = {
   -- Shared state
   resolved_python = nil,
   resolved_source_path = nil,
-  -- Buffer group management
-  group_hidden = false,
-  group_split_dir = "v", -- Direction for the group split
-  group_win = nil, -- Main group window
-  previously_visible_components = {}, -- Components that were visible before hiding
+  -- Window management state
+  win_state = {
+    group_hidden = false,
+    group_split_dir = "v", -- Direction for the group split
+    group_win = nil, -- Main group window
+    previously_visible_components = {}, -- Components that were visible before hiding
+  },
   -- Configuration cache
   cached_config = nil,
   initial_user_args = nil,
@@ -253,9 +255,9 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
   end
 
   -- Set up window layout for the new subprocess buffer
-  if window.ensure_group_visible(state, args) then
+  if window.ensure_group_visible(state.win_state, args) then
     -- Group window exists, add a split within it
-    local group_buffers = window.get_group_buffers(state)
+    local group_buffers = window.get_group_buffers(state.subprocesses)
     if #group_buffers > 0 then
       -- Find any visible window from the group to split from
       local split_from_win = nil
@@ -270,7 +272,7 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
       if split_from_win then
         safe_set_current_win(split_from_win)
       else
-        safe_set_current_win(state.group_win)
+        safe_set_current_win(state.win_state.group_win)
       end
 
       local split_dir = window.get_split_direction(args.config.split)
@@ -279,7 +281,7 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
   else
     -- No group window, create it
     safe_set_current_win(original_win)
-    window.create_group_split(state, args)
+    window.create_group_split(state.win_state, args)
   end
 
   -- Create and display new buffer for subprocess
@@ -315,7 +317,7 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
 
   -- Trigger reflow after starting process
   vim.defer_fn(function()
-    window.reflow_windows_in_group(state)
+    window.reflow_windows_in_group(state.subprocesses)
   end, 150)
 
   -- Set up smart auto-scrolling for this buffer
@@ -613,9 +615,9 @@ local function start_buffer_component(component, args)
   end
 
   -- Set up window layout for the new buffer component
-  if window.ensure_group_visible(state, args) then
+  if window.ensure_group_visible(state.win_state, args) then
     -- Group window exists, add a split within it
-    local group_buffers = window.get_group_buffers(state)
+    local group_buffers = window.get_group_buffers(state.subprocesses)
     if #group_buffers > 0 then
       -- Find any visible window from the group to split from
       local split_from_win = nil
@@ -630,7 +632,7 @@ local function start_buffer_component(component, args)
       if split_from_win then
         safe_set_current_win(split_from_win)
       else
-        safe_set_current_win(state.group_win)
+        safe_set_current_win(state.win_state.group_win)
       end
 
       local split_dir = window.get_split_direction(args.config.split)
@@ -639,7 +641,7 @@ local function start_buffer_component(component, args)
   else
     -- No group window, create it
     vim.api.nvim_set_current_win(original_win)
-    window.create_group_split(state, args)
+    window.create_group_split(state.win_state, args)
   end
 
   -- Handle different buffer components
@@ -685,7 +687,7 @@ local function start_buffer_component(component, args)
 
   -- Trigger reflow after creating buffer component
   vim.defer_fn(function()
-    window.reflow_windows_in_group(state)
+    window.reflow_windows_in_group(state.subprocesses)
   end, 150)
 
   return subprocess
@@ -837,10 +839,10 @@ local function boot_minipat_repl(args, extra_args)
     -- Add small delay to ensure previous process is fully cleaned up
     vim.defer_fn(function()
       -- Ensure group window exists and is visible
-      if window.ensure_group_visible(state, args) then
+      if window.ensure_group_visible(state.win_state, args) then
         -- If this is the first buffer in the group, we're already in the group window
         -- If there are already buffers, split within the group
-        local group_buffers = window.get_group_buffers(state)
+        local group_buffers = window.get_group_buffers(state.subprocesses)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
           local split_dir = window.get_split_direction(args.config.split)
@@ -849,7 +851,7 @@ local function boot_minipat_repl(args, extra_args)
       else
         -- Group is hidden, create the group split from original window
         safe_set_current_win(original_win)
-        window.create_group_split(state, args)
+        window.create_group_split(state.win_state, args)
       end
       start_component("repl", args, extra_args)
       -- Return to original editor window
@@ -1087,8 +1089,8 @@ local function monitor_midi(args, extra_args)
       return
     else
       -- Buffer exists but not visible, show it in group
-      if window.ensure_group_visible(state, args) then
-        local group_buffers = window.get_group_buffers(state)
+      if window.ensure_group_visible(state.win_state, args) then
+        local group_buffers = window.get_group_buffers(state.subprocesses)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
           local split_dir = window.get_split_direction(args.config.split)
@@ -1096,7 +1098,7 @@ local function monitor_midi(args, extra_args)
         end
       else
         vim.api.nvim_set_current_win(original_win)
-        window.create_group_split(state, args)
+        window.create_group_split(state.win_state, args)
       end
       vim.api.nvim_set_current_buf(state.monitor)
       vim.api.nvim_set_current_win(original_win)
@@ -1117,8 +1119,8 @@ local function monitor_midi(args, extra_args)
   end
 
   -- Create new buffer and split within group
-  if window.ensure_group_visible(state, args) then
-    local group_buffers = window.get_group_buffers(state)
+  if window.ensure_group_visible(state.win_state, args) then
+    local group_buffers = window.get_group_buffers(state.subprocesses)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
       local split_dir = window.get_split_direction(args.config.split)
@@ -1126,7 +1128,7 @@ local function monitor_midi(args, extra_args)
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    window.create_group_split(state, args)
+    window.create_group_split(state.win_state, args)
   end
   state.monitor = vim.api.nvim_create_buf(false, false)
   vim.api.nvim_set_current_buf(state.monitor)
@@ -1175,8 +1177,8 @@ local function open_logs(args)
       return
     else
       -- Buffer exists but not visible, show it in group
-      if window.ensure_group_visible(state, args) then
-        local group_buffers = window.get_group_buffers(state)
+      if window.ensure_group_visible(state.win_state, args) then
+        local group_buffers = window.get_group_buffers(state.subprocesses)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
           local split_dir = window.get_split_direction(args.config.split)
@@ -1184,7 +1186,7 @@ local function open_logs(args)
         end
       else
         vim.api.nvim_set_current_win(original_win)
-        window.create_group_split(state, args)
+        window.create_group_split(state.win_state, args)
       end
       vim.api.nvim_set_current_buf(state.logs)
       vim.api.nvim_set_current_win(original_win)
@@ -1199,8 +1201,8 @@ local function open_logs(args)
   end
 
   -- Split and open the log file within group
-  if window.ensure_group_visible(state, args) then
-    local group_buffers = window.get_group_buffers(state)
+  if window.ensure_group_visible(state.win_state, args) then
+    local group_buffers = window.get_group_buffers(state.subprocesses)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
       local split_dir = window.get_split_direction(args.config.split)
@@ -1208,7 +1210,7 @@ local function open_logs(args)
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    window.create_group_split(state, args)
+    window.create_group_split(state.win_state, args)
   end
   vim.cmd("edit " .. vim.fn.fnameescape(log_path))
 
@@ -1345,8 +1347,8 @@ local function show_backend_output(args)
       return
     else
       -- Buffer exists but not visible, show it in group
-      if window.ensure_group_visible(state, args) then
-        local group_buffers = window.get_group_buffers(state)
+      if window.ensure_group_visible(state.win_state, args) then
+        local group_buffers = window.get_group_buffers(state.subprocesses)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
           local split_dir = window.get_split_direction(args.config.split)
@@ -1354,7 +1356,7 @@ local function show_backend_output(args)
         end
       else
         vim.api.nvim_set_current_win(original_win)
-        window.create_group_split(state, args)
+        window.create_group_split(state.win_state, args)
       end
       vim.api.nvim_set_current_buf(state.backend)
       vim.api.nvim_set_current_win(original_win)
@@ -1369,8 +1371,8 @@ local function show_backend_output(args)
   end
 
   -- Create new buffer and split within group
-  if window.ensure_group_visible(state, args) then
-    local group_buffers = window.get_group_buffers(state)
+  if window.ensure_group_visible(state.win_state, args) then
+    local group_buffers = window.get_group_buffers(state.subprocesses)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
       local split_dir = window.get_split_direction(args.config.split)
@@ -1378,7 +1380,7 @@ local function show_backend_output(args)
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    window.create_group_split(state, args)
+    window.create_group_split(state.win_state, args)
   end
 
   -- Create buffer for backend
@@ -1446,8 +1448,8 @@ local function monitor_minipat_port(args)
   end
 
   -- Create new buffer and split within group
-  if window.ensure_group_visible(state, args) then
-    local group_buffers = window.get_group_buffers(state)
+  if window.ensure_group_visible(state.win_state, args) then
+    local group_buffers = window.get_group_buffers(state.subprocesses)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
       local split_dir = window.get_split_direction(args.config.split)
@@ -1455,7 +1457,7 @@ local function monitor_minipat_port(args)
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    window.create_group_split(state, args)
+    window.create_group_split(state.win_state, args)
   end
   state.monitor = vim.api.nvim_create_buf(false, false)
   vim.api.nvim_set_current_buf(state.monitor)
@@ -1497,7 +1499,7 @@ local function quit_all_processes(config)
   end
 
   -- Hide group window
-  window.hide_group(state, get_component_names())
+  window.hide_group(state.subprocesses, state.win_state, get_component_names())
 
   if #processes_quit > 0 then
     vim.notify("Quit: " .. table.concat(processes_quit, ", "), vim.log.levels.INFO)
@@ -1667,7 +1669,7 @@ function M.setup(user_args)
   local function create_toggle_command(name, desc, process_name)
     vim.api.nvim_create_user_command(prefix .. name, function()
       local current_config = get_current_config(false)
-      local result = window.toggle_subprocess_visibility(process_name, state, current_config, start_component)
+      local result = window.toggle_subprocess_visibility(process_name, state.subprocesses, state.win_state, current_config, start_component)
       if result then
         vim.notify(desc:gsub("Toggle ", "") .. " " .. result, vim.log.levels.INFO)
       else
@@ -1724,7 +1726,7 @@ function M.setup(user_args)
 
   vim.api.nvim_create_user_command(prefix .. "Hide", function()
     local current_config = get_current_config(false)
-    local result = window.toggle_all_buffers(state, current_config, start_component, get_component_names())
+    local result = window.toggle_all_buffers(state.subprocesses, state.win_state, current_config, start_component, get_component_names())
     if result then
       vim.notify("All buffers " .. result, vim.log.levels.INFO)
     end
@@ -1744,7 +1746,7 @@ function M.setup(user_args)
     vim.notify("Configuration reloaded from minipat_config.lua", vim.log.levels.INFO)
   end, { desc = "Reload configuration from minipat_config.lua" })
   vim.api.nvim_create_user_command(prefix .. "Reflow", function()
-    window.reflow_windows_in_group(state)
+    window.reflow_windows_in_group(state.subprocesses)
     vim.notify("Windows reflowed", vim.log.levels.INFO)
   end, { desc = "Reflow windows in group to equal sizes" })
 
@@ -1793,7 +1795,7 @@ function M.setup(user_args)
     if args.global_keymaps and args.global_keymaps.hide then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, function()
         local current_config = get_current_config(false)
-        local result = window.toggle_all_buffers(state, current_config, start_component, get_component_names())
+        local result = window.toggle_all_buffers(state.subprocesses, state.win_state, current_config, start_component, get_component_names())
         if result then
           vim.notify("All buffers " .. result, vim.log.levels.INFO)
         end
@@ -1803,7 +1805,7 @@ function M.setup(user_args)
     if args.global_keymaps and args.global_keymaps.all then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.all, function()
         local current_config = get_current_config(false)
-        local shown_count = window.show_all_started(state, current_config, start_component, get_component_names())
+        local shown_count = window.show_all_started(state.subprocesses, state.win_state, current_config, start_component, get_component_names())
         if shown_count > 0 then
           vim.notify("Showed " .. shown_count .. " started components", vim.log.levels.INFO)
         else
@@ -1863,7 +1865,7 @@ function M.setup(user_args)
       if args.global_keymaps and args.global_keymaps[hide_key] then
         vim.keymap.set("n", leader_prefix .. args.global_keymaps[hide_key], function()
           local current_config = get_current_config(false)
-          local result = window.toggle_subprocess_visibility(component, state, current_config, start_component)
+          local result = window.toggle_subprocess_visibility(component, state.subprocesses, state.win_state, current_config, start_component)
           if result then
             vim.notify(component:gsub("^%l", string.upper) .. " " .. result, vim.log.levels.INFO)
           end
@@ -1900,7 +1902,7 @@ function M.setup(user_args)
         vim.keymap.set("n", leader_prefix .. args.global_keymaps[only_key], function()
           local current_config = get_current_config(false)
           local component_names = get_component_names()
-          local hidden_count = window.hide_all_except(component, state, current_config, start_component, component_names)
+          local hidden_count = window.hide_all_except(component, state.subprocesses, state.win_state, current_config, start_component, component_names)
           if hidden_count > 0 then
             vim.notify(
               component:gsub("^%l", string.upper) .. " only (hid " .. hidden_count .. " others)",
