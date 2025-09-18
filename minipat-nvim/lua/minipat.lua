@@ -1,4 +1,17 @@
+-- ==============================================================================
+-- Minipat Neovim Plugin
+-- ==============================================================================
+
 local M = {}
+local process_manager = require("minipat.process")
+local window = require("minipat.window")
+
+-- Component names for generic functions
+local COMPONENTS = { "repl", "backend", "logs", "monitor" }
+
+-- ==============================================================================
+-- Configuration and Defaults
+-- ==============================================================================
 
 local DEFAULTS = {
   config = {
@@ -18,8 +31,7 @@ local DEFAULTS = {
       bpc = 4, -- Initial beats per cycle for minipat (sets MINIPAT_BPC env var)
     },
     backend = {
-      enabled = false, -- Enable custom backend process
-      command = nil, -- Custom backend command to run (e.g., "my-backend --port 8080")
+      command = "fluidsynth", -- Custom backend command to run (e.g., "my-backend --port 8080")
       cwd = nil, -- Working directory for backend (defaults to source_path)
       env = {}, -- Additional environment variables for backend
       pidfile = nil, -- Path to pidfile for tracking backend process (defaults to /tmp/minipat-backend.pid)
@@ -35,17 +47,41 @@ local DEFAULTS = {
   },
   global_keymaps = {
     leader_prefix = "<localleader>n",
-    boot = "b", -- <localleader>nb
-    quit = "q", -- <localleader>nq
-    panic = "p", -- <localleader>np
-    toggle = "k", -- <localleader>nk
-    monitor = "m", -- <localleader>nm
-    logs = "l", -- <localleader>nl
-    hide = "h", -- <localleader>nh
-    show = "w", -- <localleader>nw
-    config = "c", -- <localleader>nc
-    help = "?", -- <localleader>n?
-    at = "n", -- <localleader>nn
+    -- REPL commands (<leader>nr prefix)
+    repl_hide = "rh", -- <localleader>nrh - toggle show/hide REPL
+    repl_start = "rs", -- <localleader>nrs - (re)start REPL
+    repl_quit = "rq", -- <localleader>nrq - quit REPL
+    repl_status = "ri", -- <localleader>nri - REPL status
+    repl_only = "ro", -- <localleader>nro - show only REPL (hide others)
+    -- Monitor commands (<leader>nm prefix)
+    monitor_hide = "mh", -- <localleader>nmh - toggle show/hide monitor
+    monitor_start = "ms", -- <localleader>nms - (re)start monitor
+    monitor_quit = "mq", -- <localleader>nmq - quit monitor
+    monitor_status = "mi", -- <localleader>nmi - monitor status
+    monitor_only = "mo", -- <localleader>nmo - show only monitor (hide others)
+    -- Backend commands (<leader>nb prefix)
+    backend_hide = "bh", -- <localleader>nbh - toggle show/hide backend
+    backend_start = "bs", -- <localleader>nbs - (re)start backend
+    backend_quit = "bq", -- <localleader>nbq - quit backend
+    backend_status = "bi", -- <localleader>nbi - backend status
+    backend_only = "bo", -- <localleader>nbo - show only backend (hide others)
+    -- Logs commands (<leader>nl prefix)
+    logs_hide = "lh", -- <localleader>nlh - toggle show/hide logs
+    logs_start = "ls", -- <localleader>nls - (re)start logs viewer
+    logs_quit = "lq", -- <localleader>nlq - quit logs viewer
+    logs_status = "li", -- <localleader>nli - logs status
+    logs_only = "lo", -- <localleader>nlo - show only logs (hide others)
+    -- Other commands
+    start = "s", -- <localleader>ns - start backend (if configured) and REPL
+    quit = "q", -- <localleader>nq - quit all processes
+    hide = "h", -- <localleader>nh - toggle show/hide all buffers
+    all = "a", -- <localleader>na - show all started components
+    info = "i", -- <localleader>ni - show info/status for all components
+    panic = "p", -- <localleader>np - panic (stop playback)
+    toggle = "k", -- <localleader>nk - toggle playback
+    config = "c", -- <localleader>nc - edit config
+    help = "?", -- <localleader>n? - show help
+    at = "n", -- <localleader>nn - send code
   },
 }
 
@@ -67,93 +103,259 @@ local KEYMAPS = {
   },
 }
 
+-- ==============================================================================
+-- State Management
+-- ==============================================================================
 local state = {
-  booted = false,
-  minipat = nil,
-  minipat_process = nil,
-  monitor = nil,
-  monitor_process = nil,
-  logs = nil,
+  -- Subprocesses: each has { buffer, process }
+  subprocesses = {
+    repl = { buffer = nil, process = nil },
+    monitor = { buffer = nil, process = nil },
+    backend = { buffer = nil, process = nil },
+    logs = { buffer = nil, process = nil },
+  },
+  -- Shared state
   resolved_python = nil,
   resolved_source_path = nil,
-  quit_callback = nil,
   -- Buffer group management
   group_hidden = false,
   group_split_dir = "v", -- Direction for the group split
   group_win = nil, -- Main group window
-  -- Backend process management
-  backend_process = nil,
-  backend_pidfile = nil,
-  backend_restart_timer = nil,
+  previously_visible_components = {}, -- Components that were visible before hiding
 }
 
--- Helper function to check if a file exists
+-- ==============================================================================
+-- Utility Functions
+-- ==============================================================================
+
+-- File system utilities
 local function file_exists(path)
   local stat = vim.loop.fs_stat(path)
   return stat and stat.type == "file"
 end
 
--- Helper function to check if a directory exists
 local function dir_exists(path)
   local stat = vim.loop.fs_stat(path)
   return stat and stat.type == "directory"
 end
 
--- Get the directory of this plugin
+-- Plugin directory utilities
 local function get_plugin_dir()
   local source = debug.getinfo(1, "S").source:sub(2)
   local plugin_lua_dir = vim.fn.fnamemodify(source, ":p:h")
   return vim.fn.fnamemodify(plugin_lua_dir, ":h")
 end
 
--- Helper functions for buffer group management
-local function get_opposite_split(split_dir)
-  return split_dir == "v" and "h" or "v"
-end
+-- ==============================================================================
+-- Window and Buffer Management (using window submodule)
+-- ==============================================================================
 
-local function create_group_split(args)
-  if state.group_hidden or (state.group_win and vim.api.nvim_win_is_valid(state.group_win)) then
-    return state.group_win
+-- ==============================================================================
+-- Process Management
+-- ==============================================================================
+local function get_subprocess_status(name)
+  local subprocess = state.subprocesses[name]
+  if subprocess and subprocess.process then
+    local status_info = subprocess.process:status()
+    return status_info.is_running and "running" or "stopped"
   end
-
-  -- Create the main group split in opposite direction from current window
-  local opposite_dir = get_opposite_split(args.split)
-  state.group_split_dir = opposite_dir
-
-  -- Create the group split from the current window (editor)
-  vim.cmd(opposite_dir == "v" and "vsplit" or "split")
-  state.group_win = vim.api.nvim_get_current_win()
-
-  return state.group_win
+  return "not started"
 end
 
-local function ensure_group_visible(args)
-  if state.group_hidden then
+local function quit_subprocess(name)
+  local subprocess = state.subprocesses[name]
+  if not subprocess then
     return false
   end
 
-  if not state.group_win or not vim.api.nvim_win_is_valid(state.group_win) then
-    create_group_split(args)
+  -- Stop the process
+  if subprocess.process then
+    subprocess.process:stop()
+    subprocess.process = nil
+  end
+
+  -- Close buffer windows
+  if subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
+    local wins = vim.fn.win_findbuf(subprocess.buffer)
+    for _, win in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, false)
+      end
+    end
+    -- Delete buffer
+    pcall(vim.api.nvim_buf_delete, subprocess.buffer, { force = true })
+    subprocess.buffer = nil
   end
 
   return true
 end
 
-local function get_group_buffers()
-  local buffers = {}
-  if state.minipat and vim.api.nvim_buf_is_valid(state.minipat) then
-    table.insert(buffers, state.minipat)
+local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
+  local subprocess = state.subprocesses[name]
+  local original_win = vim.api.nvim_get_current_win()
+
+  -- Clean up any existing process for this subprocess
+  if subprocess.process then
+    quit_subprocess(name)
+    vim.wait(100) -- Allow time for cleanup
   end
-  if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
-    table.insert(buffers, state.monitor)
+
+  -- Set up window layout for the new subprocess buffer
+  if window.ensure_group_visible(state, args) then
+    -- Group window exists, add a split within it
+    local group_buffers = window.get_group_buffers(state)
+    if #group_buffers > 0 then
+      vim.api.nvim_set_current_win(state.group_win)
+      local split_dir = window.get_split_direction(args.config.split)
+      vim.cmd(window.create_split_command(split_dir, true))
+    end
+  else
+    -- No group window, create it
+    vim.api.nvim_set_current_win(original_win)
+    window.create_group_split(state, args)
   end
-  if state.logs and vim.api.nvim_buf_is_valid(state.logs) then
-    table.insert(buffers, state.logs)
+
+  -- Create and display new buffer for subprocess
+  subprocess.buffer = vim.api.nvim_create_buf(false, false)
+  vim.api.nvim_set_current_buf(subprocess.buffer)
+
+  -- Start the actual process
+  subprocess.process = process_manager.new({
+    name = name,
+    command = command,
+    cwd = cwd,
+    env = env or {},
+    debug = args.config.debug,
+    autoclose = args.config.autoclose,
+    on_exit = function(job_id, exit_code, event_type)
+      -- Clean up references when process exits
+      if subprocess.scroll_timer then
+        subprocess.scroll_timer:stop()
+        subprocess.scroll_timer:close()
+        subprocess.scroll_timer = nil
+      end
+      subprocess.auto_scroll_enabled = nil
+      subprocess.user_navigating = nil
+      subprocess.buffer = nil
+      subprocess.process = nil
+      if on_exit_callback then
+        on_exit_callback(job_id, exit_code, event_type)
+      end
+    end,
+  })
+
+  subprocess.process:start(subprocess.buffer)
+
+  -- Set up smart auto-scrolling for this buffer
+  if subprocess.buffer then
+    -- Track auto-scroll state and user interaction
+    subprocess.auto_scroll_enabled = true
+    subprocess.user_navigating = false
+    subprocess.last_line_count = 0
+
+    local function is_at_bottom(win)
+      if not vim.api.nvim_win_is_valid(win) then
+        return false
+      end
+
+      local line_count = vim.api.nvim_buf_line_count(subprocess.buffer)
+      local cursor_pos = vim.api.nvim_win_get_cursor(win)
+
+      -- Only consider at bottom if cursor is on the actual last line
+      return cursor_pos[1] >= line_count
+    end
+
+    local function scroll_to_bottom()
+      local current_line_count = vim.api.nvim_buf_line_count(subprocess.buffer)
+
+      -- Only scroll if new content was added and user isn't navigating
+      if current_line_count <= subprocess.last_line_count then
+        return
+      end
+      subprocess.last_line_count = current_line_count
+
+      -- Only auto-scroll the current window if auto-scroll is enabled and user isn't navigating
+      local current_win = vim.api.nvim_get_current_win()
+      local wins = vim.fn.win_findbuf(subprocess.buffer)
+
+      for _, win in ipairs(wins) do
+        if
+          vim.api.nvim_win_is_valid(win)
+          and win == current_win
+          and subprocess.auto_scroll_enabled
+          and not subprocess.user_navigating
+        then
+          vim.api.nvim_win_call(win, function()
+            vim.api.nvim_win_set_cursor(win, { current_line_count, 0 })
+          end)
+        end
+      end
+    end
+
+    local function on_cursor_moved()
+      local current_win = vim.api.nvim_get_current_win()
+
+      -- Mark as user navigating to pause auto-scroll temporarily
+      subprocess.user_navigating = true
+
+      -- Check if user moved to bottom, if so re-enable auto-scroll
+      if is_at_bottom(current_win) then
+        subprocess.auto_scroll_enabled = true
+      else
+        subprocess.auto_scroll_enabled = false
+      end
+
+      -- Clear navigation flag after a short delay
+      vim.defer_fn(function()
+        subprocess.user_navigating = false
+      end, 200)
+    end
+
+    -- Set up periodic auto-scrolling with a timer (slower interval)
+    subprocess.scroll_timer = vim.loop.new_timer()
+    subprocess.scroll_timer:start(
+      500,
+      500,
+      vim.schedule_wrap(function()
+        if not vim.api.nvim_buf_is_valid(subprocess.buffer) then
+          subprocess.scroll_timer:stop()
+          subprocess.scroll_timer:close()
+          subprocess.scroll_timer = nil
+          return
+        end
+        scroll_to_bottom()
+      end)
+    )
+
+    -- Track cursor movement to enable/disable auto-scroll
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+      buffer = subprocess.buffer,
+      callback = on_cursor_moved,
+    })
+
+    -- Enable auto-scroll when entering the buffer
+    vim.api.nvim_create_autocmd({ "BufEnter", "TermEnter", "WinEnter" }, {
+      buffer = subprocess.buffer,
+      callback = function()
+        local current_win = vim.api.nvim_get_current_win()
+        -- When entering the buffer, enable auto-scroll and go to bottom
+        subprocess.auto_scroll_enabled = true
+        subprocess.user_navigating = false
+        vim.api.nvim_win_call(current_win, function()
+          local line_count = vim.api.nvim_buf_line_count(subprocess.buffer)
+          vim.api.nvim_win_set_cursor(current_win, { line_count, 0 })
+        end)
+      end,
+    })
   end
-  return buffers
+
+  vim.api.nvim_set_current_win(original_win) -- Return to original window
+  return subprocess
 end
 
--- Resolve the source path
+-- ==============================================================================
+-- Configuration Resolution
+-- ==============================================================================
 local function resolve_source_path(source_path)
   local plugin_dir = get_plugin_dir()
 
@@ -171,7 +373,7 @@ end
 
 -- Resolve backend configuration paths and set defaults
 local function resolve_backend_config(backend_config, source_path)
-  if not backend_config.enabled then
+  if not backend_config.command then
     return backend_config
   end
 
@@ -198,12 +400,12 @@ end
 
 -- Validate backend configuration
 local function validate_backend_config(backend_config)
-  if not backend_config.enabled then
+  if not backend_config.command then
     return true, nil
   end
 
-  if not backend_config.command or backend_config.command == "" then
-    return false, "Backend enabled but no command specified"
+  if backend_config.command == "" then
+    return false, "Backend command is empty"
   end
 
   -- Check if cwd exists
@@ -253,271 +455,100 @@ local function get_python_binary(source_path)
   return "python"
 end
 
--- Read PID from pidfile
-local function read_pidfile(pidfile_path)
-  if not file_exists(pidfile_path) then
-    return nil
+-- ==============================================================================
+-- Subprocess Starters
+-- ==============================================================================
+local function start_component(component, args, extra_args)
+  if component == "repl" then
+    -- Resolve source path and python binary if not already done
+    if not state.resolved_python or not state.resolved_source_path then
+      state.resolved_source_path = resolve_source_path(args.config.source_path)
+      if args.config.debug then
+        print("Resolved source_path: " .. state.resolved_source_path)
+      end
+      state.resolved_python = get_python_binary(state.resolved_source_path)
+      if args.config.debug then
+        print("Using python: " .. state.resolved_python)
+      end
+    end
+
+    -- Build the command with resolved python binary
+    local cmd = state.resolved_python .. " -i -m minipat.boot"
+    if extra_args then
+      cmd = cmd .. " " .. extra_args
+    end
+    if args.config.debug then
+      print("Executing command: " .. cmd .. " in " .. state.resolved_source_path)
+    end
+
+    -- Build environment variables
+    local env = { PYTHON_GIL = "0" }
+    if args.config.minipat then
+      if args.config.minipat.port then
+        env.MINIPAT_PORT = tostring(args.config.minipat.port)
+      end
+      if args.config.minipat.log_path then
+        env.MINIPAT_LOG_PATH = tostring(args.config.minipat.log_path)
+      end
+      if args.config.minipat.log_level then
+        env.MINIPAT_LOG_LEVEL = tostring(args.config.minipat.log_level)
+      end
+      if args.config.minipat.bpm then
+        env.MINIPAT_BPM = tostring(args.config.minipat.bpm)
+      end
+      if args.config.minipat.bpc then
+        env.MINIPAT_BPC = tostring(args.config.minipat.bpc)
+      end
+    end
+
+    return start_subprocess("repl", args, cmd, state.resolved_source_path, env)
+  elseif component == "monitor" then
+    -- Resolve source path and python binary if not already done
+    if not state.resolved_python or not state.resolved_source_path then
+      state.resolved_source_path = resolve_source_path(args.config.source_path)
+      state.resolved_python = get_python_binary(state.resolved_source_path)
+    end
+
+    -- Build the command
+    local cmd = state.resolved_python .. " -m minipat.mon"
+    if extra_args and extra_args ~= "" then
+      cmd = cmd .. " " .. extra_args
+    else
+      local port = args.config.minipat and args.config.minipat.port or "minipat"
+      cmd = cmd .. " -p " .. port
+    end
+
+    return start_subprocess("monitor", args, cmd, state.resolved_source_path, { PYTHON_GIL = "0" })
+  elseif component == "backend" then
+    if not args.config.backend or not args.config.backend.command then
+      return nil
+    end
+
+    return start_subprocess(
+      "backend",
+      args,
+      args.config.backend.command,
+      args.config.backend.cwd,
+      args.config.backend.env or {}
+    )
+  elseif component == "logs" then
+    local log_path = args.config.minipat and args.config.minipat.log_path or "/tmp/minipat.log"
+
+    -- Check if log file exists
+    if not file_exists(log_path) then
+      vim.notify("Log file not found: " .. log_path, vim.log.levels.WARN)
+      return nil
+    end
+
+    local cmd = "tail -f " .. vim.fn.shellescape(log_path)
+    return start_subprocess("logs", args, cmd)
   end
 
-  local f = io.open(pidfile_path, "r")
-  if not f then
-    return nil
-  end
-
-  local pid_str = f:read("*all")
-  f:close()
-
-  if not pid_str or pid_str == "" then
-    return nil
-  end
-
-  local pid = tonumber(pid_str:match("(%d+)"))
-  return pid
+  return nil
 end
 
--- Write PID to pidfile
-local function write_pidfile(pidfile_path, pid)
-  local pidfile_dir = vim.fn.fnamemodify(pidfile_path, ":h")
-  if not dir_exists(pidfile_dir) then
-    vim.fn.mkdir(pidfile_dir, "p")
-  end
-
-  local f = io.open(pidfile_path, "w")
-  if not f then
-    return false
-  end
-
-  f:write(tostring(pid) .. "\n")
-  f:close()
-  return true
-end
-
--- Remove pidfile
-local function remove_pidfile(pidfile_path)
-  if file_exists(pidfile_path) then
-    os.remove(pidfile_path)
-  end
-end
-
--- Check if process is running
-local function is_process_running(pid)
-  if not pid then
-    return false
-  end
-
-  -- Use kill -0 to check if process exists
-  local result = vim.fn.system("kill -0 " .. pid .. " 2>/dev/null")
-  return vim.v.shell_error == 0
-end
-
--- Start backend process
-local function start_backend(backend_config, debug)
-  if not backend_config.enabled or not backend_config.command then
-    return
-  end
-
-  -- Check if backend is already running
-  if state.backend_pidfile then
-    local existing_pid = read_pidfile(state.backend_pidfile)
-    if existing_pid and is_process_running(existing_pid) then
-      if debug then
-        print("Backend process already running with PID: " .. existing_pid)
-      end
-      return
-    end
-  end
-
-  if debug then
-    print("Starting backend: " .. backend_config.command .. " in " .. backend_config.cwd)
-  end
-
-  -- Build environment
-  local env = vim.tbl_extend("force", vim.fn.environ(), backend_config.env or {})
-
-  -- Start the backend process
-  local job_id = vim.fn.jobstart(backend_config.command, {
-    cwd = backend_config.cwd,
-    env = env,
-    detach = true, -- Detach from Neovim
-    on_exit = function(job_id, exit_code, event_type)
-      if debug then
-        print("Backend process exited with code: " .. exit_code)
-      end
-
-      -- Clean up pidfile
-      if state.backend_pidfile then
-        remove_pidfile(state.backend_pidfile)
-      end
-
-      -- Clean up state
-      state.backend_process = nil
-
-      -- Restart if configured to do so and exit was unexpected
-      if backend_config.restart_on_exit and exit_code ~= 0 then
-        if debug then
-          print("Restarting backend process in 5 seconds...")
-        end
-        state.backend_restart_timer = vim.defer_fn(function()
-          start_backend(backend_config, debug)
-          state.backend_restart_timer = nil
-        end, 5000)
-      end
-    end,
-  })
-
-  if job_id <= 0 then
-    vim.notify("Failed to start backend process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
-    return
-  end
-
-  state.backend_process = job_id
-  state.backend_pidfile = backend_config.pidfile
-
-  -- Write pidfile
-  if backend_config.pidfile then
-    if not write_pidfile(backend_config.pidfile, job_id) then
-      vim.notify("Failed to write backend pidfile: " .. backend_config.pidfile, vim.log.levels.WARN)
-    end
-  end
-
-  if debug then
-    print("Backend started with job_id: " .. job_id)
-  end
-end
-
--- Stop backend process
-local function stop_backend(backend_config, debug)
-  if not backend_config.enabled then
-    return
-  end
-
-  -- Cancel restart timer if active
-  if state.backend_restart_timer then
-    state.backend_restart_timer:close()
-    state.backend_restart_timer = nil
-  end
-
-  -- Stop process by PID from pidfile first
-  if state.backend_pidfile then
-    local pid = read_pidfile(state.backend_pidfile)
-    if pid and is_process_running(pid) then
-      if debug then
-        print("Stopping backend process PID: " .. pid)
-      end
-      vim.fn.system("kill " .. pid)
-      -- Give it time to exit gracefully
-      vim.defer_fn(function()
-        if is_process_running(pid) then
-          if debug then
-            print("Force killing backend process PID: " .. pid)
-          end
-          vim.fn.system("kill -9 " .. pid)
-        end
-      end, 3000)
-    end
-    remove_pidfile(state.backend_pidfile)
-  end
-
-  -- Stop job if we have a job_id
-  if state.backend_process then
-    vim.fn.jobstop(state.backend_process)
-  end
-
-  -- Clean up state
-  state.backend_process = nil
-  state.backend_pidfile = nil
-end
-
-local function boot_minipat(args, extra_args)
-  -- Always create a fresh buffer for the terminal
-  state.minipat = vim.api.nvim_create_buf(false, false)
-  vim.api.nvim_set_current_buf(state.minipat)
-
-  -- Resolve source path and python binary if not already done
-  if not state.resolved_python or not state.resolved_source_path then
-    state.resolved_source_path = resolve_source_path(args.source_path)
-    if args.debug then
-      print("Resolved source_path: " .. state.resolved_source_path)
-    end
-    state.resolved_python = get_python_binary(state.resolved_source_path)
-    if args.debug then
-      print("Using python: " .. state.resolved_python)
-    end
-  end
-
-  -- Build the command with resolved python binary
-  local full_cmd = state.resolved_python .. " -i -m minipat.boot"
-  if extra_args ~= nil then
-    full_cmd = full_cmd .. " " .. extra_args
-  end
-  if args.debug then
-    print("Executing command: " .. full_cmd .. " in " .. state.resolved_source_path)
-  end
-
-  -- Build environment variables
-  local env = { PYTHON_GIL = "0" }
-  if args.minipat then
-    if args.minipat.port then
-      env.MINIPAT_PORT = tostring(args.minipat.port)
-    end
-    if args.minipat.log_path then
-      env.MINIPAT_LOG_PATH = tostring(args.minipat.log_path)
-    end
-    if args.minipat.log_level then
-      env.MINIPAT_LOG_LEVEL = tostring(args.minipat.log_level)
-    end
-    if args.minipat.bpm then
-      env.MINIPAT_BPM = tostring(args.minipat.bpm)
-    end
-    if args.minipat.bpc then
-      env.MINIPAT_BPC = tostring(args.minipat.bpc)
-    end
-  end
-
-  local job_id = vim.fn.termopen(full_cmd, {
-    cwd = state.resolved_source_path,
-    env = env,
-    on_exit = function(job_id, exit_code, event_type)
-      if args.debug then
-        print("Minipat process exited with code: " .. exit_code)
-      end
-
-      -- Only close window and delete buffer if autoclose is enabled
-      if args.autoclose then
-        if state.minipat and vim.api.nvim_buf_is_valid(state.minipat) then
-          if #vim.fn.win_findbuf(state.minipat) > 0 then
-            vim.api.nvim_win_close(vim.fn.win_findbuf(state.minipat)[1], true)
-          end
-          vim.api.nvim_buf_delete(state.minipat, { unload = true })
-        end
-        state.minipat = nil
-      end
-
-      -- Clean up state
-      state.minipat_process = nil
-      state.resolved_python = nil
-      state.resolved_source_path = nil
-      state.booted = false
-
-      -- Call quit callback if one was registered
-      if state.quit_callback then
-        local cb = state.quit_callback
-        state.quit_callback = nil
-        vim.schedule(cb) -- Schedule callback to avoid potential issues
-      end
-    end,
-  })
-
-  if job_id <= 0 then
-    vim.notify("Failed to start minipat process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
-    state.booted = false
-    return
-  end
-
-  state.minipat_process = job_id
-end
-
-local function quit_minipat(config, callback)
+-- Legacy function for graceful REPL quit
+local function quit_repl_gracefully(config, callback)
   if not state.booted then
     if callback then
       callback()
@@ -531,7 +562,7 @@ local function quit_minipat(config, callback)
   end
 
   if state.minipat_process then
-    local process_to_quit = state.minipat_process -- Capture the process ID we want to quit
+    local process_to_quit = state.minipat_process -- Capture the process we want to quit
     -- Send exit command to gracefully quit the REPL
     M.send(config.minipat.nucleus_var .. ".exit()")
 
@@ -541,7 +572,7 @@ local function quit_minipat(config, callback)
     vim.defer_fn(function()
       -- Only kill the specific process we intended to quit, not whatever might be in state now
       if state.minipat_process == process_to_quit then
-        vim.fn.jobstop(process_to_quit)
+        process_to_quit:stop(true) -- Force stop
         -- Give it a moment to fully clean up
         vim.defer_fn(function()
           -- Force cleanup if callback wasn't called
@@ -562,25 +593,46 @@ local function quit_minipat(config, callback)
   state.booted = false
 end
 
+-- Helper function to start backend if configured and not already running
+local function ensure_backend_started(args)
+  if not args.config.backend.command then
+    return -- No backend configured
+  end
+
+  if state.subprocesses.backend and state.subprocesses.backend.process then
+    return -- Backend already running
+  end
+
+  if args.config.debug then
+    print("Auto-starting backend: " .. args.config.backend.command)
+  end
+
+  return start_component("backend", args)
+end
+
 local function boot_minipat_repl(args, extra_args)
   local original_win = vim.api.nvim_get_current_win()
 
   local do_boot = function()
+    -- Start backend first if configured
+    ensure_backend_started(args)
+
     -- Add small delay to ensure previous process is fully cleaned up
     vim.defer_fn(function()
       -- Ensure group window exists and is visible
-      if ensure_group_visible(args) then
+      if window.ensure_group_visible(state, args) then
         -- If this is the first buffer in the group, we're already in the group window
         -- If there are already buffers, split within the group
-        local group_buffers = get_group_buffers()
+        local group_buffers = window.get_group_buffers(state)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
-          vim.cmd(args.split == "v" and "vsplit" or "split")
+          local split_dir = window.get_split_direction(args.config.split)
+          vim.cmd(window.create_split_command(split_dir, true))
         end
       else
         -- Group is hidden, create the group split from original window
         vim.api.nvim_set_current_win(original_win)
-        create_group_split(args)
+        window.create_group_split(state, args)
       end
       boot_minipat(args, extra_args)
       -- Return to original editor window
@@ -591,7 +643,7 @@ local function boot_minipat_repl(args, extra_args)
 
   -- If already booted, quit the existing process first
   if state.booted then
-    if args.debug then
+    if args.config.debug then
       print("Existing minipat process found, quitting it first...")
     end
     quit_minipat(args, do_boot)
@@ -615,10 +667,11 @@ local function key_map(key, mapping, config)
 end
 
 function M.send(text)
-  if not state.minipat_process then
+  local repl = state.subprocesses.repl
+  if not repl or not repl.process then
     return
   end
-  vim.api.nvim_chan_send(state.minipat_process, text .. "\n")
+  repl.process:send(text)
 end
 
 function M.send_reg(register)
@@ -636,22 +689,53 @@ local function help_minipat(args)
     "===========================",
     "",
     "Commands:",
-    "  :" .. prefix .. "Boot    - Boot the minipat REPL",
-    "  :" .. prefix .. "Quit    - Quit minipat (sends " .. args.config.minipat.nucleus_var .. ".exit())",
-    "  :" .. prefix .. "Stop    - Panic minipat (sends " .. args.config.minipat.nucleus_var .. ".panic())",
-    "  :" .. prefix .. "Toggle  - Toggle playback (sends " .. args.config.minipat.nucleus_var .. ".playing = not " .. args.config.minipat.nucleus_var .. ".playing)",
+    "",
+    "Main Commands:",
+    "  :" .. prefix .. "Start   - Start backend (if configured) and REPL",
+    "  :" .. prefix .. "Quit    - Quit all processes (REPL, Monitor, Backend, Logs)",
+    "  :" .. prefix .. "Info    - Show status of all components",
+    "  :" .. prefix .. "Hide    - Toggle show/hide all buffers",
+    "",
+    "REPL Commands:",
+    "  :" .. prefix .. "ReplStart   - (Re)start the minipat REPL",
+    "  :" .. prefix .. "ReplQuit    - Quit minipat (sends " .. args.config.minipat.nucleus_var .. ".exit())",
+    "  :" .. prefix .. "ReplHide    - Toggle show/hide REPL buffer",
+    "  :" .. prefix .. "ReplStatus  - Show REPL status",
+    "",
+    "Monitor Commands:",
+    "  :" .. prefix .. "MonitorStart  - (Re)start MIDI monitor for minipat port",
+    "  :" .. prefix .. "MonitorQuit   - Quit MIDI monitor",
+    "  :" .. prefix .. "MonitorHide   - Toggle show/hide monitor buffer",
+    "  :" .. prefix .. "MonitorStatus - Show monitor status",
+    "",
+    "Backend Commands:",
+    "  :" .. prefix .. "BackendStart   - (Re)start backend process",
+    "  :" .. prefix .. "BackendQuit    - Quit backend process",
+    "  :" .. prefix .. "BackendHide    - Toggle show/hide backend buffer",
+    "  :" .. prefix .. "BackendStatus  - Show backend process status",
+    "  :" .. prefix .. "BackendRestart - Restart the backend process",
+    "  :" .. prefix .. "BackendOutput  - Show backend output stream pane",
+    "  :" .. prefix .. "BackendClear   - Clear backend output buffer",
+    "  :" .. prefix .. "BackendSave [file] - Save backend output to file",
+    "",
+    "Logs Commands:",
+    "  :" .. prefix .. "LogsStart   - (Re)start log viewer with tail -f behavior",
+    "  :" .. prefix .. "LogsQuit    - Quit log viewer",
+    "  :" .. prefix .. "LogsHide    - Toggle show/hide logs buffer",
+    "  :" .. prefix .. "LogsStatus  - Show logs status",
+    "",
+    "Other Commands:",
+    "  :" .. prefix .. "Panic   - Panic minipat (sends " .. args.config.minipat.nucleus_var .. ".panic())",
+    "  :"
+      .. prefix
+      .. "Toggle  - Toggle playback ("
+      .. args.config.minipat.nucleus_var
+      .. ".playing = not "
+      .. args.config.minipat.nucleus_var
+      .. ".playing)",
     "  :" .. prefix .. "At <code> - Send Python code to minipat (boots if needed)",
-    "  :" .. prefix .. "Mon     - Toggle MIDI monitor for all ports",
-    "  :" .. prefix .. "Mod     - Monitor the configured minipat MIDI port",
-    "  :" .. prefix .. "Logs    - Toggle log viewer with tail -f behavior",
-    "  :" .. prefix .. "Hide    - Hide all minipat buffers (REPL, monitor, logs)",
-    "  :" .. prefix .. "Show    - Show all minipat buffers",
     "  :" .. prefix .. "Config  - Edit the minipat configuration file",
     "  :" .. prefix .. "Help    - Show this help",
-    "  :" .. prefix .. "BackendStart   - Start the backend process",
-    "  :" .. prefix .. "BackendStop    - Stop the backend process",
-    "  :" .. prefix .. "BackendRestart - Restart the backend process",
-    "  :" .. prefix .. "BackendStatus  - Show backend process status",
     "",
     "Keybindings (in *." .. args.config.file_ext .. " files):",
     "  " .. args.keymaps.send_line .. "  - Send current line to minipat",
@@ -663,21 +747,49 @@ local function help_minipat(args)
       .. ".panic()",
     "",
     "Global Keybindings:",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.boot .. "  - Boot minipat REPL",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.quit .. "  - Quit minipat",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.panic .. "  - Panic minipat (stop playback)",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.toggle .. "  - Toggle playback (n.playing)",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor .. "  - Monitor minipat port",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs .. "  - Open log file",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.hide .. "  - Hide buffer group",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.show .. "  - Show buffer group",
+    "  Main:",
+    "    "
+      .. args.global_keymaps.leader_prefix
+      .. args.global_keymaps.start
+      .. "  - Start backend (if configured) and REPL",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.quit .. "  - Quit all processes",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.hide .. "  - Toggle show/hide all buffers",
+    "    "
+      .. args.global_keymaps.leader_prefix
+      .. args.global_keymaps.info
+      .. "  - Show info/status for all components",
+    "  REPL:",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_hide .. "  - Toggle show/hide REPL",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_start .. "  - (Re)start REPL",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_quit .. "  - Quit REPL",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_status .. "  - REPL status",
+    "  Monitor:",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_hide .. "  - Toggle show/hide monitor",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_start .. "  - (Re)start monitor",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_quit .. "  - Quit monitor",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_status .. "  - Monitor status",
+    "  Backend:",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_hide .. "  - Toggle show/hide backend",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_start .. "  - (Re)start backend",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_quit .. "  - Quit backend",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_status .. "  - Backend status",
+    "  Logs:",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_hide .. "  - Toggle show/hide logs",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_start .. "  - (Re)start logs viewer",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_quit .. "  - Quit logs viewer",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_status .. "  - Logs status",
+    "  Other:",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.panic .. "  - Panic (stop playback)",
+    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.toggle .. "  - Toggle playback",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.config .. "  - Edit config file",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.help .. "  - Show this help",
     "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.at .. "  - Send code to minipat (MpAt)",
     "",
     "Configuration:",
     "  Source path: " .. (args.config.source_path or "(auto-detected)"),
-    "  Split mode: " .. (args.config.split == "v" and "vertical" or "horizontal"),
+    "  Split mode: "
+      .. (window.get_split_direction(args.config.split) == "v" and "vertical" or "horizontal")
+      .. (args.config.split == nil and " (auto)" or ""),
     "  Autoclose: " .. tostring(args.config.autoclose),
     "  Debug mode: " .. tostring(args.config.debug),
     "",
@@ -690,7 +802,6 @@ local function help_minipat(args)
     "  BPC: " .. (args.config.minipat and args.config.minipat.bpc and tostring(args.config.minipat.bpc) or "(not set)"),
     "",
     "Backend Config:",
-    "  Enabled: " .. (args.config.backend and tostring(args.config.backend.enabled) or "false"),
     "  Command: " .. (args.config.backend and args.config.backend.command or "(not set)"),
     "  Working directory: " .. (args.config.backend and args.config.backend.cwd or "(not set)"),
     "  Pidfile: " .. (args.config.backend and args.config.backend.pidfile or "(not set)"),
@@ -732,16 +843,15 @@ local function help_minipat(args)
   })
 end
 
-local function stop_minipat(config)
-  if not state.booted then
+local function panic_minipat(config)
+  local repl = state.subprocesses.repl
+  if not repl or not repl.process then
     return
   end
-  if state.minipat_process then
-    M.send(config.minipat.nucleus_var .. ".stop(immediate=True)")
-  end
+  M.send(config.minipat.nucleus_var .. ".panic()")
 end
 
-local function monitor_midi(args)
+local function monitor_midi(args, extra_args)
   local original_win = vim.api.nvim_get_current_win()
 
   -- If monitor is already running, toggle its visibility
@@ -757,15 +867,16 @@ local function monitor_midi(args)
       return
     else
       -- Buffer exists but not visible, show it in group
-      if ensure_group_visible(args) then
-        local group_buffers = get_group_buffers()
+      if window.ensure_group_visible(state, args) then
+        local group_buffers = window.get_group_buffers(state)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
-          vim.cmd(args.split == "v" and "vsplit" or "split")
+          local split_dir = window.get_split_direction(args.config.split)
+          vim.cmd(window.create_split_command(split_dir, true))
         end
       else
         vim.api.nvim_set_current_win(original_win)
-        create_group_split(args)
+        window.create_group_split(state, args)
       end
       vim.api.nvim_set_current_buf(state.monitor)
       vim.api.nvim_set_current_win(original_win)
@@ -775,79 +886,61 @@ local function monitor_midi(args)
 
   -- Resolve source path and python binary if not already done
   if not state.resolved_python or not state.resolved_source_path then
-    state.resolved_source_path = resolve_source_path(args.source_path)
-    if args.debug then
+    state.resolved_source_path = resolve_source_path(args.config.source_path)
+    if args.config.debug then
       print("Resolved source_path: " .. state.resolved_source_path)
     end
     state.resolved_python = get_python_binary(state.resolved_source_path)
-    if args.debug then
+    if args.config.debug then
       print("Using python: " .. state.resolved_python)
     end
   end
 
   -- Create new buffer and split within group
-  if ensure_group_visible(args) then
-    local group_buffers = get_group_buffers()
+  if window.ensure_group_visible(state, args) then
+    local group_buffers = window.get_group_buffers(state)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
-      vim.cmd(args.split == "v" and "vsplit" or "split")
+      local split_dir = window.get_split_direction(args.config.split)
+      vim.cmd(window.create_split_command(split_dir, true))
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    create_group_split(args)
+    window.create_group_split(state, args)
   end
   state.monitor = vim.api.nvim_create_buf(false, false)
   vim.api.nvim_set_current_buf(state.monitor)
 
   -- Build the command with resolved python binary
-  -- Default to monitoring minipat port if no args, otherwise use args for monitoring
   local full_cmd = state.resolved_python .. " -m minipat.mon"
   if extra_args ~= nil and extra_args ~= "" then
     full_cmd = full_cmd .. " " .. extra_args
   else
-    local port_name = args.minipat and args.minipat.port or "minipat"
+    local port_name = args.config.minipat and args.config.minipat.port or "minipat"
     full_cmd = full_cmd .. " -p " .. port_name
   end
-  if args.debug then
-    print("Executing MIDI monitor command: " .. full_cmd .. " in " .. state.resolved_source_path)
-  end
 
-  local job_id = vim.fn.termopen(full_cmd, {
+  -- Create process
+  state.monitor_process = process_manager.new({
+    name = "monitor",
+    command = full_cmd,
     cwd = state.resolved_source_path,
     env = { PYTHON_GIL = "0" },
+    debug = args.config.debug,
+    autoclose = args.config.autoclose,
     on_exit = function(job_id, exit_code, event_type)
-      if args.debug then
-        print("MIDI monitor process exited with code: " .. exit_code)
-      end
-
-      -- Only close window and delete buffer if autoclose is enabled
-      if args.autoclose then
-        if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
-          if #vim.fn.win_findbuf(state.monitor) > 0 then
-            vim.api.nvim_win_close(vim.fn.win_findbuf(state.monitor)[1], true)
-          end
-          vim.api.nvim_buf_delete(state.monitor, { unload = true })
-        end
-        state.monitor = nil
-      end
-
-      -- Clean up state
+      state.monitor = nil
       state.monitor_process = nil
     end,
   })
 
-  if job_id <= 0 then
-    vim.notify("Failed to start MIDI monitor process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
-    return
-  end
-
-  state.monitor_process = job_id
+  state.monitor_process:start(state.monitor)
   vim.api.nvim_set_current_win(original_win)
 end
 
 local function open_logs(args)
   local original_win = vim.api.nvim_get_current_win()
-  local log_path = args.minipat and args.minipat.log_path or "/tmp/minipat.log"
+  local log_path = args.config.minipat and args.config.minipat.log_path or "/tmp/minipat.log"
 
   -- If logs buffer is already open, toggle its visibility
   if state.logs and vim.api.nvim_buf_is_valid(state.logs) then
@@ -862,15 +955,16 @@ local function open_logs(args)
       return
     else
       -- Buffer exists but not visible, show it in group
-      if ensure_group_visible(args) then
-        local group_buffers = get_group_buffers()
+      if window.ensure_group_visible(state, args) then
+        local group_buffers = window.get_group_buffers(state)
         if #group_buffers > 0 then
           vim.api.nvim_set_current_win(state.group_win)
-          vim.cmd(args.split == "v" and "vsplit" or "split")
+          local split_dir = window.get_split_direction(args.config.split)
+          vim.cmd(window.create_split_command(split_dir, true))
         end
       else
         vim.api.nvim_set_current_win(original_win)
-        create_group_split(args)
+        window.create_group_split(state, args)
       end
       vim.api.nvim_set_current_buf(state.logs)
       vim.api.nvim_set_current_win(original_win)
@@ -885,15 +979,16 @@ local function open_logs(args)
   end
 
   -- Split and open the log file within group
-  if ensure_group_visible(args) then
-    local group_buffers = get_group_buffers()
+  if window.ensure_group_visible(state, args) then
+    local group_buffers = window.get_group_buffers(state)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
-      vim.cmd(args.split == "v" and "vsplit" or "split")
+      local split_dir = window.get_split_direction(args.config.split)
+      vim.cmd(window.create_split_command(split_dir, true))
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    create_group_split(args)
+    window.create_group_split(state, args)
   end
   vim.cmd("edit " .. vim.fn.fnameescape(log_path))
 
@@ -1014,6 +1109,99 @@ local function open_logs(args)
   vim.api.nvim_set_current_win(original_win)
 end
 
+local function show_backend_output(args)
+  local original_win = vim.api.nvim_get_current_win()
+
+  -- If backend buffer is already open, toggle its visibility
+  if state.backend and vim.api.nvim_buf_is_valid(state.backend) then
+    local wins = vim.fn.win_findbuf(state.backend)
+    if #wins > 0 then
+      -- Buffer is visible, hide it
+      for _, win in ipairs(wins) do
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, false)
+        end
+      end
+      return
+    else
+      -- Buffer exists but not visible, show it in group
+      if window.ensure_group_visible(state, args) then
+        local group_buffers = window.get_group_buffers(state)
+        if #group_buffers > 0 then
+          vim.api.nvim_set_current_win(state.group_win)
+          local split_dir = window.get_split_direction(args.config.split)
+          vim.cmd(window.create_split_command(split_dir, true))
+        end
+      else
+        vim.api.nvim_set_current_win(original_win)
+        window.create_group_split(state, args)
+      end
+      vim.api.nvim_set_current_buf(state.backend)
+      vim.api.nvim_set_current_win(original_win)
+      return
+    end
+  end
+
+  -- Check if backend command is configured
+  if not args.config.backend.command then
+    vim.notify("No backend command configured", vim.log.levels.WARN)
+    return
+  end
+
+  -- Create new buffer and split within group
+  if window.ensure_group_visible(state, args) then
+    local group_buffers = window.get_group_buffers(state)
+    if #group_buffers > 0 then
+      vim.api.nvim_set_current_win(state.group_win)
+      local split_dir = window.get_split_direction(args.config.split)
+      vim.cmd(window.create_split_command(split_dir, true))
+    end
+  else
+    vim.api.nvim_set_current_win(original_win)
+    window.create_group_split(state, args)
+  end
+
+  -- Create buffer for backend
+  state.backend = vim.api.nvim_create_buf(false, false)
+  vim.api.nvim_set_current_buf(state.backend)
+
+  -- Set buffer name and options
+  vim.api.nvim_buf_set_name(state.backend, "Backend")
+  vim.api.nvim_buf_set_option(state.backend, "buftype", "nofile")
+  vim.api.nvim_buf_set_option(state.backend, "swapfile", false)
+  vim.api.nvim_buf_set_option(state.backend, "bufhidden", "hide")
+
+  -- Create or reuse backend process
+  if not state.backend_process or not state.backend_process.is_running then
+    state.backend_process = process_manager.new({
+      name = "backend",
+      command = args.config.backend.command,
+      cwd = args.config.backend.cwd,
+      env = args.config.backend.env or {},
+      debug = args.config.debug,
+      autoclose = args.config.autoclose,
+      pidfile = args.config.backend.pidfile,
+      on_exit = function(job_id, exit_code, event_type)
+        state.backend = nil
+        state.backend_process = nil
+      end,
+    })
+
+    state.backend_process:start(state.backend)
+  else
+    -- Backend is already running, just attach the buffer for output
+    if args.config.debug then
+      print("Backend already running, attaching output buffer")
+    end
+    -- Note: We can't easily attach a new buffer to an existing process
+    -- This is a limitation we'll document
+    vim.notify("Backend is already running in background. Use BackendRestart to view output.", vim.log.levels.INFO)
+  end
+
+  -- Return to original editor window
+  vim.api.nvim_set_current_win(original_win)
+end
+
 local function monitor_minipat_port(args)
   local original_win = vim.api.nvim_get_current_win()
 
@@ -1027,119 +1215,91 @@ local function monitor_minipat_port(args)
 
   -- Resolve source path and python binary if not already done
   if not state.resolved_python or not state.resolved_source_path then
-    state.resolved_source_path = resolve_source_path(args.source_path)
-    if args.debug then
+    state.resolved_source_path = resolve_source_path(args.config.source_path)
+    if args.config.debug then
       print("Resolved source_path: " .. state.resolved_source_path)
     end
     state.resolved_python = get_python_binary(state.resolved_source_path)
-    if args.debug then
+    if args.config.debug then
       print("Using python: " .. state.resolved_python)
     end
   end
 
   -- Create new buffer and split within group
-  if ensure_group_visible(args) then
-    local group_buffers = get_group_buffers()
+  if window.ensure_group_visible(state, args) then
+    local group_buffers = window.get_group_buffers(state)
     if #group_buffers > 0 then
       vim.api.nvim_set_current_win(state.group_win)
-      vim.cmd(args.split == "v" and "vsplit" or "split")
+      local split_dir = window.get_split_direction(args.config.split)
+      vim.cmd(window.create_split_command(split_dir, true))
     end
   else
     vim.api.nvim_set_current_win(original_win)
-    create_group_split(args)
+    window.create_group_split(state, args)
   end
   state.monitor = vim.api.nvim_create_buf(false, false)
   vim.api.nvim_set_current_buf(state.monitor)
 
   -- Build the command to monitor the minipat port
-  local port_name = args.minipat and args.minipat.port or "minipat"
+  local port_name = args.config.minipat and args.config.minipat.port or "minipat"
   local full_cmd = state.resolved_python .. " -m minipat.mon -p " .. port_name
-  if args.debug then
-    print("Executing MIDI monitor command: " .. full_cmd .. " in " .. state.resolved_source_path)
-  end
 
-  local job_id = vim.fn.termopen(full_cmd, {
+  -- Create process
+  state.monitor_process = process_manager.new({
+    name = "monitor",
+    command = full_cmd,
     cwd = state.resolved_source_path,
     env = { PYTHON_GIL = "0" },
+    debug = args.config.debug,
+    autoclose = args.config.autoclose,
     on_exit = function(job_id, exit_code, event_type)
-      if args.debug then
-        print("MIDI monitor process exited with code: " .. exit_code)
-      end
-
-      -- Only close window and delete buffer if autoclose is enabled
-      if args.autoclose then
-        if state.monitor and vim.api.nvim_buf_is_valid(state.monitor) then
-          if #vim.fn.win_findbuf(state.monitor) > 0 then
-            vim.api.nvim_win_close(vim.fn.win_findbuf(state.monitor)[1], true)
-          end
-          vim.api.nvim_buf_delete(state.monitor, { unload = true })
-        end
-        state.monitor = nil
-      end
-
-      -- Clean up state
+      state.monitor = nil
       state.monitor_process = nil
     end,
   })
 
-  if job_id <= 0 then
-    vim.notify("Failed to start MIDI monitor process (job_id: " .. job_id .. ")", vim.log.levels.ERROR)
-    return
-  end
-
-  state.monitor_process = job_id
+  state.monitor_process:start(state.monitor)
   vim.api.nvim_set_current_win(original_win)
 end
 
-local function hide_group()
-  if state.group_hidden then
-    return
-  end
+-- Updated helper functions using the unified subprocess management
 
-  -- Find all windows displaying group buffers and close them
-  local group_buffers = get_group_buffers()
-  for _, buf in ipairs(group_buffers) do
-    local wins = vim.fn.win_findbuf(buf)
-    for _, win in ipairs(wins) do
-      if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_win_close(win, false)
-      end
+-- Helper to quit all processes
+local function quit_all_processes(config)
+  local processes_quit = {}
+
+  -- Quit all subprocesses
+  for name, subprocess in pairs(state.subprocesses) do
+    if subprocess.process then
+      quit_subprocess(name)
+      table.insert(processes_quit, name:upper())
     end
   end
 
-  -- Close the main group window if it exists
-  if state.group_win and vim.api.nvim_win_is_valid(state.group_win) then
-    vim.api.nvim_win_close(state.group_win, false)
-  end
+  -- Hide group window
+  window.hide_group(state, COMPONENTS)
 
-  state.group_hidden = true
-  state.group_win = nil
+  if #processes_quit > 0 then
+    vim.notify("Quit: " .. table.concat(processes_quit, ", "), vim.log.levels.INFO)
+  else
+    vim.notify("No processes running", vim.log.levels.INFO)
+  end
 end
 
-local function show_group(args)
-  if not state.group_hidden then
-    return
+-- Helper to get overall status info
+local function get_all_status()
+  local status_lines = {
+    "Minipat Status",
+    "==============",
+    "",
+  }
+
+  for name, _ in pairs(state.subprocesses) do
+    local status = get_subprocess_status(name)
+    table.insert(status_lines, name:upper() .. ":" .. string.rep(" ", 8 - #name) .. status)
   end
 
-  state.group_hidden = false
-
-  -- Create the main group split
-  create_group_split(args)
-
-  -- Restore buffers that exist
-  local group_buffers = get_group_buffers()
-  if #group_buffers > 0 then
-    vim.api.nvim_set_current_win(state.group_win)
-
-    -- Show the first buffer in the group window
-    vim.api.nvim_set_current_buf(group_buffers[1])
-
-    -- Split and show additional buffers
-    for i = 2, #group_buffers do
-      vim.cmd(args.split == "v" and "vsplit" or "split")
-      vim.api.nvim_set_current_buf(group_buffers[i])
-    end
-  end
+  return table.concat(status_lines, "\n")
 end
 
 local function open_config()
@@ -1172,8 +1332,14 @@ local function open_config()
   vim.cmd("edit " .. vim.fn.fnameescape(config_path))
 end
 
-function M.setup(args)
-  args = vim.tbl_deep_extend("force", DEFAULTS, args)
+-- All window management functions are now accessible through wrapper functions above
+
+-- ==============================================================================
+-- Main Setup Function
+-- ==============================================================================
+
+function M.setup(user_args)
+  local args = vim.tbl_deep_extend("force", DEFAULTS, user_args or {})
 
   -- Resolve and validate backend configuration
   local resolved_source_path = resolve_source_path(args.config.source_path)
@@ -1182,7 +1348,7 @@ function M.setup(args)
 
   if not backend_valid then
     vim.notify("Backend configuration error: " .. backend_error, vim.log.levels.ERROR)
-    backend_config.enabled = false
+    backend_config.command = nil
   end
 
   -- Store resolved backend config for later use
@@ -1194,9 +1360,10 @@ function M.setup(args)
   end
 
   local at_fn = function(fn_args)
-    if not state.booted then
+    local repl = state.subprocesses.repl
+    if not repl or not repl.process then
       local notify_id = vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
-      boot_minipat_repl(args.config, nil)
+      start_component("repl", args)
       -- Give minipat a moment to boot before sending code
       vim.defer_fn(function()
         vim.notify("", vim.log.levels.INFO, { replace = notify_id })
@@ -1214,9 +1381,10 @@ function M.setup(args)
   end
 
   local toggle_fn = function()
-    if not state.booted then
+    local repl = state.subprocesses.repl
+    if not repl or not repl.process then
       local notify_id = vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
-      boot_minipat_repl(args.config, nil)
+      start_component("repl", args)
       -- Give minipat a moment to boot before toggling
       vim.defer_fn(function()
         vim.notify("", vim.log.levels.INFO, { replace = notify_id })
@@ -1228,78 +1396,53 @@ function M.setup(args)
   end
 
   local help_fn = function()
-    help_minipat(args)
-  end
+    -- Create help text inline since help_minipat was removed
+    local prefix = args.config.command_prefix
+    local help_text = {
+      "Minipat Neovim Plugin Help",
+      "===========================",
+      "",
+      "Main Commands:",
+      "  :" .. prefix .. "Start   - Start backend (if configured) and REPL",
+      "  :" .. prefix .. "Quit    - Quit all processes",
+      "  :" .. prefix .. "Info    - Show status of all components",
+      "  :" .. prefix .. "Hide    - Toggle show/hide all buffers",
+      "",
+      "Component Commands (Repl, Monitor, Backend, Logs):",
+      "  :" .. prefix .. "[Component]Start   - (Re)start component",
+      "  :" .. prefix .. "[Component]Quit    - Quit component",
+      "  :" .. prefix .. "[Component]Hide    - Toggle show/hide component",
+      "  :" .. prefix .. "[Component]Status  - Show component status",
+    }
 
-  local mon_fn = function()
-    monitor_midi(args.config)
-  end
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_text)
+    vim.api.nvim_buf_set_option(buf, "modifiable", false)
 
-  local mod_fn = function()
-    monitor_minipat_port(args.config)
-  end
+    local width = 60
+    local height = #help_text
+    local win = vim.api.nvim_open_win(buf, true, {
+      relative = "editor",
+      width = width,
+      height = height,
+      col = (vim.o.columns - width) / 2,
+      row = (vim.o.lines - height) / 2,
+      style = "minimal",
+      border = "rounded",
+    })
 
-  local logs_fn = function()
-    open_logs(args.config)
-  end
-
-  local hide_fn = function()
-    hide_group()
-  end
-
-  local show_fn = function()
-    show_group(args.config)
+    vim.api.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>", { noremap = true, silent = true })
+    vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", ":close<CR>", { noremap = true, silent = true })
   end
 
   local config_fn = function()
-    open_config()
+    local config_path = vim.fn.stdpath("config") .. "/lua/plugins/minipat.lua"
+    vim.cmd("edit " .. vim.fn.fnameescape(config_path))
   end
 
-  local backend_start_fn = function()
-    if not backend_config.enabled then
-      vim.notify("Backend is not enabled in configuration", vim.log.levels.WARN)
-      return
-    end
-    start_backend(backend_config, args.config.debug)
-  end
+  -- Remove old backend functions since we're using the unified system
 
-  local backend_stop_fn = function()
-    if not backend_config.enabled then
-      vim.notify("Backend is not enabled in configuration", vim.log.levels.WARN)
-      return
-    end
-    stop_backend(backend_config, args.config.debug)
-  end
-
-  local backend_restart_fn = function()
-    if not backend_config.enabled then
-      vim.notify("Backend is not enabled in configuration", vim.log.levels.WARN)
-      return
-    end
-    vim.notify("Restarting backend...", vim.log.levels.INFO)
-    stop_backend(backend_config, args.config.debug)
-    vim.defer_fn(function()
-      start_backend(backend_config, args.config.debug)
-    end, 1000)
-  end
-
-  local backend_status_fn = function()
-    if not backend_config.enabled then
-      vim.notify("Backend is not enabled in configuration", vim.log.levels.INFO)
-      return
-    end
-
-    local pid = nil
-    if state.backend_pidfile then
-      pid = read_pidfile(state.backend_pidfile)
-    end
-
-    local running = pid and is_process_running(pid)
-    local status = running and "running" or "stopped"
-    local pid_info = pid and (" (PID: " .. pid .. ")") or ""
-
-    vim.notify("Backend status: " .. status .. pid_info, vim.log.levels.INFO)
-  end
+  -- These functions are no longer needed - using unified system
 
   local enter_fn = function()
     vim.cmd("set ft=python")
@@ -1319,88 +1462,248 @@ function M.setup(args)
   end
 
   local prefix = args.config.command_prefix
-  vim.api.nvim_create_user_command(
-    prefix .. "Boot",
-    boot_fn,
-    { desc = "boots Minipat instance (can pass extra args)", nargs = "*" }
-  )
+
+  -- Helper functions for creating common command patterns
+  local function create_start_command(name, desc, start_fn, extra_args_support)
+    local opts = { desc = desc }
+    if extra_args_support then
+      opts.nargs = "*"
+    end
+
+    vim.api.nvim_create_user_command(prefix .. name, function(fn_args)
+      local extra_args = extra_args_support and fn_args and fn_args["args"] or nil
+      start_fn(args, extra_args)
+    end, opts)
+  end
+
+  local function create_quit_command(name, desc, process_name)
+    vim.api.nvim_create_user_command(prefix .. name, function()
+      quit_subprocess(process_name)
+      vim.notify(desc:gsub("Quit ", "") .. " quit", vim.log.levels.INFO)
+    end, { desc = desc })
+  end
+
+  local function create_toggle_command(name, desc, process_name)
+    vim.api.nvim_create_user_command(prefix .. name, function()
+      local result = window.toggle_subprocess_visibility(process_name, state, args, start_component)
+      if result then
+        vim.notify(desc:gsub("Toggle ", "") .. " " .. result, vim.log.levels.INFO)
+      else
+        vim.notify(desc:gsub("Toggle ", "") .. " not started", vim.log.levels.WARN)
+      end
+    end, { desc = desc })
+  end
+
+  local function create_status_command(name, desc, process_name)
+    vim.api.nvim_create_user_command(prefix .. name, function()
+      local status = get_subprocess_status(process_name)
+      vim.notify(desc:gsub(" status", "") .. " status: " .. status, vim.log.levels.INFO)
+    end, { desc = desc })
+  end
+
+  -- Component Commands
+  for _, component in ipairs(COMPONENTS) do
+    local title_case = component:gsub("^%l", string.upper)
+    local extra_args_support = component == "repl" -- Only REPL supports extra args
+
+    create_start_command(title_case .. "Start", "Start " .. component, function(args, extra_args)
+      return start_component(component, args, extra_args)
+    end, extra_args_support)
+    create_quit_command(title_case .. "Quit", "Quit " .. component, component)
+    create_toggle_command(title_case .. "Hide", "Toggle " .. component, component)
+    create_status_command(title_case .. "Status", title_case .. " status", component)
+  end
+
+  -- Main Commands
+  vim.api.nvim_create_user_command(prefix .. "Start", function()
+    -- Start backend if configured
+    if args.config.backend and args.config.backend.command then
+      start_component("backend", args)
+    end
+    -- Start REPL
+    start_component("repl", args)
+  end, { desc = "Start all", nargs = "*" })
+
   vim.api.nvim_create_user_command(prefix .. "Quit", function()
-    quit_minipat(args.config)
-  end, { desc = "quits Minipat instance" })
-  vim.api.nvim_create_user_command(prefix .. "Stop", function()
-    stop_minipat(args.config)
-  end, { desc = "stops Minipat playback" })
-  vim.api.nvim_create_user_command(prefix .. "Toggle", toggle_fn, { desc = "toggle minipat playback (n.playing)" })
-  vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "send code to Minipat instance", nargs = "+" })
-  vim.api.nvim_create_user_command(prefix .. "Mon", mon_fn, { desc = "toggle MIDI monitor" })
-  vim.api.nvim_create_user_command(prefix .. "Mod", mod_fn, { desc = "monitor minipat MIDI port" })
-  vim.api.nvim_create_user_command(prefix .. "Logs", logs_fn, { desc = "open minipat log file" })
-  vim.api.nvim_create_user_command(prefix .. "Hide", hide_fn, { desc = "hide minipat buffer group" })
-  vim.api.nvim_create_user_command(prefix .. "Show", show_fn, { desc = "show minipat buffer group" })
-  vim.api.nvim_create_user_command(prefix .. "Config", config_fn, { desc = "edit minipat config file" })
-  vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "show Minipat help and keybindings" })
-  vim.api.nvim_create_user_command(prefix .. "BackendStart", backend_start_fn, { desc = "start backend process" })
-  vim.api.nvim_create_user_command(prefix .. "BackendStop", backend_stop_fn, { desc = "stop backend process" })
-  vim.api.nvim_create_user_command(prefix .. "BackendRestart", backend_restart_fn, { desc = "restart backend process" })
-  vim.api.nvim_create_user_command(prefix .. "BackendStatus", backend_status_fn, { desc = "show backend process status" })
+    quit_all_processes(args.config)
+  end, { desc = "Quit all" })
+
+  vim.api.nvim_create_user_command(prefix .. "Info", function()
+    vim.notify(get_all_status(), vim.log.levels.INFO)
+  end, { desc = "Show status" })
+
+  vim.api.nvim_create_user_command(prefix .. "Hide", function()
+    local result = window.toggle_all_buffers(state, args, start_component, COMPONENTS)
+    if result then
+      vim.notify("All buffers " .. result, vim.log.levels.INFO)
+    end
+  end, { desc = "Toggle all" })
+
+  -- Other Commands
+  vim.api.nvim_create_user_command(prefix .. "Panic", function()
+    panic_minipat(args.config)
+  end, { desc = "Stop playback" })
+  vim.api.nvim_create_user_command(prefix .. "Toggle", toggle_fn, { desc = "Toggle playback" })
+  vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "Send code", nargs = "+" })
+  vim.api.nvim_create_user_command(prefix .. "Config", config_fn, { desc = "Edit config" })
+  vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "Show help" })
+
+  -- Legacy Commands (for compatibility)
+  vim.api.nvim_create_user_command(prefix .. "Boot", function()
+    vim.notify("MpBoot is deprecated, use MpStart instead", vim.log.levels.WARN)
+    if args.config.backend and args.config.backend.command then
+      start_component("backend", args)
+    end
+    start_component("repl", args)
+  end, { desc = "Deprecated", nargs = "*" })
 
   -- Set up global keymaps
-  local leader_prefix = args.global_keymaps.leader_prefix
-  if leader_prefix then
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.boot, boot_fn, { desc = "Boot minipat REPL" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.quit, function()
-      quit_minipat(args.config)
-    end, { desc = "Quit minipat" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.panic, function()
-      stop_minipat(args.config)
-    end, { desc = "Panic minipat (stop playback)" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.toggle, toggle_fn, { desc = "Toggle minipat playback" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.monitor, function()
-      monitor_minipat_port(args.config)
-    end, { desc = "Monitor minipat port" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.logs, logs_fn, { desc = "Open minipat log file" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, hide_fn, { desc = "Hide minipat buffer group" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.show, show_fn, { desc = "Show minipat buffer group" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, config_fn, { desc = "Edit minipat config" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.help, help_fn, { desc = "Show minipat help" })
-    vim.keymap.set("n", leader_prefix .. args.global_keymaps.at, function()
-      local code = vim.fn.input("Minipat code: ")
-      if code and code ~= "" then
-        if not state.booted then
-          vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
-          boot_minipat_repl(args.config, nil)
-          -- Give minipat a moment to boot before sending code
-          vim.defer_fn(function()
-            M.send(code)
-          end, 1000) -- Wait 1 second for boot
-        else
-          M.send(code)
+  if args.global_keymaps and args.global_keymaps.leader_prefix then
+    local leader_prefix = args.global_keymaps.leader_prefix
+    -- Individual component keymaps are available through commands
+    -- e.g., :MpReplStart, :MpMonitorStart, etc.
+
+    -- Main keymaps
+    if args.global_keymaps and args.global_keymaps.start then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.start, function()
+        -- Start backend if configured
+        if args.config.backend and args.config.backend.command then
+          local ok, err = pcall(start_component, "backend", args)
+          if not ok then
+            vim.notify("Error starting backend: " .. tostring(err), vim.log.levels.ERROR)
+          end
         end
+        -- Start REPL
+        local ok, err = pcall(start_component, "repl", args)
+        if not ok then
+          vim.notify("Error starting REPL: " .. tostring(err), vim.log.levels.ERROR)
+        end
+      end, { desc = "Start all" })
+    end
+
+    if args.global_keymaps and args.global_keymaps.quit then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.quit, function()
+        quit_all_processes(args.config)
+      end, { desc = "Quit all" })
+    end
+
+    if args.global_keymaps and args.global_keymaps.hide then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, function()
+        local result = window.toggle_all_buffers(state, args, start_component, COMPONENTS)
+        if result then
+          vim.notify("All buffers " .. result, vim.log.levels.INFO)
+        end
+      end, { desc = "Toggle all" })
+    end
+
+    if args.global_keymaps and args.global_keymaps.all then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.all, function()
+        local shown_count = window.show_all_started(state, args, start_component, COMPONENTS)
+        if shown_count > 0 then
+          vim.notify("Showed " .. shown_count .. " started components", vim.log.levels.INFO)
+        else
+          vim.notify("All started components already visible", vim.log.levels.INFO)
+        end
+      end, { desc = "Show all started" })
+    end
+
+    if args.global_keymaps and args.global_keymaps.info then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.info, function()
+        vim.notify(get_all_status(), vim.log.levels.INFO)
+      end, { desc = "Show status" })
+    end
+
+    -- Other keymaps
+    if args.global_keymaps and args.global_keymaps.panic then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.panic, function()
+        panic_minipat(args.config)
+      end, { desc = "Panic minipat" })
+    end
+    if args.global_keymaps and args.global_keymaps.toggle then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.toggle, toggle_fn, { desc = "Toggle playback" })
+    end
+    if args.global_keymaps and args.global_keymaps.config then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, config_fn, { desc = "Edit config" })
+    end
+    if args.global_keymaps and args.global_keymaps.help then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.help, help_fn, { desc = "Show help" })
+    end
+    if args.global_keymaps and args.global_keymaps.at then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.at, function()
+        local code = vim.fn.input("Minipat code: ")
+        if code and code ~= "" then
+          local repl = state.subprocesses.repl
+          if not repl or not repl.process then
+            vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
+            start_component("repl", args)
+            -- Give minipat a moment to boot before sending code
+            vim.defer_fn(function()
+              M.send(code)
+            end, 1000) -- Wait 1 second for boot
+          else
+            M.send(code)
+          end
+        end
+      end, { desc = "Send code" })
+    end
+
+    -- Component keymaps
+    for _, component in ipairs(COMPONENTS) do
+      local hide_key = component .. "_hide"
+      local start_key = component .. "_start"
+      local quit_key = component .. "_quit"
+      local status_key = component .. "_status"
+      local only_key = component .. "_only"
+
+      if args.global_keymaps and args.global_keymaps[hide_key] then
+        vim.keymap.set("n", leader_prefix .. args.global_keymaps[hide_key], function()
+          local result = window.toggle_subprocess_visibility(component, state, args, start_component)
+          if result then
+            vim.notify(component:gsub("^%l", string.upper) .. " " .. result, vim.log.levels.INFO)
+          end
+        end, { desc = "Toggle " .. component })
       end
-    end, { desc = "Send code to minipat (MpAt)" })
+
+      if args.global_keymaps and args.global_keymaps[start_key] then
+        vim.keymap.set("n", leader_prefix .. args.global_keymaps[start_key], function()
+          start_component(component, args)
+        end, { desc = "Start " .. component })
+      end
+
+      if args.global_keymaps and args.global_keymaps[quit_key] then
+        vim.keymap.set("n", leader_prefix .. args.global_keymaps[quit_key], function()
+          quit_subprocess(component)
+          vim.notify(component:gsub("^%l", string.upper) .. " quit", vim.log.levels.INFO)
+        end, { desc = "Quit " .. component })
+      end
+
+      if args.global_keymaps and args.global_keymaps[status_key] then
+        vim.keymap.set("n", leader_prefix .. args.global_keymaps[status_key], function()
+          local status = get_subprocess_status(component)
+          vim.notify(component:gsub("^%l", string.upper) .. " status: " .. status, vim.log.levels.INFO)
+        end, { desc = component:gsub("^%l", string.upper) .. " status" })
+      end
+
+      if args.global_keymaps and args.global_keymaps[only_key] then
+        vim.keymap.set("n", leader_prefix .. args.global_keymaps[only_key], function()
+          local hidden_count = window.hide_all_except(component, state, args, start_component, COMPONENTS)
+          if hidden_count > 0 then
+            vim.notify(
+              component:gsub("^%l", string.upper) .. " only (hid " .. hidden_count .. " others)",
+              vim.log.levels.INFO
+            )
+          else
+            vim.notify(component:gsub("^%l", string.upper) .. " only (no others to hide)", vim.log.levels.INFO)
+          end
+        end, { desc = "Show only " .. component })
+      end
+    end
   end
 
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
     pattern = { "*." .. args.config.file_ext },
     callback = enter_fn,
   })
-
-  -- Backend lifecycle management
-  if backend_config.enabled then
-    -- Start backend if autostart is enabled
-    if backend_config.autostart then
-      start_backend(backend_config, args.config.debug)
-    end
-
-    -- Stop backend when Neovim exits if autostop is enabled
-    if backend_config.autostop then
-      vim.api.nvim_create_autocmd("VimLeavePre", {
-        callback = function()
-          stop_backend(backend_config, args.config.debug)
-        end,
-      })
-    end
-  end
 end
 
 return M
