@@ -37,7 +37,7 @@ local DEFAULTS = {
   config = {
     source_path = nil, -- Optional path to minipat project root
     file_ext = "minipat", -- File extension to trigger this plugin
-    split = "v", -- Whether to split vertical (v) or horizontal (h)
+    split = nil, -- Whether to split vertical (v) or horizontal (h) - nil to autodetect
     command_prefix = "Mp", -- prefix for the Boot, Quit commands, etc
     autoclose = true, -- Close the buffer on exit
     exit_wait = 500, -- milliseconds to wait for process to exit gracefully
@@ -256,7 +256,22 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
     -- Group window exists, add a split within it
     local group_buffers = window.get_group_buffers(state)
     if #group_buffers > 0 then
-      safe_set_current_win(state.group_win)
+      -- Find any visible window from the group to split from
+      local split_from_win = nil
+      for _, buf in ipairs(group_buffers) do
+        local wins = vim.fn.win_findbuf(buf)
+        if #wins > 0 and vim.api.nvim_win_is_valid(wins[1]) then
+          split_from_win = wins[1]
+          break
+        end
+      end
+
+      if split_from_win then
+        safe_set_current_win(split_from_win)
+      else
+        safe_set_current_win(state.group_win)
+      end
+
       local split_dir = window.get_split_direction(args.config.split)
       vim.cmd(window.create_split_command(split_dir, true))
     end
@@ -296,6 +311,11 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
   })
 
   subprocess.process:start(subprocess.buffer)
+
+  -- Trigger reflow after starting process
+  vim.defer_fn(function()
+    window.reflow_windows_in_group(state)
+  end, 150)
 
   -- Set up smart auto-scrolling for this buffer
   if subprocess.buffer then
@@ -596,7 +616,22 @@ local function start_buffer_component(component, args)
     -- Group window exists, add a split within it
     local group_buffers = window.get_group_buffers(state)
     if #group_buffers > 0 then
-      vim.api.nvim_set_current_win(state.group_win)
+      -- Find any visible window from the group to split from
+      local split_from_win = nil
+      for _, buf in ipairs(group_buffers) do
+        local wins = vim.fn.win_findbuf(buf)
+        if #wins > 0 and vim.api.nvim_win_is_valid(wins[1]) then
+          split_from_win = wins[1]
+          break
+        end
+      end
+
+      if split_from_win then
+        safe_set_current_win(split_from_win)
+      else
+        safe_set_current_win(state.group_win)
+      end
+
       local split_dir = window.get_split_direction(args.config.split)
       vim.cmd(window.create_split_command(split_dir, true))
     end
@@ -632,6 +667,12 @@ local function start_buffer_component(component, args)
   end
 
   safe_set_current_win(original_win) -- Return to original window
+
+  -- Trigger reflow after creating buffer component
+  vim.defer_fn(function()
+    window.reflow_windows_in_group(state)
+  end, 150)
+
   return subprocess
 end
 

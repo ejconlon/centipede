@@ -28,18 +28,18 @@ Next available task ID: {#16}
 
 ### Active
 
+- {#14} Add cheatsheet param to config for custom cheatsheet path (default nil) {nvim}
 
 ### Review
 
-- {#13} Reflow windows when hiding/showing {nvim}
 
 ### Upcoming
 
 - {#15} Pass only necessary state to window and process functions {nvim}
-- {#14} Add cheatsheet param to config for custom cheatsheet path (default nil) {nvim}
 
 ### Done
 
+- {#13} Reflow windows when hiding/showing {nvim}
 - {#12} Look for minipat_config.lua in cwd to override default args -> plugin args -> local args {nvim}
 - {#11} Add Cheatsheet (c) group to minipat-nvim that opens buffer containing CHEATSHEET.md
 - {#10} Create CHEATSHEET.md with examples of minipat dsl

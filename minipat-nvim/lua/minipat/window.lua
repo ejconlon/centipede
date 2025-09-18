@@ -25,7 +25,9 @@ function M.get_optimal_split_direction()
   local win = vim.api.nvim_get_current_win()
   local width = vim.api.nvim_win_get_width(win)
   local height = vim.api.nvim_win_get_height(win)
-  return width > height and "v" or "h"
+  -- If width > height (wide screen), use horizontal split to stack windows vertically
+  -- If height > width (tall screen), use vertical split for side-by-side windows
+  return width > height and "h" or "v"
 end
 
 function M.get_split_direction(config_split)
@@ -56,21 +58,17 @@ end
 -- ==============================================================================
 
 function M.reflow_windows_in_group(state)
-  if not state.group_win or not vim.api.nvim_win_is_valid(state.group_win) then
-    return
-  end
-
+  -- Get all windows displaying group buffers
   local group_buffers = M.get_group_buffers(state)
   if #group_buffers == 0 then
     return
   end
 
-  -- Get all windows displaying group buffers
   local group_windows = {}
   for _, buf in ipairs(group_buffers) do
     local wins = vim.fn.win_findbuf(buf)
     for _, win in ipairs(wins) do
-      if vim.api.nvim_win_is_valid(win) and win ~= state.group_win then
+      if vim.api.nvim_win_is_valid(win) then
         table.insert(group_windows, win)
       end
     end
@@ -80,36 +78,61 @@ function M.reflow_windows_in_group(state)
     return -- No need to reflow with 0 or 1 window
   end
 
-  -- Determine the split direction used by the group
-  local split_dir = state.group_split_dir or "v"
+  -- Save current window to restore later
+  local current_win = vim.api.nvim_get_current_win()
 
-  -- Equalize window sizes based on split direction
-  if split_dir == "v" then
-    -- Vertical splits - equalize widths
-    local total_width = vim.api.nvim_win_get_width(state.group_win)
-    local target_width = math.floor(total_width / #group_windows)
+  -- Find a valid window in the group to work from
+  local valid_group_win = nil
+  for _, win in ipairs(group_windows) do
+    if vim.api.nvim_win_is_valid(win) then
+      valid_group_win = win
+      break
+    end
+  end
 
-    for i, win in ipairs(group_windows) do
-      if vim.api.nvim_win_is_valid(win) then
-        -- Don't resize the last window to avoid rounding issues
-        if i < #group_windows then
-          vim.api.nvim_win_set_width(win, target_width)
+  if not valid_group_win then
+    return
+  end
+
+  -- Use Neovim's built-in window equalization
+  -- This handles complex nested layouts better than manual resizing
+  vim.api.nvim_set_current_win(valid_group_win)
+
+  -- First, use wincmd = to equalize all windows
+  vim.cmd("wincmd =")
+
+  -- Then explicitly set equal widths for vertical splits
+  -- This ensures windows are properly equalized even in complex layouts
+  vim.schedule(function()
+    if #group_windows > 1 then
+      local wins_still_valid = {}
+      for _, win in ipairs(group_windows) do
+        if vim.api.nvim_win_is_valid(win) then
+          table.insert(wins_still_valid, win)
+        end
+      end
+
+      if #wins_still_valid > 1 then
+        -- Get the total width available
+        local total_width = 0
+        for _, win in ipairs(wins_still_valid) do
+          total_width = total_width + vim.api.nvim_win_get_width(win)
+        end
+
+        -- Set equal width for all windows
+        local target_width = math.floor(total_width / #wins_still_valid)
+        for i, win in ipairs(wins_still_valid) do
+          if i < #wins_still_valid then  -- Don't resize the last one to avoid rounding issues
+            pcall(vim.api.nvim_win_set_width, win, target_width)
+          end
         end
       end
     end
-  else
-    -- Horizontal splits - equalize heights
-    local total_height = vim.api.nvim_win_get_height(state.group_win)
-    local target_height = math.floor(total_height / #group_windows)
+  end)
 
-    for i, win in ipairs(group_windows) do
-      if vim.api.nvim_win_is_valid(win) then
-        -- Don't resize the last window to avoid rounding issues
-        if i < #group_windows then
-          vim.api.nvim_win_set_height(win, target_height)
-        end
-      end
-    end
+  -- Restore original window if still valid
+  if vim.api.nvim_win_is_valid(current_win) then
+    vim.api.nvim_set_current_win(current_win)
   end
 end
 
@@ -200,7 +223,7 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
     -- Reflow remaining windows after hiding
     vim.defer_fn(function()
       M.reflow_windows_in_group(state)
-    end, 50)
+    end, 100)
     return "hidden"
   else
     if state.group_hidden then
@@ -217,7 +240,22 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
         end
       end
 
-      vim.api.nvim_set_current_win(state.group_win)
+      -- Find any visible window to split from
+      local split_from_win = nil
+      for _, buf in ipairs(visible_buffers) do
+        local wins = vim.fn.win_findbuf(buf)
+        if #wins > 0 and vim.api.nvim_win_is_valid(wins[1]) then
+          split_from_win = wins[1]
+          break
+        end
+      end
+
+      if split_from_win then
+        vim.api.nvim_set_current_win(split_from_win)
+      elseif state.group_win and vim.api.nvim_win_is_valid(state.group_win) then
+        vim.api.nvim_set_current_win(state.group_win)
+      end
+
       if #visible_buffers > 0 then
         local split_dir = M.get_split_direction(args.config.split)
         vim.cmd(M.create_split_command(split_dir, true))
@@ -226,7 +264,7 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
       -- Reflow windows after showing
       vim.defer_fn(function()
         M.reflow_windows_in_group(state)
-      end, 50)
+      end, 100)
     end
     safe_set_current_win(original_win)
     return "shown"

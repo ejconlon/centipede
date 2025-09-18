@@ -37,6 +37,7 @@ def _var_name() -> str:
 
 def _init() -> None:
     name = _var_name()
+    print("*** minipat REPL ***")
     print(f"Exit with {name}.exit() or <C-d><C-c>")
     n = Nucleus.boot()
     globals()[name] = n
