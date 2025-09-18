@@ -28,21 +28,25 @@ Next available task ID: {#10}
 
 ### Active
 
+
 ### Review
 
-- {#3} Add new minipat pane for backend output streams {plugin} {neovim} {ui}
-  - Create a dedicated pane to display stdout/stderr from the backend command
-  - Provide real-time monitoring of backend process output
-  - Support scrolling and log viewing functionality
+
+### Upcoming
+
+
+### Done
+
 - {#4} Add commands to manage backend pane and process {plugin} {neovim} {commands}
   - Commands to start/stop/restart the backend process
   - Commands to show/hide/toggle the backend output pane
   - Commands to clear backend logs or save them to file
   - Integration with existing plugin command structure
-
-### Upcoming
-
-### Done
+- {#3} Add new minipat pane for backend output streams {plugin} {neovim} {ui}
+  - Create a dedicated pane to display stdout/stderr from the backend command
+  - Provide real-time monitoring of backend process output
+  - Support scrolling and log viewing functionality
 
 ### Backlog
+
 
