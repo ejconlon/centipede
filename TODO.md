@@ -24,20 +24,21 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#12}
+Next available task ID: {#13}
 
 ### Active
 
+- {#12} Look for minipat_config.lua in cwd to override default args -> plugin args -> local args {nvim}
 
 ### Review
 
 
 ### Upcoming
 
-- {#11} Add Cheatsheet (c) group to minipat-nvim that opens buffer containing CHEATSHEET.md
 
 ### Done
 
+- {#11} Add Cheatsheet (c) group to minipat-nvim that opens buffer containing CHEATSHEET.md
 - {#10} Create CHEATSHEET.md with examples of minipat dsl
 - {#4} Add commands to manage backend pane and process {plugin} {neovim} {commands}
   - Commands to start/stop/restart the backend process

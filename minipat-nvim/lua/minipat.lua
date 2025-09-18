@@ -6,8 +6,28 @@ local M = {}
 local process_manager = require("minipat.process")
 local window = require("minipat.window")
 
--- Component names for generic functions
-local COMPONENTS = { "repl", "backend", "logs", "monitor" }
+-- Component configuration: name -> type mapping
+local COMPONENTS = {
+  repl = "process",
+  backend = "process",
+  logs = "process",
+  monitor = "process",
+  cheatsheet = "buffer"
+}
+
+-- Helper function to get component names
+local function get_component_names()
+  local names = {}
+  for name, _ in pairs(COMPONENTS) do
+    table.insert(names, name)
+  end
+  return names
+end
+
+-- Helper function to get component type
+local function get_component_type(name)
+  return COMPONENTS[name]
+end
 
 -- ==============================================================================
 -- Configuration and Defaults
@@ -71,6 +91,12 @@ local DEFAULTS = {
     logs_quit = "lq", -- <localleader>nlq - quit logs viewer
     logs_status = "li", -- <localleader>nli - logs status
     logs_only = "lo", -- <localleader>nlo - show only logs (hide others)
+    -- Cheatsheet commands (<leader>nc prefix)
+    cheatsheet_hide = "ch", -- <localleader>nch - toggle show/hide cheatsheet
+    cheatsheet_start = "cs", -- <localleader>ncs - (re)start cheatsheet viewer
+    cheatsheet_quit = "cq", -- <localleader>ncq - quit cheatsheet viewer
+    cheatsheet_status = "ci", -- <localleader>nci - cheatsheet status
+    cheatsheet_only = "co", -- <localleader>nco - show only cheatsheet (hide others)
     -- Other commands
     start = "s", -- <localleader>ns - start backend (if configured) and REPL
     quit = "q", -- <localleader>nq - quit all processes
@@ -79,7 +105,6 @@ local DEFAULTS = {
     info = "i", -- <localleader>ni - show info/status for all components
     panic = "p", -- <localleader>np - panic (stop playback)
     toggle = "k", -- <localleader>nk - toggle playback
-    config = "c", -- <localleader>nc - edit config
     help = "?", -- <localleader>n? - show help
     at = "n", -- <localleader>nn - send code
   },
@@ -113,6 +138,7 @@ local state = {
     monitor = { buffer = nil, process = nil },
     backend = { buffer = nil, process = nil },
     logs = { buffer = nil, process = nil },
+    cheatsheet = { buffer = nil, process = nil }, -- cheatsheet is buffer-only (process = nil)
   },
   -- Shared state
   resolved_python = nil,
@@ -155,7 +181,12 @@ end
 -- ==============================================================================
 local function get_subprocess_status(name)
   local subprocess = state.subprocesses[name]
-  if subprocess and subprocess.process then
+  local component_type = get_component_type(name)
+
+  if component_type == "buffer" then
+    -- Buffer-only component, check if buffer exists and is valid
+    return (subprocess and subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer)) and "open" or "closed"
+  elseif component_type == "process" and subprocess and subprocess.process then
     local status_info = subprocess.process:status()
     return status_info.is_running and "running" or "stopped"
   end
@@ -168,8 +199,10 @@ local function quit_subprocess(name)
     return false
   end
 
-  -- Stop the process
-  if subprocess.process then
+  local component_type = get_component_type(name)
+
+  -- Stop the process (only for process components)
+  if component_type == "process" and subprocess.process then
     subprocess.process:stop()
     subprocess.process = nil
   end
@@ -182,9 +215,15 @@ local function quit_subprocess(name)
         vim.api.nvim_win_close(win, false)
       end
     end
-    -- Delete buffer
-    pcall(vim.api.nvim_buf_delete, subprocess.buffer, { force = true })
-    subprocess.buffer = nil
+    -- Delete buffer (for buffer components, just close windows; for process components, force delete)
+    if component_type == "buffer" then
+      -- For buffer components, just close the windows, the buffer can remain
+      subprocess.buffer = nil
+    else
+      -- For process components, force delete the buffer
+      pcall(vim.api.nvim_buf_delete, subprocess.buffer, { force = true })
+      subprocess.buffer = nil
+    end
   end
 
   return true
@@ -458,6 +497,67 @@ end
 -- ==============================================================================
 -- Subprocess Starters
 -- ==============================================================================
+
+local function start_buffer_component(component, args)
+  local subprocess = state.subprocesses[component]
+  local original_win = vim.api.nvim_get_current_win()
+
+  -- Clean up any existing buffer for this component
+  if subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
+    local wins = vim.fn.win_findbuf(subprocess.buffer)
+    for _, win in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, false)
+      end
+    end
+    pcall(vim.api.nvim_buf_delete, subprocess.buffer, { force = true })
+    subprocess.buffer = nil
+  end
+
+  -- Set up window layout for the new buffer component
+  if window.ensure_group_visible(state, args) then
+    -- Group window exists, add a split within it
+    local group_buffers = window.get_group_buffers(state)
+    if #group_buffers > 0 then
+      vim.api.nvim_set_current_win(state.group_win)
+      local split_dir = window.get_split_direction(args.config.split)
+      vim.cmd(window.create_split_command(split_dir, true))
+    end
+  else
+    -- No group window, create it
+    vim.api.nvim_set_current_win(original_win)
+    window.create_group_split(state, args)
+  end
+
+  -- Handle different buffer components
+  if component == "cheatsheet" then
+    -- Find and open the cheatsheet file
+    local resolved_source_path = state.resolved_source_path or resolve_source_path(args.config.source_path)
+    local cheatsheet_path = resolved_source_path .. "/CHEATSHEET.md"
+
+    if not file_exists(cheatsheet_path) then
+      vim.notify("CHEATSHEET.md not found at: " .. cheatsheet_path, vim.log.levels.WARN)
+      vim.api.nvim_set_current_win(original_win)
+      return nil
+    end
+
+    -- Create and display new buffer for cheatsheet
+    subprocess.buffer = vim.api.nvim_create_buf(false, false)
+    vim.api.nvim_set_current_buf(subprocess.buffer)
+
+    -- Load the cheatsheet file
+    vim.cmd("edit " .. vim.fn.fnameescape(cheatsheet_path))
+    subprocess.buffer = vim.api.nvim_get_current_buf()
+
+    -- Set buffer options for read-only viewing
+    vim.api.nvim_buf_set_option(subprocess.buffer, "readonly", true)
+    vim.api.nvim_buf_set_option(subprocess.buffer, "modifiable", false)
+  end
+
+  vim.api.nvim_set_current_win(original_win) -- Return to original window
+  return subprocess
+end
+
 local function start_component(component, args, extra_args)
   if component == "repl" then
     -- Resolve source path and python binary if not already done
@@ -542,6 +642,11 @@ local function start_component(component, args, extra_args)
 
     local cmd = "tail -f " .. vim.fn.shellescape(log_path)
     return start_subprocess("logs", args, cmd)
+  else
+    local component_type = get_component_type(component)
+    if component_type == "buffer" then
+      return start_buffer_component(component, args)
+    end
   end
 
   return nil
@@ -1277,7 +1382,7 @@ local function quit_all_processes(config)
   end
 
   -- Hide group window
-  window.hide_group(state, COMPONENTS)
+  window.hide_group(state, get_component_names())
 
   if #processes_quit > 0 then
     vim.notify("Quit: " .. table.concat(processes_quit, ", "), vim.log.levels.INFO)
@@ -1331,6 +1436,7 @@ local function open_config()
 
   vim.cmd("edit " .. vim.fn.fnameescape(config_path))
 end
+
 
 -- All window management functions are now accessible through wrapper functions above
 
@@ -1408,7 +1514,7 @@ function M.setup(user_args)
       "  :" .. prefix .. "Info    - Show status of all components",
       "  :" .. prefix .. "Hide    - Toggle show/hide all buffers",
       "",
-      "Component Commands (Repl, Monitor, Backend, Logs):",
+      "Component Commands (Repl, Monitor, Backend, Logs, Cheatsheet):",
       "  :" .. prefix .. "[Component]Start   - (Re)start component",
       "  :" .. prefix .. "[Component]Quit    - Quit component",
       "  :" .. prefix .. "[Component]Hide    - Toggle show/hide component",
@@ -1435,10 +1541,6 @@ function M.setup(user_args)
     vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", ":close<CR>", { noremap = true, silent = true })
   end
 
-  local config_fn = function()
-    local config_path = vim.fn.stdpath("config") .. "/lua/plugins/minipat.lua"
-    vim.cmd("edit " .. vim.fn.fnameescape(config_path))
-  end
 
   -- Remove old backend functions since we're using the unified system
 
@@ -1502,16 +1604,22 @@ function M.setup(user_args)
   end
 
   -- Component Commands
-  for _, component in ipairs(COMPONENTS) do
+  for component, component_type in pairs(COMPONENTS) do
     local title_case = component:gsub("^%l", string.upper)
     local extra_args_support = component == "repl" -- Only REPL supports extra args
 
-    create_start_command(title_case .. "Start", "Start " .. component, function(args, extra_args)
-      return start_component(component, args, extra_args)
-    end, extra_args_support)
-    create_quit_command(title_case .. "Quit", "Quit " .. component, component)
+    if component_type == "process" then
+      -- Process components get full command set
+      create_start_command(title_case .. "Start", "Start " .. component, function(args, extra_args)
+        return start_component(component, args, extra_args)
+      end, extra_args_support)
+      create_quit_command(title_case .. "Quit", "Quit " .. component, component)
+      create_status_command(title_case .. "Status", title_case .. " status", component)
+    end
+    -- Buffer components only get hide/toggle (no start/quit/status commands)
+
+    -- All components get hide/toggle command
     create_toggle_command(title_case .. "Hide", "Toggle " .. component, component)
-    create_status_command(title_case .. "Status", title_case .. " status", component)
   end
 
   -- Main Commands
@@ -1533,7 +1641,7 @@ function M.setup(user_args)
   end, { desc = "Show status" })
 
   vim.api.nvim_create_user_command(prefix .. "Hide", function()
-    local result = window.toggle_all_buffers(state, args, start_component, COMPONENTS)
+    local result = window.toggle_all_buffers(state, args, start_component, get_component_names())
     if result then
       vim.notify("All buffers " .. result, vim.log.levels.INFO)
     end
@@ -1545,7 +1653,6 @@ function M.setup(user_args)
   end, { desc = "Stop playback" })
   vim.api.nvim_create_user_command(prefix .. "Toggle", toggle_fn, { desc = "Toggle playback" })
   vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "Send code", nargs = "+" })
-  vim.api.nvim_create_user_command(prefix .. "Config", config_fn, { desc = "Edit config" })
   vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "Show help" })
 
   -- Legacy Commands (for compatibility)
@@ -1589,7 +1696,7 @@ function M.setup(user_args)
 
     if args.global_keymaps and args.global_keymaps.hide then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, function()
-        local result = window.toggle_all_buffers(state, args, start_component, COMPONENTS)
+        local result = window.toggle_all_buffers(state, args, start_component, get_component_names())
         if result then
           vim.notify("All buffers " .. result, vim.log.levels.INFO)
         end
@@ -1598,7 +1705,7 @@ function M.setup(user_args)
 
     if args.global_keymaps and args.global_keymaps.all then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.all, function()
-        local shown_count = window.show_all_started(state, args, start_component, COMPONENTS)
+        local shown_count = window.show_all_started(state, args, start_component, get_component_names())
         if shown_count > 0 then
           vim.notify("Showed " .. shown_count .. " started components", vim.log.levels.INFO)
         else
@@ -1621,9 +1728,6 @@ function M.setup(user_args)
     end
     if args.global_keymaps and args.global_keymaps.toggle then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.toggle, toggle_fn, { desc = "Toggle playback" })
-    end
-    if args.global_keymaps and args.global_keymaps.config then
-      vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, config_fn, { desc = "Edit config" })
     end
     if args.global_keymaps and args.global_keymaps.help then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.help, help_fn, { desc = "Show help" })
@@ -1648,13 +1752,14 @@ function M.setup(user_args)
     end
 
     -- Component keymaps
-    for _, component in ipairs(COMPONENTS) do
+    for component, component_type in pairs(COMPONENTS) do
       local hide_key = component .. "_hide"
       local start_key = component .. "_start"
       local quit_key = component .. "_quit"
       local status_key = component .. "_status"
       local only_key = component .. "_only"
 
+      -- All components get hide/toggle keymap
       if args.global_keymaps and args.global_keymaps[hide_key] then
         vim.keymap.set("n", leader_prefix .. args.global_keymaps[hide_key], function()
           local result = window.toggle_subprocess_visibility(component, state, args, start_component)
@@ -1664,29 +1769,35 @@ function M.setup(user_args)
         end, { desc = "Toggle " .. component })
       end
 
-      if args.global_keymaps and args.global_keymaps[start_key] then
-        vim.keymap.set("n", leader_prefix .. args.global_keymaps[start_key], function()
-          start_component(component, args)
-        end, { desc = "Start " .. component })
-      end
+      -- Only process components get start/quit/status keymaps
+      if component_type == "process" then
+        if args.global_keymaps and args.global_keymaps[start_key] then
+          vim.keymap.set("n", leader_prefix .. args.global_keymaps[start_key], function()
+            start_component(component, args)
+          end, { desc = "Start " .. component })
+        end
 
-      if args.global_keymaps and args.global_keymaps[quit_key] then
-        vim.keymap.set("n", leader_prefix .. args.global_keymaps[quit_key], function()
-          quit_subprocess(component)
-          vim.notify(component:gsub("^%l", string.upper) .. " quit", vim.log.levels.INFO)
-        end, { desc = "Quit " .. component })
-      end
+        if args.global_keymaps and args.global_keymaps[quit_key] then
+          vim.keymap.set("n", leader_prefix .. args.global_keymaps[quit_key], function()
+            quit_subprocess(component)
+            vim.notify(component:gsub("^%l", string.upper) .. " quit", vim.log.levels.INFO)
+          end, { desc = "Quit " .. component })
+        end
 
-      if args.global_keymaps and args.global_keymaps[status_key] then
-        vim.keymap.set("n", leader_prefix .. args.global_keymaps[status_key], function()
-          local status = get_subprocess_status(component)
-          vim.notify(component:gsub("^%l", string.upper) .. " status: " .. status, vim.log.levels.INFO)
-        end, { desc = component:gsub("^%l", string.upper) .. " status" })
+        if args.global_keymaps and args.global_keymaps[status_key] then
+          vim.keymap.set("n", leader_prefix .. args.global_keymaps[status_key], function()
+            local status = get_subprocess_status(component)
+            vim.notify(component:gsub("^%l", string.upper) .. " status: " .. status, vim.log.levels.INFO)
+          end, { desc = component:gsub("^%l", string.upper) .. " status" })
+        end
       end
+      -- Buffer components only get hide/toggle keymaps (no start/quit/status)
 
+      -- All components get "only" keymap
       if args.global_keymaps and args.global_keymaps[only_key] then
         vim.keymap.set("n", leader_prefix .. args.global_keymaps[only_key], function()
-          local hidden_count = window.hide_all_except(component, state, args, start_component, COMPONENTS)
+          local component_names = get_component_names()
+          local hidden_count = window.hide_all_except(component, state, args, start_component, component_names)
           if hidden_count > 0 then
             vim.notify(
               component:gsub("^%l", string.upper) .. " only (hid " .. hidden_count .. " others)",
