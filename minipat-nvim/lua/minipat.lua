@@ -157,6 +157,15 @@ local state = {
 -- Utility Functions
 -- ==============================================================================
 
+-- Safe window navigation
+local function safe_set_current_win(win)
+  if win and vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_set_current_win(win)
+    return true
+  end
+  return false
+end
+
 -- File system utilities
 local function file_exists(path)
   local stat = vim.loop.fs_stat(path)
@@ -247,13 +256,13 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
     -- Group window exists, add a split within it
     local group_buffers = window.get_group_buffers(state)
     if #group_buffers > 0 then
-      vim.api.nvim_set_current_win(state.group_win)
+      safe_set_current_win(state.group_win)
       local split_dir = window.get_split_direction(args.config.split)
       vim.cmd(window.create_split_command(split_dir, true))
     end
   else
     -- No group window, create it
-    vim.api.nvim_set_current_win(original_win)
+    safe_set_current_win(original_win)
     window.create_group_split(state, args)
   end
 
@@ -391,7 +400,8 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
     })
   end
 
-  vim.api.nvim_set_current_win(original_win) -- Return to original window
+  -- Return to original window if it's still valid
+  safe_set_current_win(original_win)
   return subprocess
 end
 
@@ -621,7 +631,7 @@ local function start_buffer_component(component, args)
     vim.api.nvim_buf_set_option(subprocess.buffer, "modifiable", false)
   end
 
-  vim.api.nvim_set_current_win(original_win) -- Return to original window
+  safe_set_current_win(original_win) -- Return to original window
   return subprocess
 end
 
@@ -719,50 +729,29 @@ local function start_component(component, args, extra_args)
   return nil
 end
 
--- Legacy function for graceful REPL quit
+-- Graceful REPL quit using unified system
 local function quit_repl_gracefully(config, callback)
-  if not state.booted then
+  local repl = state.subprocesses.repl
+  if not repl or not repl.process then
     if callback then
       callback()
     end
     return
   end
 
-  -- Register callback to be called when process exits
-  if callback then
-    state.quit_callback = callback
-  end
+  -- Send exit command to gracefully quit the REPL
+  M.send(config.minipat.nucleus_var .. ".exit()")
 
-  if state.minipat_process then
-    local process_to_quit = state.minipat_process -- Capture the process we want to quit
-    -- Send exit command to gracefully quit the REPL
-    M.send(config.minipat.nucleus_var .. ".exit()")
+  -- Wait for process to exit gracefully
+  local wait_time = config.exit_wait or 1000
 
-    -- Wait for process to exit gracefully
-    local wait_time = config.exit_wait or 1000
-
-    vim.defer_fn(function()
-      -- Only kill the specific process we intended to quit, not whatever might be in state now
-      if state.minipat_process == process_to_quit then
-        process_to_quit:stop(true) -- Force stop
-        -- Give it a moment to fully clean up
-        vim.defer_fn(function()
-          -- Force cleanup if callback wasn't called
-          if state.quit_callback then
-            local cb = state.quit_callback
-            state.quit_callback = nil
-            cb()
-          end
-        end, 100)
-      end
-    end, wait_time)
-  else
-    -- No process running, call callback immediately
+  vim.defer_fn(function()
+    -- Force quit if still running
+    quit_subprocess("repl")
     if callback then
       callback()
     end
-  end
-  state.booted = false
+  end, wait_time)
 end
 
 -- Helper function to start backend if configured and not already running
@@ -803,22 +792,23 @@ local function boot_minipat_repl(args, extra_args)
         end
       else
         -- Group is hidden, create the group split from original window
-        vim.api.nvim_set_current_win(original_win)
+        safe_set_current_win(original_win)
         window.create_group_split(state, args)
       end
-      boot_minipat(args, extra_args)
+      start_component("repl", args, extra_args)
       -- Return to original editor window
-      vim.api.nvim_set_current_win(original_win)
-      state.booted = true
+      safe_set_current_win(original_win)
     end, 200) -- 200ms delay
   end
 
-  -- If already booted, quit the existing process first
-  if state.booted then
+  -- If already running, quit the existing process first
+  local repl = state.subprocesses.repl
+  if repl and repl.process then
     if args.config.debug then
       print("Existing minipat process found, quitting it first...")
     end
-    quit_minipat(args, do_boot)
+    quit_subprocess("repl")
+    vim.defer_fn(do_boot, 200)
   else
     do_boot()
   end
@@ -1696,6 +1686,10 @@ function M.setup(user_args)
     local new_config = get_current_config(true)
     vim.notify("Configuration reloaded from minipat_config.lua", vim.log.levels.INFO)
   end, { desc = "Reload configuration from minipat_config.lua" })
+  vim.api.nvim_create_user_command(prefix .. "Reflow", function()
+    window.reflow_windows_in_group(state)
+    vim.notify("Windows reflowed", vim.log.levels.INFO)
+  end, { desc = "Reflow windows in group to equal sizes" })
 
   -- Legacy Commands (for compatibility)
   vim.api.nvim_create_user_command(prefix .. "Boot", function()

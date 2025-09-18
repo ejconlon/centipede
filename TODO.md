@@ -24,17 +24,18 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#15}
+Next available task ID: {#16}
 
 ### Active
 
-- {#13} Reflow windows when hiding/showing {nvim}
 
 ### Review
 
+- {#13} Reflow windows when hiding/showing {nvim}
 
 ### Upcoming
 
+- {#15} Pass only necessary state to window and process functions {nvim}
 - {#14} Add cheatsheet param to config for custom cheatsheet path (default nil) {nvim}
 
 ### Done

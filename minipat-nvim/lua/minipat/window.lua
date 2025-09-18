@@ -4,6 +4,15 @@
 
 local M = {}
 
+-- Safe window navigation
+local function safe_set_current_win(win)
+  if win and vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_set_current_win(win)
+    return true
+  end
+  return false
+end
+
 -- ==============================================================================
 -- Window and Split Utilities
 -- ==============================================================================
@@ -40,6 +49,80 @@ function M.create_split_command(split_dir, equal_size)
     end
   end
   return base_cmd
+end
+
+-- ==============================================================================
+-- Window Reflow and Equalization
+-- ==============================================================================
+
+function M.reflow_windows_in_group(state)
+  if not state.group_win or not vim.api.nvim_win_is_valid(state.group_win) then
+    return
+  end
+
+  local group_buffers = M.get_group_buffers(state)
+  if #group_buffers == 0 then
+    return
+  end
+
+  -- Get all windows displaying group buffers
+  local group_windows = {}
+  for _, buf in ipairs(group_buffers) do
+    local wins = vim.fn.win_findbuf(buf)
+    for _, win in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(win) and win ~= state.group_win then
+        table.insert(group_windows, win)
+      end
+    end
+  end
+
+  if #group_windows <= 1 then
+    return -- No need to reflow with 0 or 1 window
+  end
+
+  -- Determine the split direction used by the group
+  local split_dir = state.group_split_dir or "v"
+
+  -- Equalize window sizes based on split direction
+  if split_dir == "v" then
+    -- Vertical splits - equalize widths
+    local total_width = vim.api.nvim_win_get_width(state.group_win)
+    local target_width = math.floor(total_width / #group_windows)
+
+    for i, win in ipairs(group_windows) do
+      if vim.api.nvim_win_is_valid(win) then
+        -- Don't resize the last window to avoid rounding issues
+        if i < #group_windows then
+          vim.api.nvim_win_set_width(win, target_width)
+        end
+      end
+    end
+  else
+    -- Horizontal splits - equalize heights
+    local total_height = vim.api.nvim_win_get_height(state.group_win)
+    local target_height = math.floor(total_height / #group_windows)
+
+    for i, win in ipairs(group_windows) do
+      if vim.api.nvim_win_is_valid(win) then
+        -- Don't resize the last window to avoid rounding issues
+        if i < #group_windows then
+          vim.api.nvim_win_set_height(win, target_height)
+        end
+      end
+    end
+  end
+end
+
+function M.equalize_group_windows(state)
+  -- Use vim's built-in equalize functionality as a fallback
+  if state.group_win and vim.api.nvim_win_is_valid(state.group_win) then
+    local current_win = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(state.group_win)
+    vim.cmd("wincmd =")
+    if vim.api.nvim_win_is_valid(current_win) then
+      vim.api.nvim_set_current_win(current_win)
+    end
+  end
 end
 
 -- ==============================================================================
@@ -114,6 +197,10 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
         vim.api.nvim_win_close(win, false)
       end
     end
+    -- Reflow remaining windows after hiding
+    vim.defer_fn(function()
+      M.reflow_windows_in_group(state)
+    end, 50)
     return "hidden"
   else
     if state.group_hidden then
@@ -136,8 +223,12 @@ function M.toggle_subprocess_visibility(name, state, args, start_component_fn)
         vim.cmd(M.create_split_command(split_dir, true))
       end
       vim.api.nvim_set_current_buf(subprocess.buffer)
+      -- Reflow windows after showing
+      vim.defer_fn(function()
+        M.reflow_windows_in_group(state)
+      end, 50)
     end
-    vim.api.nvim_set_current_win(original_win)
+    safe_set_current_win(original_win)
     return "shown"
   end
 end
@@ -171,6 +262,13 @@ function M.hide_all_except(keep_component, state, args, start_component_fn, comp
     start_component_fn(keep_component, args)
   end
 
+  -- Reflow windows after hiding all except the kept component
+  if hidden_count > 0 then
+    vim.defer_fn(function()
+      M.reflow_windows_in_group(state)
+    end, 50)
+  end
+
   return hidden_count
 end
 
@@ -188,6 +286,14 @@ function M.show_all_started(state, args, start_component_fn, components)
       end
     end
   end
+
+  -- Reflow windows after showing all started components
+  if shown_count > 0 then
+    vim.defer_fn(function()
+      M.reflow_windows_in_group(state)
+    end, 100) -- Slightly longer delay since multiple windows may be created
+  end
+
   return shown_count
 end
 
@@ -196,14 +302,25 @@ function M.show_group(state, args, start_component_fn)
     return
   end
 
+  local shown_count = 0
   for _, component in ipairs(state.previously_visible_components) do
     local subprocess = state.subprocesses[component]
     if subprocess and subprocess.buffer and vim.api.nvim_buf_is_valid(subprocess.buffer) then
       local wins = vim.fn.win_findbuf(subprocess.buffer)
       if #wins == 0 then
-        M.toggle_subprocess_visibility(component, state, args, start_component_fn)
+        local result = M.toggle_subprocess_visibility(component, state, args, start_component_fn)
+        if result == "shown" then
+          shown_count = shown_count + 1
+        end
       end
     end
+  end
+
+  -- Reflow windows after showing the group
+  if shown_count > 0 then
+    vim.defer_fn(function()
+      M.reflow_windows_in_group(state)
+    end, 100)
   end
 end
 
