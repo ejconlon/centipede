@@ -51,7 +51,7 @@ local DEFAULTS = {
       bpc = 4, -- Initial beats per cycle for minipat (sets MINIPAT_BPC env var)
     },
     backend = {
-      command = "fluidsynth", -- Custom backend command to run (e.g., "my-backend --port 8080")
+      command = nil, -- Custom backend command to run (e.g., "my-backend --port 8080")
       cwd = nil, -- Working directory for backend (defaults to source_path)
       env = {}, -- Additional environment variables for backend
       pidfile = nil, -- Path to pidfile for tracking backend process (defaults to /tmp/minipat-backend.pid)
@@ -148,6 +148,9 @@ local state = {
   group_split_dir = "v", -- Direction for the group split
   group_win = nil, -- Main group window
   previously_visible_components = {}, -- Components that were visible before hiding
+  -- Configuration cache
+  cached_config = nil,
+  initial_user_args = nil,
 }
 
 -- ==============================================================================
@@ -395,6 +398,31 @@ end
 -- ==============================================================================
 -- Configuration Resolution
 -- ==============================================================================
+
+-- Load configuration from minipat_config.lua in cwd if it exists
+local function load_cwd_config()
+  local cwd = vim.fn.getcwd()
+  local config_path = cwd .. "/minipat_config.lua"
+
+  if not file_exists(config_path) then
+    return nil
+  end
+
+  -- Try to load the config file
+  local ok, config = pcall(dofile, config_path)
+  if not ok then
+    vim.notify("Error loading minipat_config.lua: " .. tostring(config), vim.log.levels.ERROR)
+    return nil
+  end
+
+  if type(config) ~= "table" then
+    vim.notify("minipat_config.lua must return a table", vim.log.levels.ERROR)
+    return nil
+  end
+
+  return config
+end
+
 local function resolve_source_path(source_path)
   local plugin_dir = get_plugin_dir()
 
@@ -439,12 +467,8 @@ end
 
 -- Validate backend configuration
 local function validate_backend_config(backend_config)
-  if not backend_config.command then
+  if not backend_config.command or backend_config.command == "" then
     return true, nil
-  end
-
-  if backend_config.command == "" then
-    return false, "Backend command is empty"
   end
 
   -- Check if cwd exists
@@ -462,6 +486,49 @@ local function validate_backend_config(backend_config)
 
   return true, nil
 end
+
+-- Get current configuration (reload from file if needed)
+local function get_current_config(force_reload)
+  if not force_reload and state.cached_config then
+    return state.cached_config
+  end
+
+  -- Start with defaults and initial user args
+  local args = vim.tbl_deep_extend("force", DEFAULTS, state.initial_user_args or {})
+
+  -- Load and apply local configuration from minipat_config.lua in cwd if it exists
+  local cwd_config = load_cwd_config()
+  if cwd_config then
+    args = vim.tbl_deep_extend("force", args, cwd_config)
+  end
+
+  -- Resolve and validate backend configuration
+  local resolved_source_path = resolve_source_path(args.config.source_path)
+  local backend_config = resolve_backend_config(args.config.backend, resolved_source_path)
+  local backend_valid, backend_error = validate_backend_config(backend_config)
+
+  if not backend_valid then
+    vim.notify("Backend configuration error: " .. backend_error, vim.log.levels.ERROR)
+    backend_config.command = nil
+  end
+
+  -- Store resolved backend config
+  args.config.backend = backend_config
+
+  -- Cache the result
+  state.cached_config = args
+
+  return args
+end
+
+-- Invalidate cached configuration (force reload on next use)
+local function invalidate_config_cache()
+  state.cached_config = nil
+  -- Also clear resolved paths to force re-resolution
+  state.resolved_python = nil
+  state.resolved_source_path = nil
+end
+
 
 -- Get the python binary from source_path/.venv
 local function get_python_binary(source_path)
@@ -787,8 +854,9 @@ function M.send_reg(register)
   M.send(text)
 end
 
-local function help_minipat(args)
-  local prefix = args.config.command_prefix
+local function help_minipat()
+  local current_config = get_current_config(false)
+  local prefix = current_config.config.command_prefix
   local help_text = {
     "Minipat Neovim Plugin Help",
     "===========================",
@@ -803,7 +871,7 @@ local function help_minipat(args)
     "",
     "REPL Commands:",
     "  :" .. prefix .. "ReplStart   - (Re)start the minipat REPL",
-    "  :" .. prefix .. "ReplQuit    - Quit minipat (sends " .. args.config.minipat.nucleus_var .. ".exit())",
+    "  :" .. prefix .. "ReplQuit    - Quit minipat (sends " .. current_config.config.minipat.nucleus_var .. ".exit())",
     "  :" .. prefix .. "ReplHide    - Toggle show/hide REPL buffer",
     "  :" .. prefix .. "ReplStatus  - Show REPL status",
     "",
@@ -830,89 +898,89 @@ local function help_minipat(args)
     "  :" .. prefix .. "LogsStatus  - Show logs status",
     "",
     "Other Commands:",
-    "  :" .. prefix .. "Panic   - Panic minipat (sends " .. args.config.minipat.nucleus_var .. ".panic())",
+    "  :" .. prefix .. "Panic   - Panic minipat (sends " .. current_config.config.minipat.nucleus_var .. ".panic())",
     "  :"
       .. prefix
       .. "Toggle  - Toggle playback ("
-      .. args.config.minipat.nucleus_var
+      .. current_config.config.minipat.nucleus_var
       .. ".playing = not "
-      .. args.config.minipat.nucleus_var
+      .. current_config.config.minipat.nucleus_var
       .. ".playing)",
     "  :" .. prefix .. "At <code> - Send Python code to minipat (boots if needed)",
     "  :" .. prefix .. "Config  - Edit the minipat configuration file",
     "  :" .. prefix .. "Help    - Show this help",
     "",
-    "Keybindings (in *." .. args.config.file_ext .. " files):",
-    "  " .. args.keymaps.send_line .. "  - Send current line to minipat",
-    "  " .. args.keymaps.send_visual .. "  - (Visual mode) Send selection to minipat",
+    "Keybindings (in *." .. current_config.config.file_ext .. " files):",
+    "  " .. current_config.keymaps.send_line .. "  - Send current line to minipat",
+    "  " .. current_config.keymaps.send_visual .. "  - (Visual mode) Send selection to minipat",
     "  "
-      .. args.keymaps.panic
+      .. current_config.keymaps.panic
       .. "  - Panic (pause, reset cycle, clear patterns) - "
-      .. args.config.minipat.nucleus_var
+      .. current_config.config.minipat.nucleus_var
       .. ".panic()",
     "",
     "Global Keybindings:",
     "  Main:",
     "    "
-      .. args.global_keymaps.leader_prefix
-      .. args.global_keymaps.start
+      .. current_config.global_keymaps.leader_prefix
+      .. current_config.global_keymaps.start
       .. "  - Start backend (if configured) and REPL",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.quit .. "  - Quit all processes",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.hide .. "  - Toggle show/hide all buffers",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.quit .. "  - Quit all processes",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.hide .. "  - Toggle show/hide all buffers",
     "    "
-      .. args.global_keymaps.leader_prefix
-      .. args.global_keymaps.info
+      .. current_config.global_keymaps.leader_prefix
+      .. current_config.global_keymaps.info
       .. "  - Show info/status for all components",
     "  REPL:",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_hide .. "  - Toggle show/hide REPL",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_start .. "  - (Re)start REPL",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_quit .. "  - Quit REPL",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.repl_status .. "  - REPL status",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.repl_hide .. "  - Toggle show/hide REPL",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.repl_start .. "  - (Re)start REPL",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.repl_quit .. "  - Quit REPL",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.repl_status .. "  - REPL status",
     "  Monitor:",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_hide .. "  - Toggle show/hide monitor",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_start .. "  - (Re)start monitor",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_quit .. "  - Quit monitor",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.monitor_status .. "  - Monitor status",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.monitor_hide .. "  - Toggle show/hide monitor",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.monitor_start .. "  - (Re)start monitor",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.monitor_quit .. "  - Quit monitor",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.monitor_status .. "  - Monitor status",
     "  Backend:",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_hide .. "  - Toggle show/hide backend",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_start .. "  - (Re)start backend",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_quit .. "  - Quit backend",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.backend_status .. "  - Backend status",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.backend_hide .. "  - Toggle show/hide backend",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.backend_start .. "  - (Re)start backend",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.backend_quit .. "  - Quit backend",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.backend_status .. "  - Backend status",
     "  Logs:",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_hide .. "  - Toggle show/hide logs",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_start .. "  - (Re)start logs viewer",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_quit .. "  - Quit logs viewer",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.logs_status .. "  - Logs status",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.logs_hide .. "  - Toggle show/hide logs",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.logs_start .. "  - (Re)start logs viewer",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.logs_quit .. "  - Quit logs viewer",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.logs_status .. "  - Logs status",
     "  Other:",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.panic .. "  - Panic (stop playback)",
-    "    " .. args.global_keymaps.leader_prefix .. args.global_keymaps.toggle .. "  - Toggle playback",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.config .. "  - Edit config file",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.help .. "  - Show this help",
-    "  " .. args.global_keymaps.leader_prefix .. args.global_keymaps.at .. "  - Send code to minipat (MpAt)",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.panic .. "  - Panic (stop playback)",
+    "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.toggle .. "  - Toggle playback",
+    "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.config .. "  - Edit config file",
+    "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.help .. "  - Show this help",
+    "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.at .. "  - Send code to minipat (MpAt)",
     "",
     "Configuration:",
-    "  Source path: " .. (args.config.source_path or "(auto-detected)"),
+    "  Source path: " .. (current_config.config.source_path or "(auto-detected)"),
     "  Split mode: "
-      .. (window.get_split_direction(args.config.split) == "v" and "vertical" or "horizontal")
-      .. (args.config.split == nil and " (auto)" or ""),
-    "  Autoclose: " .. tostring(args.config.autoclose),
-    "  Debug mode: " .. tostring(args.config.debug),
+      .. (window.get_split_direction(current_config.config.split) == "v" and "vertical" or "horizontal")
+      .. (current_config.config.split == nil and " (auto)" or ""),
+    "  Autoclose: " .. tostring(current_config.config.autoclose),
+    "  Debug mode: " .. tostring(current_config.config.debug),
     "",
     "Minipat Config:",
-    "  Nucleus var: " .. (args.config.minipat and args.config.minipat.nucleus_var or "(not set)"),
-    "  Port: " .. (args.config.minipat and args.config.minipat.port or "(not set)"),
-    "  Log path: " .. (args.config.minipat and args.config.minipat.log_path or "(not set)"),
-    "  Log level: " .. (args.config.minipat and args.config.minipat.log_level or "(not set)"),
-    "  BPM: " .. (args.config.minipat and args.config.minipat.bpm and tostring(args.config.minipat.bpm) or "(not set)"),
-    "  BPC: " .. (args.config.minipat and args.config.minipat.bpc and tostring(args.config.minipat.bpc) or "(not set)"),
+    "  Nucleus var: " .. (current_config.config.minipat and current_config.config.minipat.nucleus_var or "(not set)"),
+    "  Port: " .. (current_config.config.minipat and current_config.config.minipat.port or "(not set)"),
+    "  Log path: " .. (current_config.config.minipat and current_config.config.minipat.log_path or "(not set)"),
+    "  Log level: " .. (current_config.config.minipat and current_config.config.minipat.log_level or "(not set)"),
+    "  BPM: " .. (current_config.config.minipat and current_config.config.minipat.bpm and tostring(current_config.config.minipat.bpm) or "(not set)"),
+    "  BPC: " .. (current_config.config.minipat and current_config.config.minipat.bpc and tostring(current_config.config.minipat.bpc) or "(not set)"),
     "",
     "Backend Config:",
-    "  Command: " .. (args.config.backend and args.config.backend.command or "(not set)"),
-    "  Working directory: " .. (args.config.backend and args.config.backend.cwd or "(not set)"),
-    "  Pidfile: " .. (args.config.backend and args.config.backend.pidfile or "(not set)"),
-    "  Autostart: " .. (args.config.backend and tostring(args.config.backend.autostart) or "false"),
-    "  Autostop: " .. (args.config.backend and tostring(args.config.backend.autostop) or "false"),
-    "  Restart on exit: " .. (args.config.backend and tostring(args.config.backend.restart_on_exit) or "false"),
+    "  Command: " .. (current_config.config.backend and current_config.config.backend.command or "(not set)"),
+    "  Working directory: " .. (current_config.config.backend and current_config.config.backend.cwd or "(not set)"),
+    "  Pidfile: " .. (current_config.config.backend and current_config.config.backend.pidfile or "(not set)"),
+    "  Autostart: " .. (current_config.config.backend and tostring(current_config.config.backend.autostart) or "false"),
+    "  Autostop: " .. (current_config.config.backend and tostring(current_config.config.backend.autostop) or "false"),
+    "  Restart on exit: " .. (current_config.config.backend and tostring(current_config.config.backend.restart_on_exit) or "false"),
   }
 
   -- Create a floating window for the help text
@@ -1445,31 +1513,24 @@ end
 -- ==============================================================================
 
 function M.setup(user_args)
-  local args = vim.tbl_deep_extend("force", DEFAULTS, user_args or {})
+  -- Store initial user args for later config reloading
+  state.initial_user_args = user_args or {}
 
-  -- Resolve and validate backend configuration
-  local resolved_source_path = resolve_source_path(args.config.source_path)
-  local backend_config = resolve_backend_config(args.config.backend, resolved_source_path)
-  local backend_valid, backend_error = validate_backend_config(backend_config)
-
-  if not backend_valid then
-    vim.notify("Backend configuration error: " .. backend_error, vim.log.levels.ERROR)
-    backend_config.command = nil
-  end
-
-  -- Store resolved backend config for later use
-  args.config.backend = backend_config
+  -- Get initial configuration (this will also cache it)
+  local args = get_current_config(true)
 
   local boot_fn = function(fn_args)
     local extra_args = fn_args and fn_args["args"] or nil
-    boot_minipat_repl(args.config, extra_args)
+    local current_config = get_current_config(true)
+    boot_minipat_repl(current_config.config, extra_args)
   end
 
   local at_fn = function(fn_args)
     local repl = state.subprocesses.repl
     if not repl or not repl.process then
       local notify_id = vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
-      start_component("repl", args)
+      local current_config = get_current_config(true)
+      start_component("repl", current_config)
       -- Give minipat a moment to boot before sending code
       vim.defer_fn(function()
         vim.notify("", vim.log.levels.INFO, { replace = notify_id })
@@ -1488,57 +1549,23 @@ function M.setup(user_args)
 
   local toggle_fn = function()
     local repl = state.subprocesses.repl
+    local current_config = get_current_config(false)
     if not repl or not repl.process then
       local notify_id = vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
-      start_component("repl", args)
+      current_config = get_current_config(true)
+      start_component("repl", current_config)
       -- Give minipat a moment to boot before toggling
       vim.defer_fn(function()
         vim.notify("", vim.log.levels.INFO, { replace = notify_id })
-        M.send(args.config.minipat.nucleus_var .. ".playing = not " .. args.config.minipat.nucleus_var .. ".playing")
+        M.send(current_config.config.minipat.nucleus_var .. ".playing = not " .. current_config.config.minipat.nucleus_var .. ".playing")
       end, 1000) -- Wait 1 second for boot
     else
-      M.send(args.config.minipat.nucleus_var .. ".playing = not " .. args.config.minipat.nucleus_var .. ".playing")
+      M.send(current_config.config.minipat.nucleus_var .. ".playing = not " .. current_config.config.minipat.nucleus_var .. ".playing")
     end
   end
 
   local help_fn = function()
-    -- Create help text inline since help_minipat was removed
-    local prefix = args.config.command_prefix
-    local help_text = {
-      "Minipat Neovim Plugin Help",
-      "===========================",
-      "",
-      "Main Commands:",
-      "  :" .. prefix .. "Start   - Start backend (if configured) and REPL",
-      "  :" .. prefix .. "Quit    - Quit all processes",
-      "  :" .. prefix .. "Info    - Show status of all components",
-      "  :" .. prefix .. "Hide    - Toggle show/hide all buffers",
-      "",
-      "Component Commands (Repl, Monitor, Backend, Logs, Cheatsheet):",
-      "  :" .. prefix .. "[Component]Start   - (Re)start component",
-      "  :" .. prefix .. "[Component]Quit    - Quit component",
-      "  :" .. prefix .. "[Component]Hide    - Toggle show/hide component",
-      "  :" .. prefix .. "[Component]Status  - Show component status",
-    }
-
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_text)
-    vim.api.nvim_buf_set_option(buf, "modifiable", false)
-
-    local width = 60
-    local height = #help_text
-    local win = vim.api.nvim_open_win(buf, true, {
-      relative = "editor",
-      width = width,
-      height = height,
-      col = (vim.o.columns - width) / 2,
-      row = (vim.o.lines - height) / 2,
-      style = "minimal",
-      border = "rounded",
-    })
-
-    vim.api.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>", { noremap = true, silent = true })
-    vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", ":close<CR>", { noremap = true, silent = true })
+    help_minipat()
   end
 
 
@@ -1547,6 +1574,9 @@ function M.setup(user_args)
   -- These functions are no longer needed - using unified system
 
   local enter_fn = function()
+    -- Invalidate config cache when entering a minipat buffer to pick up any changes on next use
+    invalidate_config_cache()
+
     vim.cmd("set ft=python")
     vim.api.nvim_buf_set_option(0, "commentstring", "# %s")
 
@@ -1558,6 +1588,7 @@ function M.setup(user_args)
       end
     end)
 
+    -- Use initial args for keymaps (they won't change during runtime)
     for key, value in pairs(args.keymaps) do
       key_map(key, value, args.config)
     end
@@ -1573,8 +1604,9 @@ function M.setup(user_args)
     end
 
     vim.api.nvim_create_user_command(prefix .. name, function(fn_args)
+      local current_config = get_current_config(true)
       local extra_args = extra_args_support and fn_args and fn_args["args"] or nil
-      start_fn(args, extra_args)
+      start_fn(current_config, extra_args)
     end, opts)
   end
 
@@ -1587,7 +1619,8 @@ function M.setup(user_args)
 
   local function create_toggle_command(name, desc, process_name)
     vim.api.nvim_create_user_command(prefix .. name, function()
-      local result = window.toggle_subprocess_visibility(process_name, state, args, start_component)
+      local current_config = get_current_config(false)
+      local result = window.toggle_subprocess_visibility(process_name, state, current_config, start_component)
       if result then
         vim.notify(desc:gsub("Toggle ", "") .. " " .. result, vim.log.levels.INFO)
       else
@@ -1624,16 +1657,18 @@ function M.setup(user_args)
 
   -- Main Commands
   vim.api.nvim_create_user_command(prefix .. "Start", function()
+    local current_config = get_current_config(true)
     -- Start backend if configured
-    if args.config.backend and args.config.backend.command then
-      start_component("backend", args)
+    if current_config.config.backend and current_config.config.backend.command then
+      start_component("backend", current_config)
     end
     -- Start REPL
-    start_component("repl", args)
+    start_component("repl", current_config)
   end, { desc = "Start all", nargs = "*" })
 
   vim.api.nvim_create_user_command(prefix .. "Quit", function()
-    quit_all_processes(args.config)
+    local current_config = get_current_config(false)
+    quit_all_processes(current_config.config)
   end, { desc = "Quit all" })
 
   vim.api.nvim_create_user_command(prefix .. "Info", function()
@@ -1641,7 +1676,8 @@ function M.setup(user_args)
   end, { desc = "Show status" })
 
   vim.api.nvim_create_user_command(prefix .. "Hide", function()
-    local result = window.toggle_all_buffers(state, args, start_component, get_component_names())
+    local current_config = get_current_config(false)
+    local result = window.toggle_all_buffers(state, current_config, start_component, get_component_names())
     if result then
       vim.notify("All buffers " .. result, vim.log.levels.INFO)
     end
@@ -1649,19 +1685,26 @@ function M.setup(user_args)
 
   -- Other Commands
   vim.api.nvim_create_user_command(prefix .. "Panic", function()
-    panic_minipat(args.config)
+    local current_config = get_current_config(false)
+    panic_minipat(current_config.config)
   end, { desc = "Stop playback" })
   vim.api.nvim_create_user_command(prefix .. "Toggle", toggle_fn, { desc = "Toggle playback" })
   vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "Send code", nargs = "+" })
   vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "Show help" })
+  vim.api.nvim_create_user_command(prefix .. "ReloadConfig", function()
+    invalidate_config_cache()
+    local new_config = get_current_config(true)
+    vim.notify("Configuration reloaded from minipat_config.lua", vim.log.levels.INFO)
+  end, { desc = "Reload configuration from minipat_config.lua" })
 
   -- Legacy Commands (for compatibility)
   vim.api.nvim_create_user_command(prefix .. "Boot", function()
     vim.notify("MpBoot is deprecated, use MpStart instead", vim.log.levels.WARN)
-    if args.config.backend and args.config.backend.command then
-      start_component("backend", args)
+    local current_config = get_current_config(true)
+    if current_config.config.backend and current_config.config.backend.command then
+      start_component("backend", current_config)
     end
-    start_component("repl", args)
+    start_component("repl", current_config)
   end, { desc = "Deprecated", nargs = "*" })
 
   -- Set up global keymaps
@@ -1673,15 +1716,16 @@ function M.setup(user_args)
     -- Main keymaps
     if args.global_keymaps and args.global_keymaps.start then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.start, function()
+        local current_config = get_current_config(true)
         -- Start backend if configured
-        if args.config.backend and args.config.backend.command then
-          local ok, err = pcall(start_component, "backend", args)
+        if current_config.config.backend and current_config.config.backend.command then
+          local ok, err = pcall(start_component, "backend", current_config)
           if not ok then
             vim.notify("Error starting backend: " .. tostring(err), vim.log.levels.ERROR)
           end
         end
         -- Start REPL
-        local ok, err = pcall(start_component, "repl", args)
+        local ok, err = pcall(start_component, "repl", current_config)
         if not ok then
           vim.notify("Error starting REPL: " .. tostring(err), vim.log.levels.ERROR)
         end
@@ -1690,13 +1734,15 @@ function M.setup(user_args)
 
     if args.global_keymaps and args.global_keymaps.quit then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.quit, function()
-        quit_all_processes(args.config)
+        local current_config = get_current_config(false)
+        quit_all_processes(current_config.config)
       end, { desc = "Quit all" })
     end
 
     if args.global_keymaps and args.global_keymaps.hide then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.hide, function()
-        local result = window.toggle_all_buffers(state, args, start_component, get_component_names())
+        local current_config = get_current_config(false)
+        local result = window.toggle_all_buffers(state, current_config, start_component, get_component_names())
         if result then
           vim.notify("All buffers " .. result, vim.log.levels.INFO)
         end
@@ -1705,7 +1751,8 @@ function M.setup(user_args)
 
     if args.global_keymaps and args.global_keymaps.all then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.all, function()
-        local shown_count = window.show_all_started(state, args, start_component, get_component_names())
+        local current_config = get_current_config(false)
+        local shown_count = window.show_all_started(state, current_config, start_component, get_component_names())
         if shown_count > 0 then
           vim.notify("Showed " .. shown_count .. " started components", vim.log.levels.INFO)
         else
@@ -1723,7 +1770,8 @@ function M.setup(user_args)
     -- Other keymaps
     if args.global_keymaps and args.global_keymaps.panic then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.panic, function()
-        panic_minipat(args.config)
+        local current_config = get_current_config(false)
+        panic_minipat(current_config.config)
       end, { desc = "Panic minipat" })
     end
     if args.global_keymaps and args.global_keymaps.toggle then
@@ -1739,7 +1787,8 @@ function M.setup(user_args)
           local repl = state.subprocesses.repl
           if not repl or not repl.process then
             vim.notify("Minipat is not booted. Booting minipat first...", vim.log.levels.INFO)
-            start_component("repl", args)
+            local current_config = get_current_config(true)
+            start_component("repl", current_config)
             -- Give minipat a moment to boot before sending code
             vim.defer_fn(function()
               M.send(code)
@@ -1762,7 +1811,8 @@ function M.setup(user_args)
       -- All components get hide/toggle keymap
       if args.global_keymaps and args.global_keymaps[hide_key] then
         vim.keymap.set("n", leader_prefix .. args.global_keymaps[hide_key], function()
-          local result = window.toggle_subprocess_visibility(component, state, args, start_component)
+          local current_config = get_current_config(false)
+          local result = window.toggle_subprocess_visibility(component, state, current_config, start_component)
           if result then
             vim.notify(component:gsub("^%l", string.upper) .. " " .. result, vim.log.levels.INFO)
           end
@@ -1773,7 +1823,8 @@ function M.setup(user_args)
       if component_type == "process" then
         if args.global_keymaps and args.global_keymaps[start_key] then
           vim.keymap.set("n", leader_prefix .. args.global_keymaps[start_key], function()
-            start_component(component, args)
+            local current_config = get_current_config(true)
+            start_component(component, current_config)
           end, { desc = "Start " .. component })
         end
 
@@ -1796,8 +1847,9 @@ function M.setup(user_args)
       -- All components get "only" keymap
       if args.global_keymaps and args.global_keymaps[only_key] then
         vim.keymap.set("n", leader_prefix .. args.global_keymaps[only_key], function()
+          local current_config = get_current_config(false)
           local component_names = get_component_names()
-          local hidden_count = window.hide_all_except(component, state, args, start_component, component_names)
+          local hidden_count = window.hide_all_except(component, state, current_config, start_component, component_names)
           if hidden_count > 0 then
             vim.notify(
               component:gsub("^%l", string.upper) .. " only (hid " .. hidden_count .. " others)",
