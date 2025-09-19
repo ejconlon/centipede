@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
-
 import pytest
 
 from minipat.kit import (
@@ -319,22 +317,6 @@ class TestKitIntegration:
         # This is a basic test - full integration would require
         # more complex stream evaluation
         assert stream is not None
-
-    def test_deprecated_kit_dsl_function(self) -> None:
-        """Test the deprecated kit DSL function."""
-        from minipat.dsl import kit
-
-        # Test that the deprecated function still works but warns
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            flow = kit("bd sd hh")
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "deprecated" in str(w[0].message)
-
-        # Verify the flow was created
-        assert flow is not None
-        assert hasattr(flow, "stream")
 
     def test_nucleus_kit_method(self) -> None:
         """Test the nucleus kit method."""

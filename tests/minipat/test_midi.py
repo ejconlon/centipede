@@ -939,6 +939,47 @@ def test_timed_message_comparison() -> None:
     assert popped_messages == expected_order
 
 
+def test_midi_processor_whole_arc_timing() -> None:
+    """Test MidiProcessor uses whole arc end time for note_off when present."""
+    processor = MidiProcessor()
+
+    # Create MIDI attributes for a note
+    midi_attrs: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(NoteKey(), NoteField.mk(60))
+        .put(VelocityKey(), VelocityField.mk(80))
+    )
+
+    # Test case 1: Partial event at the END of a note (should generate note_off)
+    # This simulates the final partial event of a long note
+    active_arc = CycleArc(
+        CycleTime(Fraction(3, 4)), CycleTime(Fraction(1))
+    )  # 0.75 to 1.0
+    whole_arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))  # 0.0 to 1.0
+    span = CycleSpan(active_arc, whole_arc)
+    event = Ev(span, midi_attrs)
+    event_heap = ev_heap_singleton(event)
+
+    instant = Instant(
+        cycle_time=CycleTime(Fraction(0)), cps=Fraction(2), posix_start=PosixTime(0.0)
+    )
+
+    timed_messages = processor.process(instant, Orbit(0), event_heap)
+    message_list = list(timed_messages)
+
+    # Should have 1 message: note_off (no note_on since this isn't the start)
+    assert len(message_list) == 1
+
+    note_off_msg = message_list[0]
+
+    # Verify note_off timing (should use whole arc end, not active arc end)
+    assert note_off_msg.time == PosixTime(0.5)  # 1.0 cycle at 2 cps = 0.5 seconds
+    # Not 0.375 which would be 3/4 cycle at 2 cps (active arc end)
+
+    # Verify it's actually a note_off message
+    assert MsgTypeField.get(note_off_msg.message) == "note_off"
+
+
 def test_timed_message_comparison_edge_cases() -> None:
     """Test TimedMessage comparison edge cases."""
     from mido.frozen import FrozenMessage

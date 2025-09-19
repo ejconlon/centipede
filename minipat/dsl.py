@@ -487,41 +487,6 @@ def midinote(pat_str: str) -> Flow:
     return Flow(midinote_stream(pat_str))
 
 
-def kit(pat_str: str) -> Flow:
-    """Create a flow from drum kit sound identifiers using the default kit.
-
-    Creates a Flow from drum sound identifiers using the default drum kit mapping.
-    Supports all standard drum notation like "bd" for bass drum, "sd" for snare, etc.
-
-    DEPRECATED: Use nucleus.kit() instead for better control over drum kit state.
-
-    Args:
-        pat_str: Pattern string containing drum sound identifiers
-
-    Returns:
-        A Flow containing MIDI note attributes for drum sounds
-
-    Examples:
-        kit("bd sd bd sd")       # Bass drum, snare, bass drum, snare
-        kit("bd ~ sd ~")         # Bass drum, rest, snare, rest
-        kit("[bd,sd,hh]")        # Bass drum + snare + hi-hat (simultaneous)
-        kit("hh*8")              # Hi-hat repeated 8 times
-        kit("bd sd:2 hh:3")      # Different speeds for each element
-
-    Recommended usage:
-        n = Nucleus.boot()
-        n.kit("bd sd bd sd")     # Use nucleus method instead
-    """
-    import warnings
-
-    warnings.warn(
-        "Global kit() function is deprecated. Use nucleus.kit() method instead for better control over drum kit state.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return Flow(kit_stream_with_kit(pat_str, DEFAULT_KIT))
-
-
 def vel(pat_str: str) -> Flow:
     """Create a flow from velocity values.
 
@@ -645,7 +610,7 @@ class Nucleus:
 
         # Play patterns on orbits
         n[0] = note("c4 d4 e4 f4")  # Orbit 0
-        n[1] = kit("bd ~ sd ~")     # Orbit 1 with drums
+        n[1] = n.kit("bd ~ sd ~")     # Orbit 1 with drums
 
         # Manage drum kit
         n.add_drum_sound("crash2", 49)

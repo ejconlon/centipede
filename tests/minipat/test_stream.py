@@ -413,6 +413,40 @@ def test_partial_arc_query() -> None:
         )
 
 
+def test_pure_pattern_partial_queries() -> None:
+    """Test that pure patterns only generate events for queries containing the cycle start."""
+    # Create a simple pure pattern
+    pattern = Pat.pure("c")
+    stream = Stream.pat(pattern)
+
+    # Query first half: (0, 0.5) - should contain cycle start at 0
+    first_query = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 2)))
+    first_events = stream.unstream(first_query)
+    first_list = list(first_events)
+
+    # Query second half: (0.5, 1) - does NOT contain cycle start at 0
+    second_query = CycleArc(CycleTime(Fraction(1, 2)), CycleTime(Fraction(1)))
+    second_events = stream.unstream(second_query)
+    second_list = list(second_events)
+
+    # Only the first query should get an event (contains cycle start)
+    assert len(first_list) == 1
+    assert len(second_list) == 0
+
+    # The first event should span the full cycle
+    event = first_list[0][1]
+    assert event.val == "c"
+    assert event.span.active.start == CycleTime(Fraction(0))
+    assert event.span.active.end == CycleTime(Fraction(1))
+    assert event.span.whole is None  # Pure pattern has no wider context
+
+    # Test that queries starting after cycle 0 don't get cycle 0 events
+    late_query = CycleArc(CycleTime(Fraction(1, 4)), CycleTime(Fraction(3, 4)))
+    late_events = stream.unstream(late_query)
+    late_list = list(late_events)
+    assert len(late_list) == 0  # Doesn't contain cycle start at 0
+
+
 def test_replicate_stream() -> None:
     """Test replicate patterns work with stream processing."""
 

@@ -24,20 +24,25 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#16}
+Next available task ID: {#20}
 
 ### Active
 
-- {#15} Pass only necessary state to window and process functions {nvim}
 
 ### Review
 
 
 ### Upcoming
 
+- {#19} Repeat composition stream, move into stream.py and add to combinators {python}
+- {#18} Render EvHeap to midi file
 
 ### Done
 
+- {#16} Create minipat.compose module for composition primitives {python}
+- {#15} Pass only necessary state to window and process functions {nvim}
+  - We pass whole application state around, but I would like the window and
+    process modules to be more self-contained.
 - {#14} Add cheatsheet param to config for custom cheatsheet path (default nil) {nvim}
 - {#13} Reflow windows when hiding/showing {nvim}
 - {#12} Look for minipat_config.lua in cwd to override default args -> plugin args -> local args {nvim}

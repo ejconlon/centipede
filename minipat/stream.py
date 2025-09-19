@@ -66,7 +66,6 @@ def _create_span(original_arc: CycleArc, query_arc: CycleArc) -> Optional[CycleS
     return CycleSpan(active, whole)
 
 
-# sealed
 class Stream[T](metaclass=ABCMeta):
     """A stream of events in time."""
 

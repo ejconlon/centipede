@@ -243,9 +243,15 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
 
                     if event_end:
                         # Create note off message (at end of span)
+                        # Use whole arc end if present, otherwise active arc end
+                        note_end_time = (
+                            span.whole.end
+                            if span.whole is not None
+                            else span.active.end
+                        )
                         note_off_timestamp = PosixTime(
                             instant.posix_start
-                            + (float(span.active.end) / float(instant.cps))
+                            + (float(note_end_time) / float(instant.cps))
                         )
                         note_off_msg = msg_note_off(channel=channel, note=note)
                         timed_messages.append(

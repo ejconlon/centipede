@@ -4,7 +4,6 @@ from minipat.dsl import (
     Nucleus,
     channel,
     control,
-    kit,
     midinote,
     note,
     program,
@@ -19,7 +18,6 @@ from minipat.kit import (
 )
 
 __all__ = [
-    "kit",  # Deprecated - use Nucleus.kit() instead
     "note",
     "midinote",
     "vel",
