@@ -204,9 +204,6 @@ def minimize_seq_gcd_dag[T](dag: PatDag[T], find: PatFind) -> Optional[PatFind]:
     Converts [a@2 b@4] -> [a b@2]@2
     Returns None if no GCD can be factored out.
     """
-    from functools import reduce
-    from math import gcd
-
     patf = dag.get_node(find)
     match patf:
         case PatSeq(pats):

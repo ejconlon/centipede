@@ -1,7 +1,7 @@
-"""Drum kit functionality for the minipat pattern system.
+"""Kit functionality for the minipat pattern system.
 
-This module provides drum sound pattern mapping from string identifiers to MIDI parameters.
-It supports drum kit notation like "bd" for bass drum, "sd" for snare drum, etc.
+This module provides hit pattern mapping from string identifiers to MIDI parameters.
+It supports kit notation like "bd" for bass drum, "sd" for snare drum, etc.
 """
 
 from __future__ import annotations
@@ -144,10 +144,7 @@ class DrumSoundElemParser(Iso[str, Note]):
         return str(int(value))
 
 
-# Helper functions for creating DrumSound objects
-
-
-def make_drum_sound(
+def add_hit(
     note: int, velocity: Optional[int] = None, channel: Optional[int] = None
 ) -> Sound:
     """Create a Sound object with validation.
@@ -162,6 +159,10 @@ def make_drum_sound(
 
     Raises:
         ValueError: If note, velocity, or channel values are out of range
+
+    Example:
+        hit = add_hit(49, 100, 9)  # Create a crash cymbal hit
+        n.kit = n.kit.put("crash2", hit)
     """
     midi_note = NoteField.mk(note)
     midi_velocity = None if velocity is None else VelocityField.mk(velocity)

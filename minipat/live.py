@@ -21,6 +21,8 @@ from minipat.common import (
     ONE,
     ONE_HALF,
     ZERO,
+    Bpc,
+    Cps,
     CycleDelta,
     CycleTime,
     PosixDelta,
@@ -49,7 +51,7 @@ _DEFAULT_WAIT_FACTOR = Fraction(1, 4)
 
 
 def _calculate_sleep_interval(
-    cps: Fraction,
+    cps: Cps,
     generations_per_cycle: int,
     wait_factor: Fraction,
 ) -> PosixDelta:
@@ -80,10 +82,10 @@ def _calculate_sleep_interval(
 class Timing:
     """Configuration for timing calculations (frozen for immutability)."""
 
-    cps: Fraction
+    cps: Cps
     """Current cycles per second (tempo)."""
 
-    beats_per_cycle: int
+    beats_per_cycle: Bpc
     """Number of beats in one cycle."""
 
     generations_per_cycle: int
@@ -96,12 +98,10 @@ class Timing:
     """Amount of wall time it's appropriate to sleep when polling."""
 
     @staticmethod
-    def initial(
-        cps: Optional[Fraction], beats_per_cycle: Optional[int] = None
-    ) -> Timing:
+    def initial(cps: Optional[Cps], beats_per_cycle: Optional[Bpc] = None) -> Timing:
         """Create a Timing instance with default values."""
-        cps = cps if cps is not None else _DEFAULT_CPS
-        beats_per_cycle = beats_per_cycle if beats_per_cycle is not None else 4
+        cps = cps if cps is not None else Cps(_DEFAULT_CPS)
+        beats_per_cycle = beats_per_cycle if beats_per_cycle is not None else Bpc(4)
         generations_per_cycle = _DEFAULT_GENERATIONS_PER_CYCLE
         wait_factor = _DEFAULT_WAIT_FACTOR
         sleep_interval = _calculate_sleep_interval(
@@ -117,7 +117,7 @@ class Timing:
             sleep_interval=sleep_interval,
         )
 
-    def set_cps(self, cps: Fraction) -> Timing:
+    def set_cps(self, cps: Cps) -> Timing:
         sleep_interval = _calculate_sleep_interval(
             cps=cps,
             generations_per_cycle=self.generations_per_cycle,
@@ -131,7 +131,7 @@ class Timing:
             sleep_interval=sleep_interval,
         )
 
-    def set_beats_per_cycle(self, beats_per_cycle: int) -> Timing:
+    def set_beats_per_cycle(self, beats_per_cycle: Bpc) -> Timing:
         """Create a new Timing with updated beats per cycle."""
         sleep_interval = _calculate_sleep_interval(
             cps=self.cps,
@@ -154,7 +154,7 @@ class Instant:
     cycle_time: CycleTime
     """The cycle time for this instant."""
 
-    cps: Fraction
+    cps: Cps
     """Cycles per second at this instant."""
 
     posix_start: PosixTime
@@ -693,8 +693,8 @@ class LiveSystem[T, U]:
         system: System,
         processor: Processor[T, U],
         backend_sender: Sender[BackendMessage[U]],
-        cps: Optional[Fraction] = None,
-        beats_per_cycle: Optional[int] = None,
+        cps: Optional[Cps] = None,
+        beats_per_cycle: Optional[Bpc] = None,
     ) -> LiveSystem[T, U]:
         """Create and start the live pattern system.
 
@@ -771,7 +771,7 @@ class LiveSystem[T, U]:
     def clear_orbits(self) -> None:
         self._pattern_sender.send(PatternClearOrbits())
 
-    def set_cps(self, cps: Fraction) -> None:
+    def set_cps(self, cps: Cps) -> None:
         """Set the cycles per second (tempo).
 
         Args:
@@ -782,7 +782,7 @@ class LiveSystem[T, U]:
         self._transport_sender.send(TransportSetTiming(timing))
         self._backend_sender.send(BackendTiming(timing))
 
-    def get_cps(self) -> Fraction:
+    def get_cps(self) -> Cps:
         """Get the current cycles per second (tempo).
 
         Returns:
@@ -791,7 +791,7 @@ class LiveSystem[T, U]:
         with self._transport_state_mutex as ts:
             return ts.timing.cps
 
-    def set_bpc(self, bpc: int) -> None:
+    def set_bpc(self, bpc: Bpc) -> None:
         """Set the beats per cycle.
 
         Args:
@@ -802,7 +802,7 @@ class LiveSystem[T, U]:
         self._transport_sender.send(TransportSetTiming(timing))
         self._backend_sender.send(BackendTiming(timing))
 
-    def get_bpc(self) -> int:
+    def get_bpc(self) -> Bpc:
         """Get the current beats per cycle.
 
         Returns:

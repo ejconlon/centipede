@@ -15,7 +15,7 @@ from mido.frozen import FrozenMessage
 
 from bad_actor import System, new_system
 from minipat.combinators import note_stream
-from minipat.common import PosixTime
+from minipat.common import PosixTime, mk_cps
 from minipat.live import (
     LiveSystem,
     Orbit,
@@ -145,7 +145,7 @@ def live_system(system: System) -> Generator[MidiLiveFixture, None, None]:
         patch("minipat.midi.mido.get_output_names", return_value=["test_port"]),
     ):
         # Pass CPS=2 directly to the constructor
-        live = start_midi_live_system(system, "test_port", cps=Fraction(2, 1))
+        live = start_midi_live_system(system, "test_port", cps=mk_cps(Fraction(2, 1)))
         try:
             yield live, mock_port
         finally:

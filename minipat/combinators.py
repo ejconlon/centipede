@@ -395,25 +395,25 @@ def note_stream(s: str) -> Stream[MidiAttrs]:
     return Stream.pat_bind(parse_pattern(s), _NOTE_NAME_BINDER)
 
 
-def kit_stream_with_kit(s: str, kit: Kit) -> Stream[MidiAttrs]:
+def sound_stream(kit: Kit, s: str) -> Stream[MidiAttrs]:
     """Create stream from drum kit sound identifiers using a specific kit.
 
     Parses a pattern string containing drum sound identifiers (like "bd", "sd", "hh")
     and creates a stream of MIDI attributes using the provided drum kit mapping.
 
     Args:
-        s: Pattern string containing drum sound identifiers
         kit: The DrumKit instance to use for sound mapping
+        s: Pattern string containing drum sound identifiers
 
     Returns:
         A Stream containing MIDI attributes for drum sounds
 
     Examples:
-        kit_stream_with_kit("bd sd bd sd", my_kit)       # Bass drum, snare, bass drum, snare
-        kit_stream_with_kit("bd ~ sd ~", my_kit)         # Bass drum, rest, snare, rest
-        kit_stream_with_kit("[bd,sd,hh]", my_kit)        # Bass drum + snare + hi-hat (simultaneous)
-        kit_stream_with_kit("hh*8", my_kit)              # Hi-hat repeated 8 times
-        kit_stream_with_kit("bd sd:2 hh:3", my_kit)      # Different speeds for each element
+        sound_stream(kit, "bd sd bd sd")       # Bass drum, snare, bass drum, snare
+        sound_stream(kit, "bd ~ sd ~")         # Bass drum, rest, snare, rest
+        sound_stream(kit, "[bd,sd,hh]")        # Bass drum + snare + hi-hat (simultaneous)
+        sound_stream(kit, "hh*8")              # Hi-hat repeated 8 times
+        sound_stream(kit, "bd sd:2 hh:3")      # Different speeds for each element
     """
     drum_binder = ElemBinder(DrumSoundElemParser(kit), NoteField())
     return Stream.pat_bind(parse_pattern(s), drum_binder)

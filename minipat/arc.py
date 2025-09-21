@@ -15,6 +15,7 @@ from minipat.common import (
     CycleTime,
     CycleTimeOps,
     Factor,
+    Numeric,
     PosixDelta,
     PosixTime,
     PosixTimeOps,
@@ -23,6 +24,8 @@ from minipat.common import (
     StepTimeOps,
     TimeOps,
 )
+
+type NumArc = Arc[Numeric, Numeric]
 
 
 class Arc[T, D](metaclass=ABCMeta):

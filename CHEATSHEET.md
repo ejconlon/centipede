@@ -36,10 +36,10 @@ midinote("[60,64,67]")   # C major chord (simultaneous)
 ### `kit(pattern)` - Drum Sounds
 ```python
 # Use nucleus method for better control
-n.kit("bd sd bd sd")     # Bass drum, snare, bass drum, snare
-n.kit("bd ~ sd ~")       # Bass drum, rest, snare, rest
-n.kit("[bd,sd,hh]")      # Bass drum + snare + hi-hat (simultaneous)
-n.kit("hh*8")            # Hi-hat repeated 8 times
+n.sound("bd sd bd sd")     # Bass drum, snare, bass drum, snare
+n.sound("bd ~ sd ~")       # Bass drum, rest, snare, rest
+n.sound("[bd,sd,hh]")      # Bass drum + snare + hi-hat (simultaneous)
+n.sound("hh*8")            # Hi-hat repeated 8 times
 ```
 
 ### `vel(pattern)` - Velocity
@@ -205,13 +205,10 @@ n[0].clear()            # Clear orbit pattern
 del n[0]                # Clear orbit (shorthand)
 ```
 
-### Drum Kit Management
+### Kit Management
 ```python
-n.add_drum_sound("crash2", 49)      # Add new drum sound
-n.remove_drum_sound("crash2")       # Remove drum sound
-sounds = n.list_drum_sounds()       # List all sounds
-n.reset_kit()                       # Reset to default kit
-n.drum_kit = custom_kit             # Set custom kit
+n.add_hit("crash2", 49, 100)    # Add new hit with velocity
+n.kit = custom_kit               # Set custom kit
 ```
 
 ## Combining Patterns
@@ -220,7 +217,7 @@ n.drum_kit = custom_kit             # Set custom kit
 ```python
 # Melody with rhythm
 melody = note("c4 d4 e4 f4")
-rhythm = n.kit("bd ~ sd ~")
+rhythm = n.sound("bd ~ sd ~")
 combined = melody >> rhythm
 
 # Chord progressions
@@ -229,18 +226,18 @@ chords = note("[c4,e4,g4] [f4,a4,c5] [g4,b4,d5] [c4,e4,g4]")
 progression = bass | chords
 
 # Layered drums
-kick = n.kit("bd ~ ~ ~")
-snare = n.kit("~ ~ sd ~")
-hihat = n.kit("hh hh hh hh")
+kick = n.sound("bd ~ ~ ~")
+snare = n.sound("~ ~ sd ~")
+hihat = n.sound("hh hh hh hh")
 drums = kick | snare | hihat
 ```
 
 ### Performance Patterns
 ```python
 # Build up pattern
-n[0] = n.kit("bd")                         # Start with kick
-n[0] = n.kit("bd ~ sd ~")                  # Add snare
-n[0] = n.kit("bd ~ sd ~") | n.kit("hh*8")  # Add hi-hat
+n[0] = n.sound("bd")                         # Start with kick
+n[0] = n.sound("bd ~ sd ~")                  # Add snare
+n[0] = n.sound("bd ~ sd ~") | n.sound("hh*8")  # Add hi-hat
 
 # Variations
 base = note("c4 d4 e4 f4")

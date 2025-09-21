@@ -6,8 +6,8 @@ MIDI message handling utilities.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from fractions import Fraction
 from functools import partial
 from logging import Logger
 from threading import Event
@@ -33,7 +33,7 @@ from bad_actor import (
     Task,
     new_system,
 )
-from minipat.common import PosixTime, current_posix_time
+from minipat.common import Bpc, Cps, PosixTime, current_posix_time
 from minipat.ev import EvHeap
 from minipat.live import (
     BackendEvents,
@@ -208,8 +208,6 @@ class MidiProcessor(Processor[MidiAttrs, TimedMessage]):
                 msgs = parse_messages(orbit, ev.val, self._default_velocity)
             except ValueError as e:
                 # Log the error and skip this event
-                import logging
-
                 logger = logging.getLogger(__name__)
                 logger.warning(
                     "Skipping MIDI event due to parse error at cycle %s: %s",
@@ -429,8 +427,8 @@ class MidiNursery(Nursery[BackendMessage[TimedMessage]]):
 def start_midi_live_system(
     system: System,
     out_port_name: str,
-    cps: Optional[Fraction] = None,
-    beats_per_cycle: Optional[int] = None,
+    cps: Optional[Cps] = None,
+    beats_per_cycle: Optional[Bpc] = None,
 ) -> LiveSystem[MidiAttrs, TimedMessage]:
     """Start a LiveSystem with MIDI components.
 

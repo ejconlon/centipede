@@ -34,11 +34,20 @@ Next available task ID: {#20}
 
 ### Upcoming
 
-- {#19} Repeat composition stream, move into stream.py and add to combinators {python}
-- {#18} Render EvHeap to midi file
 
 ### Done
 
+- {#18} Render EvHeap to midi file
+  - Added render_evheap_to_midi_file() function to midi.py for rendering event heaps to MIDI files
+  - Function supports configurable tempo (cps), MIDI resolution (ticks_per_beat), and default velocity
+  - Handles note_on/note_off pairs, program changes, and control changes properly
+  - Automatically assigns default channel (orbit 0) when no channel is specified in events
+  - Tested with both simple and complex compositions including multiple channels and overlapping notes
+- {#19} Repeat composition stream, move into stream.py and add to combinators {python}
+  - Added Stream.repeat_compose() static method to stream.py for repeating composition structures
+  - Added repeat_compose() function to combinators.py that delegates to Stream.repeat_compose()
+  - Supports both full and fractional repetitions with proper timing calculations
+  - Tested functionality with various repetition counts and verified all existing tests pass
 - {#16} Create minipat.compose module for composition primitives {python}
 - {#15} Pass only necessary state to window and process functions {nvim}
   - We pass whole application state around, but I would like the window and

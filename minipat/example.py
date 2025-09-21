@@ -5,6 +5,7 @@ import time
 from fractions import Fraction
 
 from bad_actor import Actor, ActorEnv, new_system
+from minipat.common import mk_cps
 from minipat.live import (
     BackendEvents,
     BackendMessage,
@@ -68,7 +69,7 @@ def main() -> None:
         live.set_orbit(Orbit(1), stream2)
 
         # Set tempo and start playback
-        live.set_cps(Fraction(2))  # 2 cycles per second
+        live.set_cps(mk_cps(Fraction(2)))  # 2 cycles per second
         live.play()
 
         # Let it play for a few seconds

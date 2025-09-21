@@ -16,7 +16,7 @@ from minipat.combinators import (
     program_stream,
     velocity_stream,
 )
-from minipat.common import CycleTime, PosixTime
+from minipat.common import CycleTime, PosixTime, mk_cps
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
 from minipat.messages import (
@@ -168,7 +168,7 @@ def test_midi_processor() -> None:
     # Create test instant
     instant = Instant(
         cycle_time=CycleTime(Fraction(0)),
-        cps=Fraction(2),  # 2 cycles per second
+        cps=mk_cps(Fraction(2)),  # 2 cycles per second
         posix_start=PosixTime(0.0),
     )
 
@@ -221,7 +221,9 @@ def test_midi_processor_defaults() -> None:
     event_heap = ev_heap_singleton(event)
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(1)),
+        posix_start=PosixTime(0.0),
     )
 
     timed_messages = processor.process(
@@ -244,7 +246,9 @@ def test_midi_processor_empty_events() -> None:
     processor = MidiProcessor()
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(1)),
+        posix_start=PosixTime(0.0),
     )
 
     timed_messages = processor.process(instant, Orbit(0), ev_heap_empty())
@@ -267,7 +271,9 @@ def test_midi_processor_validates_values() -> None:
     event_heap = ev_heap_singleton(event)
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(1)),
+        posix_start=PosixTime(0.0),
     )
 
     # Should log and skip invalid MIDI values, returning empty list
@@ -290,7 +296,9 @@ def test_midi_processor_orbit_as_channel() -> None:
     event_heap = ev_heap_singleton(event)
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(1)),
+        posix_start=PosixTime(0.0),
     )
 
     # Test valid orbits map to correct channels
@@ -655,7 +663,9 @@ def test_midi_processor_with_parse_messages() -> None:
     event_heap = ev_heap_singleton(event)
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(1)),
+        posix_start=PosixTime(0.0),
     )
 
     timed_messages = processor.process(instant, Orbit(1), event_heap)
@@ -782,7 +792,9 @@ def test_midi_processor_with_mixed_messages() -> None:
     event_heap = ev_heap_singleton(event)
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(1), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(1)),
+        posix_start=PosixTime(0.0),
     )
 
     timed_messages = processor.process(instant, Orbit(0), event_heap)
@@ -961,7 +973,9 @@ def test_midi_processor_whole_arc_timing() -> None:
     event_heap = ev_heap_singleton(event)
 
     instant = Instant(
-        cycle_time=CycleTime(Fraction(0)), cps=Fraction(2), posix_start=PosixTime(0.0)
+        cycle_time=CycleTime(Fraction(0)),
+        cps=mk_cps(Fraction(2)),
+        posix_start=PosixTime(0.0),
     )
 
     timed_messages = processor.process(instant, Orbit(0), event_heap)

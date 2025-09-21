@@ -6,16 +6,15 @@ from fractions import Fraction
 
 from minipat.arc import CycleArc
 from minipat.common import CycleTime
-from minipat.compose import ComposeStream, compose
 from minipat.pat import Pat
-from minipat.stream import Stream
+from minipat.stream import ComposeStream, Stream, compose_once
 
 
 def test_compose_empty_sections() -> None:
     """Test compose with empty sections list."""
     from minipat.ev import EvHeap
 
-    result: EvHeap[str] = compose([])
+    result: EvHeap[str] = compose_once([])
     event_list = list(result)
     assert len(event_list) == 0
 
@@ -26,7 +25,7 @@ def test_compose_single_section() -> None:
     section = (CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), stream)
     sections = [section]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 1
@@ -49,7 +48,7 @@ def test_compose_multiple_sections() -> None:
         (CycleArc(CycleTime(Fraction(2)), CycleTime(Fraction(3))), stream3),
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 3
@@ -80,7 +79,7 @@ def test_compose_overlapping_sections() -> None:
         (CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(3))), stream2),  # 1-3
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 2
@@ -115,7 +114,7 @@ def test_compose_with_sequence_patterns() -> None:
         ),  # single note
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 3
@@ -202,7 +201,7 @@ def test_compose_stream_partial_queries() -> None:
 
 
 def test_compose_stream_out_of_bounds_query() -> None:
-    """Test ComposeStream with queries outside the containing arc."""
+    """Test ComposeStream with infinite looping behavior."""
     stream = Stream.pat(Pat.pure("note"))
     sections = [
         (CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), stream),
@@ -211,24 +210,35 @@ def test_compose_stream_out_of_bounds_query() -> None:
     containing_arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     compose_stream = ComposeStream(containing_arc, sections)
 
-    # Query before the composition
+    # Query before the composition - should get the pattern shifted back
     before_query = CycleArc(CycleTime(Fraction(-1)), CycleTime(Fraction(0)))
     events = compose_stream.unstream(before_query)
-    assert len(list(events)) == 0
+    event_list = list(events)
+    assert len(event_list) == 1
+    assert event_list[0][1].span.active.start == CycleTime(Fraction(-1))
+    assert event_list[0][1].span.active.end == CycleTime(Fraction(0))
 
-    # Query after the composition
+    # Query after the composition - should get the pattern shifted forward
     after_query = CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2)))
     events = compose_stream.unstream(after_query)
-    assert len(list(events)) == 0
+    event_list = list(events)
+    assert len(event_list) == 1
+    assert event_list[0][1].span.active.start == CycleTime(Fraction(1))
+    assert event_list[0][1].span.active.end == CycleTime(Fraction(2))
 
-    # Query overlapping the beginning
+    # Query overlapping two repetitions
     overlap_begin = CycleArc(CycleTime(Fraction(-1, 2)), CycleTime(Fraction(1, 2)))
     events = compose_stream.unstream(overlap_begin)
     event_list = list(events)
-    assert len(event_list) == 1
-    # Should be clipped to the valid range
-    assert event_list[0][1].span.active.start == CycleTime(Fraction(0))
-    assert event_list[0][1].span.active.end == CycleTime(Fraction(1, 2))
+    assert (
+        len(event_list) == 2
+    )  # Two events: tail of previous repetition and head of current
+    # First event is from the previous repetition (-1 to 0)
+    assert event_list[0][1].span.active.start == CycleTime(Fraction(-1, 2))
+    assert event_list[0][1].span.active.end == CycleTime(Fraction(0))
+    # Second event is from the current repetition (0 to 1)
+    assert event_list[1][1].span.active.start == CycleTime(Fraction(0))
+    assert event_list[1][1].span.active.end == CycleTime(Fraction(1, 2))
 
 
 def test_compose_stream_null_arc_query() -> None:
@@ -262,7 +272,7 @@ def test_compose_sections_sorting() -> None:
         (CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2))), stream2),  # second
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 3
@@ -296,7 +306,7 @@ def test_compose_fractional_timing() -> None:
         ),  # 0.5-1.0
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 2
@@ -325,7 +335,7 @@ def test_compose_with_gaps() -> None:
         ),  # 3-4 (gap from 1-3)
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     assert len(event_list) == 2
@@ -351,7 +361,7 @@ def test_compose_with_silence() -> None:
         (CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2))), stream2),
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     # Should only get events from the non-silent section
@@ -429,7 +439,7 @@ def test_compose_with_complex_nested_patterns() -> None:
         (CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(3))), stream),
     ]
 
-    result = compose(sections)
+    result = compose_once(sections)
     event_list = list(result)
 
     # Should get events from the sequence pattern

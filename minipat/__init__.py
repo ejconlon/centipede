@@ -14,8 +14,9 @@ from minipat.kit import (
     DEFAULT_KIT,
     Kit,
     Sound,
-    make_drum_sound,
+    add_hit,
 )
+from minipat.messages import Note
 
 __all__ = [
     "note",
@@ -29,5 +30,6 @@ __all__ = [
     "DEFAULT_KIT",
     "Kit",
     "Sound",
-    "make_drum_sound",
+    "Note",
+    "add_hit",
 ]

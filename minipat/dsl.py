@@ -5,28 +5,68 @@ import os
 import sys
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, NoReturn, Optional
+from typing import Callable, NoReturn, Optional, cast
 
 from bad_actor import System, new_system
+from minipat.arc import CycleArc, NumArc
 from minipat.combinators import (
     channel_stream,
     combine_all,
     control_stream,
-    kit_stream_with_kit,
     midinote_stream,
     note_stream,
     program_stream,
+    sound_stream,
     value_stream,
     velocity_stream,
 )
-from minipat.common import CycleDelta, CycleTime, Numeric, numeric_frac
-from minipat.kit import DEFAULT_KIT, Kit, make_drum_sound
+from minipat.common import (
+    Bpc,
+    BpcLike,
+    Cps,
+    CpsLike,
+    CycleDelta,
+    CycleDeltaLike,
+    CycleTime,
+    CycleTimeLike,
+    Numeric,
+    Tempo,
+    TempoLike,
+    mk_bpc,
+    mk_cps,
+    mk_cycle_delta,
+    mk_cycle_time,
+    mk_tempo,
+    numeric_frac,
+)
+from minipat.kit import DEFAULT_KIT, Kit, add_hit
 from minipat.live import LiveSystem, Orbit
 from minipat.messages import MidiAttrs, TimedMessage
 from minipat.midi import start_midi_live_system
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
+
+
+def arc(start: Numeric, end: Numeric) -> NumArc:
+    """Create a numeric arc from start and end values.
+
+    Args:
+        start: Start time as a numeric value
+        end: End time as a numeric value
+
+    Returns:
+        A NumArc representing the time interval
+
+    Examples:
+        arc(0, 2)      # Arc from 0 to 2
+        arc(1.5, 3)    # Arc from 1.5 to 3
+        arc(0, 1/4)    # Arc from 0 to quarter beat
+    """
+
+    # Convert to CycleArc and cast to NumArc for type compatibility
+    cycle_arc = CycleArc(mk_cycle_time(start), mk_cycle_time(end))
+    return cast(NumArc, cycle_arc)
 
 
 @dataclass(frozen=True, eq=False)
@@ -448,6 +488,39 @@ class Flow:
         """Operator overload for repeating flow."""
         return self.repeat(count)
 
+    @staticmethod
+    def compose(*sections: tuple[NumArc, Flow]) -> Flow:
+        """Create a flow that composes multiple sections with infinite looping.
+
+        The composition loops infinitely - if the sections span (0, 4), then
+        querying (4, 8) returns the same pattern shifted by 4, (-4, 0) same, etc.
+
+        Args:
+            *sections: Variable number of (arc, flow) pairs defining the composition
+
+        Returns:
+            A flow containing the infinitely looping composition
+
+        Examples:
+            # Create a simple verse-chorus structure that loops forever
+            verse = note("c4 d4 e4 f4")
+            chorus = note("g4 a4 b4 c5")
+            song = Flow.compose(
+                (arc(0, 2), verse),
+                (arc(2, 4), chorus)
+            )
+        """
+        # Convert NumArc sections to CycleArc sections
+        cycle_sections = []
+        for num_arc, flow in sections:
+            cycle_arc = CycleArc(
+                mk_cycle_time(num_arc.start),
+                mk_cycle_time(num_arc.end),
+            )
+            cycle_sections.append((cycle_arc, flow.stream))
+
+        return Flow(Stream.compose(cycle_sections))
+
 
 def note(pat_str: str) -> Flow:
     """Create a flow from note names.
@@ -598,7 +671,7 @@ class Nucleus:
         tempo: Get/set beats per minute (alternative tempo control)
         cycle: Get/set current cycle position
         bpc: Get/set beats per cycle
-        drum_kit: Get/set the current drum kit
+        kit: Get/set the current kit
 
     Examples:
         # Boot the system
@@ -610,11 +683,10 @@ class Nucleus:
 
         # Play patterns on orbits
         n[0] = note("c4 d4 e4 f4")  # Orbit 0
-        n[1] = n.kit("bd ~ sd ~")     # Orbit 1 with drums
+        n[1] = n.sound("bd ~ sd ~")     # Orbit 1 with drums
 
-        # Manage drum kit
-        n.add_drum_sound("crash2", 49)
-        sounds = n.list_drum_sounds()
+        # Manage kit
+        n.add_hit("crash2", 49)  # Add custom hit
 
         # Control orbits
         n[0].mute()      # Mute orbit 0
@@ -650,12 +722,12 @@ class Nucleus:
         assert init_bpm is not None
         init_bpc = init_bpc or int(os.environ.get("MINIPAT_BPC", "4"))
         assert init_bpc is not None
-        init_cps = Fraction(init_bpm, init_bpc * 60)
+        init_cps = Cps(Fraction(init_bpm, init_bpc * 60))
         logging.basicConfig(
             filename=log_path, filemode="w", level=getattr(logging, log_level)
         )
         sys = new_system(sys_name)
-        live = start_midi_live_system(sys, port_name, init_cps, init_bpc)
+        live = start_midi_live_system(sys, port_name, init_cps, mk_bpc(init_bpc))
         kit = DEFAULT_KIT  # Use default kit
         return Nucleus(sys, live, kit)
 
@@ -715,7 +787,7 @@ class Nucleus:
         self.live.play(value)
 
     @property
-    def cps(self) -> Fraction:
+    def cps(self) -> Cps:
         """Cycles per second (tempo control).
 
         This is the fundamental tempo unit in minipat. Higher values = faster.
@@ -728,9 +800,9 @@ class Nucleus:
         return self.live.get_cps()
 
     @cps.setter
-    def cps(self, value: Numeric) -> None:
+    def cps(self, value: CpsLike) -> None:
         """Set the cycles per second (tempo)."""
-        self.live.set_cps(numeric_frac(value))
+        self.live.set_cps(mk_cps(value))
 
     @property
     def cycle(self) -> CycleTime:
@@ -747,12 +819,12 @@ class Nucleus:
         return self.live.get_cycle()
 
     @cycle.setter
-    def cycle(self, value: Numeric) -> None:
+    def cycle(self, value: CycleTimeLike) -> None:
         """Set the current cycle position."""
-        self.live.set_cycle(CycleTime(numeric_frac(value)))
+        self.live.set_cycle(mk_cycle_time(value))
 
     @property
-    def bpc(self) -> int:
+    def bpc(self) -> Bpc:
         """Beats per cycle.
 
         Defines how many beats fit in one cycle. This affects how tempo
@@ -766,12 +838,12 @@ class Nucleus:
         return self.live.get_bpc()
 
     @bpc.setter
-    def bpc(self, value: int) -> None:
+    def bpc(self, value: BpcLike) -> None:
         """Set the beats per cycle."""
-        self.live.set_bpc(value)
+        self.live.set_bpc(mk_bpc(value))
 
     @property
-    def tempo(self) -> Fraction:
+    def tempo(self) -> Tempo:
         """Tempo in beats per minute (BPM).
 
         This is the most familiar tempo control. Setting this adjusts CPS
@@ -782,22 +854,23 @@ class Nucleus:
             n.tempo = 140    # Faster tempo
             bpm = n.tempo    # Get current BPM
         """
-        return self.cps * self.bpc * 60
+        return Tempo(Fraction(self.cps) * self.bpc * 60)
 
     @tempo.setter
-    def tempo(self, value: Numeric) -> None:
+    def tempo(self, value: TempoLike) -> None:
         """Set the tempo in beats per minute, adjusting cps while keeping bpc fixed."""
-        bpm = numeric_frac(value)
-        new_cps = bpm / (self.bpc * 60)
+        tempo_val = mk_tempo(value)
+        new_cps = Fraction(tempo_val) / (self.bpc * 60)
         self.cps = new_cps
 
     def once(
         self,
         flow: Flow,
-        length: Optional[CycleDelta] = None,
+        length: Optional[CycleDeltaLike] = None,
         aligned: Optional[bool] = None,
     ) -> None:
-        self.live.once(flow.stream, length=length, aligned=aligned, orbit=None)
+        cycle_length = mk_cycle_delta(length) if length is not None else None
+        self.live.once(flow.stream, length=cycle_length, aligned=aligned, orbit=None)
 
     def orbital(self, num: int) -> Orbital:
         return Orbital(self, Orbit(num))
@@ -819,34 +892,36 @@ class Nucleus:
         self.once(flow)
 
     @property
-    def drum_kit(self) -> Kit:
-        """Get the current drum kit.
+    def kit(self) -> Kit:
+        """Get the current kit.
 
         Returns:
             The currently active Kit instance
         """
         return self._kit
 
-    @drum_kit.setter
-    def drum_kit(self, kit: Kit) -> None:
-        """Set the current drum kit.
+    @kit.setter
+    def kit(self, kit: Kit) -> None:
+        """Set the current kit.
 
         Args:
             kit: The Kit instance to make active
         """
         self._kit = kit
 
-    def add_drum_sound(
+    def add_hit(
         self,
         identifier: str,
         note: int,
         velocity: Optional[int] = None,
         channel: Optional[int] = None,
     ) -> None:
-        """Add a new drum sound to the current kit.
+        """Add a new hit to the current kit.
+
+        Creates a Sound object with validation and adds it to the kit.
 
         Args:
-            identifier: String identifier for the drum sound
+            identifier: String identifier for the hit
             note: MIDI note number (0-127)
             velocity: Optional default velocity (0-127)
             channel: Optional default channel (0-15)
@@ -855,70 +930,32 @@ class Nucleus:
             ValueError: If note, velocity, or channel values are out of range
 
         Example:
-            n.add_drum_sound("crash2", 49, 100)
-            n[0] = kit("bd crash2 sd")
+            n.add_hit("crash2", 49, 100)
+            n[0] = n.sound("bd crash2 sd")
         """
-        sound = make_drum_sound(note, velocity, channel)
+        sound = add_hit(note, velocity, channel)
         self._kit = self._kit.put(identifier, sound)
 
-    def remove_drum_sound(self, identifier: str) -> bool:
-        """Remove a drum sound from the current kit.
+    def sound(self, pat_str: str) -> Flow:
+        """Create a flow from kit hit identifiers using this nucleus's kit.
 
-        Args:
-            identifier: String identifier for the drum sound to remove
-
-        Returns:
-            True if the sound was removed, False if it wasn't found
-
-        Example:
-            n.remove_drum_sound("crash2")
-        """
-        if self._kit.contains(identifier):
-            self._kit = self._kit.remove(identifier)
-            return True
-        return False
-
-    def list_drum_sounds(self) -> Kit:
-        """List all drum sounds in the current kit.
-
-        Returns:
-            Kit mapping identifiers to Sound objects
-
-        Example:
-            sounds = n.list_drum_sounds()
-            for name, sound in sounds.items():
-                print(f"{name}: {sound.note}")
-        """
-        return self._kit
-
-    def reset_kit(self) -> None:
-        """Reset the current drum kit to the default kit.
-
-        Example:
-            n.reset_kit()  # Back to default drum sounds
-        """
-        self._kit = DEFAULT_KIT
-
-    def kit(self, pat_str: str) -> Flow:
-        """Create a flow from drum kit sound identifiers using this nucleus's kit.
-
-        Creates a Flow from drum sound identifiers using this nucleus's drum kit mapping.
+        Creates a Flow from hit identifiers using this nucleus's kit mapping.
         Supports all standard drum notation like "bd" for bass drum, "sd" for snare, etc.
 
         Args:
-            pat_str: Pattern string containing drum sound identifiers
+            pat_str: Pattern string containing hit identifiers
 
         Returns:
-            A Flow containing MIDI note attributes for drum sounds
+            A Flow containing MIDI note attributes for hits
 
         Examples:
-            n.kit("bd sd bd sd")       # Bass drum, snare, bass drum, snare
-            n.kit("bd ~ sd ~")         # Bass drum, rest, snare, rest
-            n.kit("[bd,sd,hh]")        # Bass drum + snare + hi-hat (simultaneous)
-            n.kit("hh*8")              # Hi-hat repeated 8 times
-            n.kit("bd sd:2 hh:3")      # Different speeds for each element
+            n.sound("bd sd bd sd")       # Bass drum, snare, bass drum, snare
+            n.sound("bd ~ sd ~")         # Bass drum, rest, snare, rest
+            n.sound("[bd,sd,hh]")        # Bass drum + snare + hi-hat (simultaneous)
+            n.sound("hh*8")              # Hi-hat repeated 8 times
+            n.sound("bd sd:2 hh:3")      # Different speeds for each element
         """
-        return Flow(kit_stream_with_kit(pat_str, self._kit))
+        return Flow(sound_stream(self._kit, pat_str))
 
 
 @dataclass(frozen=True, eq=False)
@@ -951,7 +988,7 @@ class Orbital:
     def once(
         self,
         flow: Flow,
-        length: Optional[CycleDelta] = None,
+        length: Optional[CycleDeltaLike] = None,
         aligned: Optional[bool] = None,
     ) -> None:
         """Play a flow once on this orbit.
@@ -965,8 +1002,9 @@ class Orbital:
             n[0].once(note("c4 d4 e4"))  # Play melody once
             n[0] | note("c5")            # Shorthand using | operator
         """
+        cycle_length = mk_cycle_delta(length) if length is not None else None
         self.nucleus.live.once(
-            flow.stream, length=length, aligned=aligned, orbit=self.num
+            flow.stream, length=cycle_length, aligned=aligned, orbit=self.num
         )
 
     def every(self, flow: Flow) -> None:

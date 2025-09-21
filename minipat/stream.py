@@ -232,6 +232,37 @@ class Stream[T](metaclass=ABCMeta):
         return RepeatStream(stream, count)
 
     @staticmethod
+    def compose[U](sections: List[Tuple[CycleArc, Stream[U]]]) -> Stream[U]:
+        """Create a stream that composes multiple sections with infinite looping.
+
+        The composition loops infinitely - if contained in Arc (0, 4),
+        then (4, 8) will be the exact same output shifted, (-4, 0) same, etc.
+
+        Args:
+            sections: A list of (arc, stream) pairs defining the composition structure
+
+        Returns:
+            A stream containing the infinitely looping composition
+
+        Examples:
+            # Create a simple verse-chorus structure that loops forever
+            verse = Stream.pure("verse")
+            chorus = Stream.pure("chorus")
+            sections = [
+                (CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2))), verse),
+                (CycleArc(CycleTime(Fraction(2)), CycleTime(Fraction(4))), chorus),
+            ]
+
+            # The pattern repeats infinitely every 4 cycles
+            song = Stream.compose(sections)
+        """
+        if not sections:
+            return Stream.silent()
+
+        # Use ComposeStream.mk which handles sorting and validation
+        return ComposeStream.mk(sections)
+
+    @staticmethod
     def pat(pattern: Pat[T]) -> Stream[T]:
         """Create a stream from a pattern.
 
@@ -317,6 +348,114 @@ class Stream[T](metaclass=ABCMeta):
             A new stream with events shifted in time
         """
         return ShiftStream(self, delta)
+
+
+type Section[T] = Tuple[CycleArc, Stream[T]]
+
+
+@dataclass(frozen=True)
+class ComposeStream[T](Stream[T]):
+    """Stream that composes multiple sections with their own timing arcs.
+
+    The compose loops infinitely - if the containing arc is (0, 4), then
+    querying (4, 8) returns the same pattern shifted by 4, querying (-4, 0)
+    returns it shifted by -4, etc.
+    """
+
+    containing_arc: CycleArc
+    sections: List[Section[T]]
+
+    @staticmethod
+    def mk(sections: List[Section[T]]) -> Stream[T]:
+        if not sections:
+            return SilentStream()
+
+        # Sort sections by their arc start time to ensure chronological ordering
+        sorted_sections = sorted(sections, key=lambda section: section[0].start)
+
+        # Calculate the containing arc (0 to max end time of all sections)
+        max_end = max(section_arc.end for section_arc, _ in sorted_sections)
+        containing_arc = CycleArc(CycleTime(Fraction(0)), CycleTime(max_end))
+
+        if containing_arc.null():
+            return SilentStream()
+        else:
+            return ComposeStream(containing_arc, sorted_sections)
+
+    def unstream_all(self) -> PHeapMap[CycleSpan, Ev[T]]:
+        return self.unstream(self.containing_arc)
+
+    @override
+    def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[T]]:
+        if arc.null() or not self.sections:
+            return ev_heap_empty()
+
+        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+
+        # The pattern repeats based on the containing arc's duration (period)
+        period = self.containing_arc.end - self.containing_arc.start
+        if period <= 0:
+            return ev_heap_empty()
+
+        # Find which repetitions of the pattern we need to render for this arc
+        # We need to consider all repetitions that could contribute events to the query arc
+        start_rep = arc.start // period - (1 if arc.start % period != 0 else 0)
+        end_rep = arc.end // period + (1 if arc.end % period != 0 else 0)
+
+        # For each repetition that overlaps with the query arc
+        for rep_index in range(int(start_rep), int(end_rep) + 1):
+            offset = rep_index * period
+
+            # For each section in the composition
+            for section_arc, section_stream in self.sections:
+                # Shift the section arc by the repetition offset
+                shifted_start = section_arc.start + offset
+                shifted_end = section_arc.end + offset
+                shifted_arc = CycleArc(CycleTime(shifted_start), CycleTime(shifted_end))
+
+                # Check if this shifted section intersects with the query arc
+                section_intersection = shifted_arc.intersect(arc)
+                if not section_intersection.null():
+                    # Always query the substream for a full canonical cycle to get all events
+                    canonical_cycle = CycleArc(
+                        CycleTime(Fraction(0)), CycleTime(Fraction(1))
+                    )
+                    section_events = section_stream.unstream(canonical_cycle)
+
+                    # Calculate the shifted intersection for clipping
+                    shifted_query_start = section_intersection.start - shifted_arc.start
+                    shifted_query_end = section_intersection.end - shifted_arc.start
+                    shifted_query = CycleArc(
+                        CycleTime(shifted_query_start), CycleTime(shifted_query_end)
+                    )
+
+                    # Filter and shift events back to the section's time window
+                    for _, ev in section_events:
+                        # Check if this event intersects with the shifted query
+                        event_intersection = ev.span.active.intersect(shifted_query)
+                        if not event_intersection.null():
+                            # Calculate the active arc (clipped to the intersection)
+                            active_start = event_intersection.start + shifted_arc.start
+                            active_end = event_intersection.end + shifted_arc.start
+                            active_arc = CycleArc(
+                                CycleTime(active_start), CycleTime(active_end)
+                            )
+
+                            # Calculate the whole arc (full event extent in shifted time)
+                            whole_start = ev.span.active.start + shifted_arc.start
+                            whole_end = ev.span.active.end + shifted_arc.start
+                            whole_arc = CycleArc(
+                                CycleTime(whole_start), CycleTime(whole_end)
+                            )
+
+                            # Only set whole if it's different from active (i.e., the event was clipped)
+                            final_whole = whole_arc if whole_arc != active_arc else None
+
+                            span = CycleSpan(active_arc, final_whole)
+                            shifted_ev = Ev(span, ev.val)
+                            result = ev_heap_push(shifted_ev, result)
+
+        return result
 
 
 @dataclass(frozen=True)
@@ -1178,3 +1317,29 @@ def _generate_euclidean(hits: int, steps: int, rotation: int) -> List[bool]:
         pattern = pattern[rotation:] + pattern[:rotation]
 
     return pattern
+
+
+def compose_once[T](sections: List[Section[T]]) -> PHeapMap[CycleSpan, Ev[T]]:
+    """Compose sections and render them once.
+
+    This function takes a list of (CycleArc, Stream) pairs and renders them
+    exactly once, returning the events. The compose starts at CycleTime 0
+    and the section arcs are relative to this zero point.
+
+    Args:
+        sections: A list of (arc, stream) pairs where arc indicates when
+                and for how long the stream should play, relative to time 0.
+
+    Returns:
+        An EvHeap[T] containing all events from the composition rendered once
+    """
+    if not sections:
+        return ev_heap_empty()
+
+    # Create a ComposeStream and render it once
+    stream = ComposeStream.mk(sections)
+    if isinstance(stream, ComposeStream):
+        return stream.unstream_all()
+    else:
+        # If mk returned SilentStream
+        return ev_heap_empty()

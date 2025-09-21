@@ -1,4 +1,4 @@
-"""Tests for drum kit functionality."""
+"""Tests for kit functionality."""
 
 from __future__ import annotations
 
@@ -9,23 +9,57 @@ from minipat.kit import (
     DrumSoundElemParser,
     Kit,
     Sound,
-    make_drum_sound,
+    add_hit,
 )
 from minipat.messages import Note
 from spiny.map import PMap
 
 
+class TestAddHit:
+    """Tests for add_hit helper function."""
+
+    def test_add_hit_basic(self) -> None:
+        """Test basic hit creation."""
+        hit = add_hit(36)
+        assert hit.note == Note(36)
+        assert hit.velocity is None
+        assert hit.channel is None
+
+    def test_add_hit_with_velocity_and_channel(self) -> None:
+        """Test hit creation with velocity and channel."""
+        from minipat.messages import Channel, Velocity
+
+        hit = add_hit(36, 100, 9)
+        assert hit.note == Note(36)
+        assert hit.velocity == Velocity(100)
+        assert hit.channel == Channel(9)
+
+    def test_add_hit_validation(self) -> None:
+        """Test that add_hit validates input values."""
+        # Test invalid note
+        with pytest.raises(ValueError):
+            add_hit(128)  # Note out of range
+
+        # Test invalid velocity
+        with pytest.raises(ValueError):
+            add_hit(36, 128)  # Velocity out of range
+
+        # Test invalid channel
+        with pytest.raises(ValueError):
+            add_hit(36, 100, 16)  # Channel out of range
+
+
 class TestSound:
     """Tests for Sound class."""
 
-    def test_drum_sound_creation(self) -> None:
+    def test_hit_creation(self) -> None:
         """Test basic Sound creation."""
         sound = Sound(Note(36))
         assert sound.note == Note(36)
         assert sound.velocity is None
         assert sound.channel is None
 
-    def test_drum_sound_with_velocity_and_channel(self) -> None:
+    def test_hit_with_velocity_and_channel(self) -> None:
         """Test Sound creation with velocity and channel."""
         from minipat.messages import Channel, Velocity
 
@@ -35,50 +69,16 @@ class TestSound:
         assert sound.channel == Channel(9)
 
 
-class TestMakeSound:
-    """Tests for make_drum_sound helper function."""
-
-    def test_make_drum_sound_basic(self) -> None:
-        """Test basic drum sound creation."""
-        sound = make_drum_sound(36)
-        assert sound.note == Note(36)
-        assert sound.velocity is None
-        assert sound.channel is None
-
-    def test_make_drum_sound_with_velocity_and_channel(self) -> None:
-        """Test drum sound creation with velocity and channel."""
-        sound = make_drum_sound(36, 100, 9)
-        assert sound.note == Note(36)
-        from minipat.messages import Channel, Velocity
-
-        assert sound.velocity == Velocity(100)
-        assert sound.channel == Channel(9)
-
-    def test_make_drum_sound_validation(self) -> None:
-        """Test that make_drum_sound validates input values."""
-        # Test invalid note
-        with pytest.raises(ValueError):
-            make_drum_sound(128)  # Note out of range
-
-        # Test invalid velocity
-        with pytest.raises(ValueError):
-            make_drum_sound(36, 128)  # Velocity out of range
-
-        # Test invalid channel
-        with pytest.raises(ValueError):
-            make_drum_sound(36, 100, 16)  # Channel out of range
-
-
 class TestKit:
     """Tests for Kit class."""
 
-    def test_empty_drum_kit(self) -> None:
+    def test_empty_kit(self) -> None:
         """Test empty drum kit creation."""
         kit: Kit = PMap.empty()
         assert kit.lookup("bd") is None
         assert kit.size() == 0
 
-    def test_drum_kit_with_sounds(self) -> None:
+    def test_kit_with_sounds(self) -> None:
         """Test drum kit with initial sounds."""
         sounds = [("bd", Sound(Note(36))), ("sd", Sound(Note(38)))]
         kit: Kit = PMap.mk(sounds)
@@ -168,7 +168,7 @@ class TestDefaultKit:
 class TestDrumSoundElemParser:
     """Tests for DrumSoundElemParser."""
 
-    def test_parse_basic_drum_sounds(self) -> None:
+    def test_parse_basic_hits(self) -> None:
         """Test parsing basic drum sound identifiers."""
         kit = DEFAULT_KIT
         parser = DrumSoundElemParser(kit)
@@ -214,90 +214,52 @@ class TestDrumSoundElemParser:
 class TestNucleusKitManagement:
     """Tests for Nucleus-based kit management."""
 
-    def test_nucleus_drum_kit_property(self) -> None:
-        """Test getting and setting the drum_kit property."""
+    def test_nucleus_kit_property(self) -> None:
+        """Test getting and setting the kit property."""
         from minipat.dsl import Nucleus
 
         n = Nucleus.boot()
         try:
             # Test getting kit
-            kit = n.drum_kit
+            kit = n.kit
             assert isinstance(kit, PMap)
             assert kit.lookup("bd") is not None
 
             # Test setting kit
             custom_kit: Kit = PMap.mk([("custom", Sound(Note(100)))])
-            n.drum_kit = custom_kit
-            assert n.drum_kit.lookup("custom") is not None
-            assert n.drum_kit.lookup("custom").note == Note(100)  # type: ignore
+            n.kit = custom_kit
+            assert n.kit.lookup("custom") is not None
+            assert n.kit.lookup("custom").note == Note(100)  # type: ignore
         finally:
             n.stop()
 
-    def test_nucleus_add_drum_sound(self) -> None:
-        """Test adding drum sounds via Nucleus."""
+    def test_nucleus_add_hit(self) -> None:
+        """Test adding hits via Nucleus.add_hit() method."""
         from minipat.dsl import Nucleus
+        from minipat.messages import Channel, Velocity
 
         n = Nucleus.boot()
         try:
-            n.add_drum_sound("test", 100, 80, 9)
+            # Add a hit using the method
+            n.add_hit("test", 100, 80, 9)
 
-            sound = n.drum_kit.lookup("test")
+            sound = n.kit.lookup("test")
             assert sound is not None
             assert sound.note == Note(100)
-        finally:
-            n.stop()
+            assert sound.velocity == Velocity(80)
+            assert sound.channel == Channel(9)
 
-    def test_nucleus_remove_drum_sound(self) -> None:
-        """Test removing drum sounds via Nucleus."""
-        from minipat.dsl import Nucleus
+            # Add another hit without velocity/channel
+            n.add_hit("simple", 60)
+            simple = n.kit.lookup("simple")
+            assert simple is not None
+            assert simple.note == Note(60)
+            assert simple.velocity is None
+            assert simple.channel is None
 
-        n = Nucleus.boot()
-        try:
-            # Add a sound first
-            n.add_drum_sound("test", 100)
-            assert n.drum_kit.lookup("test") is not None
-
-            # Remove it
-            removed = n.remove_drum_sound("test")
-            assert removed is True
-            assert n.drum_kit.lookup("test") is None
-
-            # Try to remove non-existent sound
-            removed = n.remove_drum_sound("nonexistent")
-            assert removed is False
-        finally:
-            n.stop()
-
-    def test_nucleus_list_drum_sounds(self) -> None:
-        """Test listing drum sounds via Nucleus."""
-        from minipat.dsl import Nucleus
-
-        n = Nucleus.boot()
-        try:
-            sounds = n.list_drum_sounds()
-            assert isinstance(sounds, PMap)
-            assert sounds.contains("bd")
-            assert sounds.contains("sd")
-            bd_sound = sounds.lookup("bd")
-            assert bd_sound is not None
-            assert bd_sound.note == Note(36)
-        finally:
-            n.stop()
-
-    def test_nucleus_reset_kit(self) -> None:
-        """Test resetting kit via Nucleus."""
-        from minipat.dsl import Nucleus
-
-        n = Nucleus.boot()
-        try:
-            # Modify kit
-            n.add_drum_sound("custom", 100)
-            assert n.drum_kit.lookup("custom") is not None
-
-            # Reset kit
-            n.reset_kit()
-            assert n.drum_kit.lookup("custom") is None
-            assert n.drum_kit.lookup("bd") is not None
+            # Check that default sounds are still there
+            assert n.kit.contains("bd")
+            assert n.kit.contains("sd")
         finally:
             n.stop()
 
@@ -307,11 +269,11 @@ class TestKitIntegration:
 
     def test_kit_stream_with_kit(self) -> None:
         """Test creating streams from kit patterns with specific kit."""
-        from minipat.combinators import kit_stream_with_kit
+        from minipat.combinators import sound_stream
 
         kit = DEFAULT_KIT
         # Create a stream from a drum pattern
-        stream = kit_stream_with_kit("bd sd bd sd", kit)
+        stream = sound_stream(kit, "bd sd bd sd")
 
         # Verify the stream contains the correct notes
         # This is a basic test - full integration would require
@@ -325,7 +287,7 @@ class TestKitIntegration:
         n = Nucleus.boot()
         try:
             # Create a flow from a drum pattern using nucleus
-            flow = n.kit("bd sd hh")
+            flow = n.sound("bd sd hh")
 
             # Verify the flow was created
             assert flow is not None
@@ -340,10 +302,10 @@ class TestKitIntegration:
         n = Nucleus.boot()
         try:
             # Add a custom drum sound
-            n.add_drum_sound("custom", 100)
+            n.add_hit("custom", 100)
 
             # Use it in a pattern
-            flow = n.kit("bd custom sd")
+            flow = n.sound("bd custom sd")
             assert flow is not None
         finally:
             n.stop()
@@ -357,7 +319,7 @@ class TestKitIntegration:
             # This should raise an error due to unknown drum sound
             with pytest.raises(ValueError):
                 # Attempting to evaluate this pattern should fail
-                n.kit("bd unknownsound sd")
+                n.sound("bd unknownsound sd")
                 # Force evaluation by trying to access the pattern elements
                 # In real usage, this would happen when the pattern is played
         finally:
