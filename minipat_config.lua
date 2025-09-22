@@ -1,7 +1,10 @@
 return {
   config = {
+    minipat = {
+      port = "fluidsynth",
+    },
     backend = {
-      command = "fluidsynth -qsid",
+      command = "fluidsynth -qsi",
     },
   },
 }
