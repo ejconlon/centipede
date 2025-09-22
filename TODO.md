@@ -34,7 +34,6 @@ Next available task ID: {#26}
 
 ### Upcoming
 
-- {#22} Add " | delta: [fractional seconds since last column msg]" column to minipat nvim monitor output
 - {#24} Add `type FlowLike = str | Stream[MidiAttrs] | Flow` to dsl and expand accepted argument types
 - {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
 - {#23} Add `Flow.transpose(self, pat_str: str) -> Flow` to transpose notes
@@ -42,6 +41,12 @@ Next available task ID: {#26}
 
 ### Done
 
+- {#22} Add " | delta: [fractional seconds since last column msg]" column to minipat nvim monitor output
+  - Modified pretty_print_message() to track and display both global and per-channel delta times
+  - Added two delta columns: gdel (global) and cdel (channel-specific)
+  - Both deltas display with 3 decimal places (e.g., "gdel: 0.123 | cdel: 1.456")
+  - First message shows "gdel: 0.000 | cdel: 0.000"
+  - Updated monitor_port() to maintain both last_global_timestamp_ns and channel_timestamps dictionary
 - {#20} Add `Nucleus.preview(arc: CycleArcLike) -> Event` to render and play midi file
   - Added preview() method to Nucleus class that renders current orbit patterns
   - Updated render_midi_file() to set type=0 for single track MIDI files

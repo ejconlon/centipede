@@ -139,11 +139,46 @@ def format_message_csv(msg: mido.Message, delimiter: str) -> str:
         )
 
 
-def pretty_print_message(msg: mido.Message) -> None:
-    """Pretty print a MIDI message with timestamp."""
+def pretty_print_message(
+    msg: mido.Message,
+    last_global_timestamp_ns: int | None,
+    channel_timestamps: dict[int | str, int],
+) -> int:
+    """Pretty print a MIDI message with both global and per-channel deltas.
+
+    Args:
+        msg: The MIDI message to print
+        last_global_timestamp_ns: Last timestamp across all channels
+        channel_timestamps: Dictionary mapping channel numbers (or "NC") to last timestamp
+
+    Returns:
+        Current timestamp in nanoseconds
+    """
     timestamp_ns = time.time_ns()
     # Format with millisecond precision: HH:MM:SS.mmm
     wall_time = time.strftime("%H:%M:%S") + f".{(timestamp_ns // 1_000_000) % 1000:03d}"
+
+    # Get channel or "NC" for messages without channel
+    channel_key: int | str = msg.channel if hasattr(msg, "channel") else "NC"
+
+    # Calculate global delta
+    if last_global_timestamp_ns is not None:
+        gdelta_ns = timestamp_ns - last_global_timestamp_ns
+        gdelta_secs = gdelta_ns / 1_000_000_000  # Convert to seconds
+        gdelta_str = f" | gdel: {gdelta_secs:.3f}"
+    else:
+        gdelta_str = " | gdel: 0.000"
+
+    # Calculate channel delta
+    if channel_key in channel_timestamps:
+        cdelta_ns = timestamp_ns - channel_timestamps[channel_key]
+        cdelta_secs = cdelta_ns / 1_000_000_000  # Convert to seconds
+        cdelta_str = f" | cdel: {cdelta_secs:.3f}"
+    else:
+        cdelta_str = " | cdel: 0.000"
+
+    # Update timestamp for this channel
+    channel_timestamps[channel_key] = timestamp_ns
 
     # Get channel string - padded to 2 digits if present, NC if not
     channel_str = f"[{msg.channel:02d}]" if hasattr(msg, "channel") else "[NC]"
@@ -158,35 +193,45 @@ def pretty_print_message(msg: mido.Message) -> None:
 
     if msg.type == "note_on":
         print(
-            f"[{wall_time}] {channel_str} {display_type:<9} | note: {msg.note:3d} | vel: {msg.velocity:3d}"
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | note: {msg.note:3d} | vel: {msg.velocity:3d}"
         )
     elif msg.type == "note_off":
         print(
-            f"[{wall_time}] {channel_str} {display_type:<9} | note: {msg.note:3d} | vel: {msg.velocity:3d}"
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | note: {msg.note:3d} | vel: {msg.velocity:3d}"
         )
     elif msg.type == "control_change":
         print(
-            f"[{wall_time}] {channel_str} {display_type:<9} | control: {msg.control:3d} | value: {msg.value:3d}"
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | control: {msg.control:3d} | value: {msg.value:3d}"
         )
     elif msg.type == "program_change":
         print(
-            f"[{wall_time}] {channel_str} {display_type:<9} | program: {msg.program:3d}"
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | program: {msg.program:3d}"
         )
     elif msg.type == "pitchwheel":
-        print(f"[{wall_time}] {channel_str} {display_type:<9} | pitch: {msg.pitch:6d}")
+        print(
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | pitch: {msg.pitch:6d}"
+        )
     elif msg.type == "aftertouch":
-        print(f"[{wall_time}] {channel_str} {display_type:<9} | value: {msg.value:3d}")
+        print(
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | value: {msg.value:3d}"
+        )
     elif msg.type == "polytouch":
         print(
-            f"[{wall_time}] {channel_str} {display_type:<9} | note: {msg.note:3d} | value: {msg.value:3d}"
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | note: {msg.note:3d} | value: {msg.value:3d}"
         )
     elif msg.type == "sysex":
         data_str = " ".join(f"{b:02x}" for b in msg.data[:8])
         if len(msg.data) > 8:
             data_str += "..."
-        print(f"[{wall_time}] {channel_str} {display_type:<9} | data: {data_str}")
+        print(
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | data: {data_str}"
+        )
     else:
-        print(f"[{wall_time}] {channel_str} {display_type:<9} | {msg}")
+        print(
+            f"[{wall_time}] {channel_str} {display_type:<9}{gdelta_str}{cdelta_str} | {msg}"
+        )
+
+    return timestamp_ns
 
 
 def list_ports() -> None:
@@ -261,13 +306,19 @@ def monitor_port(port_name: str, delimiter: str | None) -> None:
             )
             print(header)
 
-        with mido.open_input(port_name) as inport:
+        inport = mido.open_input(port_name)
+
+        with inport:
+            last_global_timestamp_ns: int | None = None
+            channel_timestamps: dict[int | str, int] = {}
             for msg in inport:
                 if use_delimited and delimiter is not None:
                     csv_line = format_message_csv(msg, delimiter)
                     print(csv_line)
                 else:
-                    pretty_print_message(msg)
+                    last_global_timestamp_ns = pretty_print_message(
+                        msg, last_global_timestamp_ns, channel_timestamps
+                    )
     except KeyboardInterrupt:
         print("\nStopped monitoring", file=sys.stderr)
     except OSError as e:
