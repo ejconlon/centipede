@@ -8,7 +8,7 @@ from fractions import Fraction
 from functools import partial
 from typing import Any, Callable, Iterable, Optional, Tuple, cast, override
 
-from minipat.common import ONE_HALF, PartialMatchException, ignore_arg
+from minipat.common import PartialMatchException, ignore_arg
 from spiny.arrow import ArrowM
 from spiny.common import Box, Singleton
 from spiny.seq import PSeq
@@ -175,7 +175,7 @@ class Pat[T]:
         return Pat(PatStretch(pattern, count))
 
     @staticmethod
-    def prob(pat: Pat[T], chance: Fraction = ONE_HALF) -> Pat[T]:
+    def prob(pat: Pat[T], chance: Fraction = Fraction(1, 2)) -> Pat[T]:
         """Create a probabilistic pattern.
 
         Textual form: pattern?

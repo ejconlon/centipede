@@ -2,10 +2,9 @@
 
 from fractions import Fraction
 
-from minipat.arc import CycleArc
-from minipat.common import CycleDelta, CycleTime
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
+from minipat.time import CycleArc, CycleDelta, CycleTime
 from spiny import PSeq
 
 

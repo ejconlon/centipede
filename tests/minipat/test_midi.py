@@ -8,7 +8,6 @@ from typing import List
 import mido
 from mido.frozen import FrozenMessage
 
-from minipat.arc import CycleArc, CycleSpan
 from minipat.combinators import (
     combine,
     combine_all,
@@ -16,7 +15,6 @@ from minipat.combinators import (
     program_stream,
     velocity_stream,
 )
-from minipat.common import CycleTime, PosixTime, mk_cps
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
 from minipat.messages import (
@@ -49,6 +47,7 @@ from minipat.midi import (
     echo_system,
     parse_messages,
 )
+from minipat.time import CycleArc, CycleSpan, CycleTime, PosixTime, mk_cps
 from spiny.dmap import DMap
 
 

@@ -2,12 +2,11 @@
 
 from fractions import Fraction
 
-from minipat.arc import CycleArc
-from minipat.common import CycleTime
 from minipat.parser import parse_pattern
 from minipat.pat import Pat, SpeedOp
 from minipat.printer import print_pattern
 from minipat.stream import Stream
+from minipat.time import CycleArc, CycleTime
 
 
 def test_pat_speed_fractional_fast() -> None:

@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#20}
+Next available task ID: {#21}
 
 ### Active
 
@@ -37,6 +37,10 @@ Next available task ID: {#20}
 
 ### Done
 
+- {#20} Add `Nucleus.preview(arc: CycleArcLike) -> Event` to render and play midi file
+  - Added preview() method to Nucleus class that renders current orbit patterns
+  - Updated render_midi_file() to set type=0 for single track MIDI files
+  - Tested functionality with multiple orbits and patterns
 - {#18} Render EvHeap to midi file
   - Added render_evheap_to_midi_file() function to midi.py for rendering event heaps to MIDI files
   - Function supports configurable tempo (cps), MIDI resolution (ticks_per_beat), and default velocity

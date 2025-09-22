@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from minipat.arc import CycleArc, CycleSpan
-from minipat.common import CycleTime
 from minipat.ev import Ev
 from minipat.parser import parse_pattern
 from minipat.stream import Stream
+from minipat.time import CycleArc, CycleSpan, CycleTime
 
 
 def _test_pattern_events(

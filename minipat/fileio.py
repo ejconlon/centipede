@@ -7,7 +7,6 @@ from typing import Optional
 
 import mido
 
-from minipat.common import Bpc, Cps, PosixTime
 from minipat.ev import EvHeap
 from minipat.live import Orbit
 from minipat.messages import (
@@ -22,9 +21,11 @@ from minipat.messages import (
     msg_note_off,
 )
 from minipat.midi import parse_messages
+from minipat.time import Bpc, Cps, CycleTime, PosixTime
 
 
 def render_midi_file(
+    start: CycleTime,
     events: EvHeap[MidiAttrs],
     filepath: str,
     cps: Cps = Cps(Fraction(1, 2)),
@@ -34,6 +35,7 @@ def render_midi_file(
     """Render an EvHeap to a MIDI file.
 
     Args:
+        start: Start cycle time - events will be timed relative to this
         events: The event heap containing MIDI attribute events
         filepath: Path where to save the MIDI file
         cps: Cycles per second (tempo)
@@ -46,17 +48,16 @@ def render_midi_file(
             (CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), note_stream("c4")),
             (CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2))), note_stream("d4")),
         ])
-        render_midi_file(events, "output.mid", cps=Cps(2.0), bpc=Bpc(4))
+        render_midi_file(CycleTime(Fraction(0)), events, "output.mid", cps=Cps(2.0), bpc=Bpc(4))
     """
     default_vel = default_velocity if default_velocity is not None else DEFAULT_VELOCITY
 
-    # Calculate ticks_per_beat based on standard MIDI resolution
+    # Calculate ticks_per_beat (ticks per quarter note)
     # Standard MIDI files typically use 480 ticks per quarter note
-    # We'll use 480 * bpc to get appropriate resolution for the given beats per cycle
-    ticks_per_beat = 480 * int(bpc)
+    ticks_per_beat = 480
 
-    # Create a new MIDI file with one track
-    midi_file = mido.MidiFile(ticks_per_beat=ticks_per_beat)
+    # Create a new MIDI file with one track (type=0 for single track file)
+    midi_file = mido.MidiFile(type=0, ticks_per_beat=ticks_per_beat)
     track = mido.MidiTrack()
     midi_file.tracks.append(track)
 
@@ -76,11 +77,11 @@ def render_midi_file(
         # Use orbit 0 as default channel if no channel is specified
         msgs = parse_messages(Orbit(0), ev.val, default_vel)
 
-        # Calculate timing for this event
-        event_time_cycles = float(span.active.start)
+        # Calculate timing for this event relative to start
+        event_time_cycles = float(span.active.start - start)
         event_duration_cycles = float(span.active.end - span.active.start)
 
-        # Convert cycle time to POSIX timestamp (treating cycle 0 as timestamp 0)
+        # Convert cycle time to POSIX timestamp (treating start as timestamp 0)
         event_time = PosixTime(event_time_cycles / float(cps))
         event_end_time = PosixTime(
             (event_time_cycles + event_duration_cycles) / float(cps)
@@ -103,9 +104,9 @@ def render_midi_file(
                 # For program_change and control_change, just add at start time
                 msg_heap.push(TimedMessage(event_time, midi_msg))
 
-    # Extract sorted messages from heap and track active notes for smart note-off handling
-    # Key: (channel, note) -> count of active notes
-    active_notes: dict[tuple[int, int], int] = {}
+    # Extract sorted messages from heap and track whether notes expect note-off
+    # Key: (channel, note) -> boolean indicating if note_off is expected
+    expects_note_off: dict[tuple[int, int], bool] = {}
     last_time = 0.0
 
     # Process all messages in time order
@@ -119,48 +120,67 @@ def render_midi_file(
 
         msg_type = MsgTypeField.get(frozen_msg)
 
-        # Handle note tracking for smart note-off
+        # Handle note tracking
         if msg_type == "note_on":
             channel = ChannelField.get(frozen_msg)
             note = NoteField.get(frozen_msg)
             key = (channel, note)
+            velocity = frozen_msg.velocity
 
-            # Increment active note count
-            active_notes[key] = active_notes.get(key, 0) + 1
-
-            # Always send note_on
-            note_on_msg = mido.Message(
-                "note_on",
-                channel=channel,
-                note=note,
-                velocity=frozen_msg.velocity,
-                time=int((abs_time - last_time) * float(cps) * ticks_per_beat),
-            )
-            track.append(note_on_msg)
-            last_time = abs_time
+            if velocity == 0:
+                # note_on with velocity=0 is equivalent to note_off
+                if expects_note_off.get(key, False):
+                    expects_note_off[key] = False
+                    note_off_msg = mido.Message(
+                        "note_off",
+                        channel=channel,
+                        note=note,
+                        velocity=0,
+                        time=int(
+                            (abs_time - last_time)
+                            * float(cps)
+                            * int(bpc)
+                            * ticks_per_beat
+                        ),
+                    )
+                    track.append(note_off_msg)
+                    last_time = abs_time
+                # else: skip this note_off as we don't expect one
+            else:
+                # Regular note_on with velocity > 0
+                expects_note_off[key] = True
+                note_on_msg = mido.Message(
+                    "note_on",
+                    channel=channel,
+                    note=note,
+                    velocity=velocity,
+                    time=int(
+                        (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
+                    ),
+                )
+                track.append(note_on_msg)
+                last_time = abs_time
 
         elif msg_type == "note_off":
             channel = ChannelField.get(frozen_msg)
             note = NoteField.get(frozen_msg)
             key = (channel, note)
 
-            # Only send note_off if this is the last active instance
-            count = active_notes.get(key, 0)
-            if count > 0:
-                active_notes[key] = count - 1
-                if active_notes[key] == 0:
-                    # This is the last note_off needed
-                    del active_notes[key]
-                    note_off_msg = mido.Message(
-                        "note_off",
-                        channel=channel,
-                        note=note,
-                        velocity=0,
-                        time=int((abs_time - last_time) * float(cps) * ticks_per_beat),
-                    )
-                    track.append(note_off_msg)
-                    last_time = abs_time
-                # else: skip this note_off as there are still active notes
+            # Only send note_off if we expect one
+            if expects_note_off.get(key, False):
+                expects_note_off[key] = False
+                note_off_msg = mido.Message(
+                    "note_off",
+                    channel=channel,
+                    note=note,
+                    velocity=0,
+                    time=int(
+                        (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
+                    ),
+                )
+                track.append(note_off_msg)
+                last_time = abs_time
+            # else: skip this note_off as we don't expect one
 
         elif msg_type == "program_change":
             # Program change
@@ -168,7 +188,9 @@ def render_midi_file(
                 "program_change",
                 channel=ChannelField.get(frozen_msg),
                 program=frozen_msg.program,
-                time=int((abs_time - last_time) * float(cps) * ticks_per_beat),
+                time=int(
+                    (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
+                ),
             )
             track.append(pc_msg)
             last_time = abs_time
@@ -180,7 +202,9 @@ def render_midi_file(
                 channel=ChannelField.get(frozen_msg),
                 control=frozen_msg.control,
                 value=frozen_msg.value,
-                time=int((abs_time - last_time) * float(cps) * ticks_per_beat),
+                time=int(
+                    (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
+                ),
             )
             track.append(cc_msg)
             last_time = abs_time

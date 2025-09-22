@@ -8,10 +8,10 @@ from typing import List
 from hypothesis import given
 from hypothesis import strategies as st
 
-from minipat.arc import CycleArc
 from minipat.pat import Pat
 from minipat.reflect import minimize_pattern
 from minipat.stream import Stream
+from minipat.time import CycleArc
 from tests.spiny.hypo import configure_hypo
 
 configure_hypo()

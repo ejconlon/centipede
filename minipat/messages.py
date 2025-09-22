@@ -7,7 +7,7 @@ from typing import Any, List, NewType, Optional, cast, override
 from mido import Message
 from mido.frozen import FrozenMessage
 
-from minipat.common import PosixTime
+from minipat.time import PosixTime
 from spiny.dmap import DKey, DMap
 from spiny.heap import PHeap
 

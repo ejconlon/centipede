@@ -9,8 +9,6 @@ from functools import reduce
 from math import gcd
 from typing import Callable, List, Optional, Sequence, override
 
-from minipat.arc import Arc, CycleArc, StepArc
-from minipat.common import CycleDelta, CycleTime, StepDelta, StepTime
 from minipat.pat import (
     Pat,
     PatRepeat,
@@ -19,6 +17,15 @@ from minipat.pat import (
 )
 from minipat.pat_dag import PatDag, PatFind
 from minipat.stream import Stream
+from minipat.time import (
+    Arc,
+    CycleArc,
+    CycleDelta,
+    CycleTime,
+    StepArc,
+    StepDelta,
+    StepTime,
+)
 from spiny.seq import PSeq
 
 

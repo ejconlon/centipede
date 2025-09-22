@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from minipat.arc import CycleArc
-from minipat.common import CycleTime
 from minipat.pat import Pat
 from minipat.stream import ComposeStream, Stream, compose_once
+from minipat.time import CycleArc, CycleTime
 
 
 def test_compose_empty_sections() -> None:

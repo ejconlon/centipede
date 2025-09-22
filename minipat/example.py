@@ -5,7 +5,6 @@ import time
 from fractions import Fraction
 
 from bad_actor import Actor, ActorEnv, new_system
-from minipat.common import mk_cps
 from minipat.live import (
     BackendEvents,
     BackendMessage,
@@ -17,6 +16,7 @@ from minipat.live import (
 )
 from minipat.pat import Pat
 from minipat.stream import Stream
+from minipat.time import mk_cps
 
 
 class LogBackendActor[T](Actor[BackendMessage[T]]):

@@ -1,7 +1,6 @@
 from fractions import Fraction
 
-from minipat.arc import CycleArc
-from minipat.common import CycleDelta, CycleTime
+from minipat.time import CycleArc, CycleDelta, CycleTime
 
 
 def test_arc_creation() -> None:

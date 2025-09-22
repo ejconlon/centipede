@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 
-from minipat.arc import CycleSpan
-from minipat.common import CycleDelta, Factor
+from minipat.time import CycleDelta, CycleSpan
 from spiny import PHeapMap
 
 
@@ -32,7 +32,7 @@ class Ev[T]:
         """
         return Ev(self.span.shift(delta), self.val)
 
-    def scale(self, factor: Factor) -> Ev[T]:
+    def scale(self, factor: Fraction) -> Ev[T]:
         """Scale the event's span by a factor.
 
         Args:
@@ -43,7 +43,7 @@ class Ev[T]:
         """
         return Ev(self.span.scale(factor), self.val)
 
-    def clip(self, factor: Factor) -> Ev[T]:
+    def clip(self, factor: Fraction) -> Ev[T]:
         """Clip the event's span to a fraction of its length.
 
         Args:

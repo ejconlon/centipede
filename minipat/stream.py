@@ -10,8 +10,7 @@ from fractions import Fraction
 from math import ceil, floor
 from typing import Callable, List, Optional, Tuple, override
 
-from minipat.arc import CycleArc, CycleSpan
-from minipat.common import ONE, CycleDelta, CycleTime, PartialMatchException
+from minipat.common import PartialMatchException
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push
 from minipat.pat import (
     Pat,
@@ -30,6 +29,7 @@ from minipat.pat import (
     PatStretch,
     SpeedOp,
 )
+from minipat.time import CycleArc, CycleDelta, CycleSpan, CycleTime
 from spiny import PSeq
 from spiny.heapmap import PHeapMap
 
@@ -1248,7 +1248,7 @@ def pat_stream[T, U](pat: Pat[T], binder: PatBinder[T, U]) -> Stream[U]:
                     # Use the inner pattern, not the stretch wrapper
                     pat = pat.unwrap.pat
                 else:
-                    weight = ONE
+                    weight = Fraction(1)
                 wpats.append((pat_stream(pat, binder), weight))
             return WeightedSeqStream(wpats)
         case PatPar(pats):

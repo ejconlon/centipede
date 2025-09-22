@@ -1,8 +1,7 @@
 from fractions import Fraction
 
-from minipat.arc import CycleArc, CycleSpan
-from minipat.common import CycleDelta, CycleTime
 from minipat.ev import Ev
+from minipat.time import CycleArc, CycleDelta, CycleSpan, CycleTime
 
 
 def test_ev_creation() -> None:

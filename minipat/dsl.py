@@ -5,10 +5,9 @@ import os
 import sys
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, NoReturn, Optional, cast
+from typing import Callable, NoReturn, Optional
 
 from bad_actor import System, new_system
-from minipat.arc import CycleArc, NumArc
 from minipat.combinators import (
     channel_stream,
     combine_all,
@@ -20,11 +19,18 @@ from minipat.combinators import (
     value_stream,
     velocity_stream,
 )
-from minipat.common import (
+from minipat.kit import DEFAULT_KIT, Kit, add_hit
+from minipat.live import LiveSystem, Orbit
+from minipat.messages import MidiAttrs, TimedMessage
+from minipat.midi import start_midi_live_system
+from minipat.pat import Pat, SpeedOp
+from minipat.stream import MergeStrat, Stream
+from minipat.time import (  # Arc types; Core types; Creation functions
     Bpc,
     BpcLike,
     Cps,
     CpsLike,
+    CycleArcLike,
     CycleDelta,
     CycleDeltaLike,
     CycleTime,
@@ -34,39 +40,13 @@ from minipat.common import (
     TempoLike,
     mk_bpc,
     mk_cps,
+    mk_cycle_arc,
     mk_cycle_delta,
     mk_cycle_time,
     mk_tempo,
     numeric_frac,
 )
-from minipat.kit import DEFAULT_KIT, Kit, add_hit
-from minipat.live import LiveSystem, Orbit
-from minipat.messages import MidiAttrs, TimedMessage
-from minipat.midi import start_midi_live_system
-from minipat.pat import Pat, SpeedOp
-from minipat.stream import MergeStrat, Stream
 from spiny import PSeq
-
-
-def arc(start: Numeric, end: Numeric) -> NumArc:
-    """Create a numeric arc from start and end values.
-
-    Args:
-        start: Start time as a numeric value
-        end: End time as a numeric value
-
-    Returns:
-        A NumArc representing the time interval
-
-    Examples:
-        arc(0, 2)      # Arc from 0 to 2
-        arc(1.5, 3)    # Arc from 1.5 to 3
-        arc(0, 1/4)    # Arc from 0 to quarter beat
-    """
-
-    # Convert to CycleArc and cast to NumArc for type compatibility
-    cycle_arc = CycleArc(mk_cycle_time(start), mk_cycle_time(end))
-    return cast(NumArc, cycle_arc)
 
 
 @dataclass(frozen=True, eq=False)
@@ -489,7 +469,7 @@ class Flow:
         return self.repeat(count)
 
     @staticmethod
-    def compose(*sections: tuple[NumArc, Flow]) -> Flow:
+    def compose(*sections: tuple[CycleArcLike, Flow]) -> Flow:
         """Create a flow that composes multiple sections with infinite looping.
 
         The composition loops infinitely - if the sections span (0, 4), then
@@ -510,13 +490,10 @@ class Flow:
                 (arc(2, 4), chorus)
             )
         """
-        # Convert NumArc sections to CycleArc sections
+        # Convert arc sections to CycleArc sections
         cycle_sections = []
-        for num_arc, flow in sections:
-            cycle_arc = CycleArc(
-                mk_cycle_time(num_arc.start),
-                mk_cycle_time(num_arc.end),
-            )
+        for arc_like, flow in sections:
+            cycle_arc = mk_cycle_arc(arc_like)
             cycle_sections.append((cycle_arc, flow.stream))
 
         return Flow(Stream.compose(cycle_sections))
@@ -699,7 +676,7 @@ class Nucleus:
 
     sys: System
     live: LiveSystem[MidiAttrs, TimedMessage]
-    _kit: Kit
+    kit: Kit
 
     @staticmethod
     def boot(
@@ -728,8 +705,7 @@ class Nucleus:
         )
         sys = new_system(sys_name)
         live = start_midi_live_system(sys, port_name, init_cps, mk_bpc(init_bpc))
-        kit = DEFAULT_KIT  # Use default kit
-        return Nucleus(sys, live, kit)
+        return Nucleus(sys, live, DEFAULT_KIT)
 
     def stop(self) -> int:
         self.live.panic()
@@ -886,28 +862,10 @@ class Nucleus:
             o.every(flow)
 
     def __delitem__(self, num: int) -> None:
-        return self.orbital(num).clear()
+        self.orbital(num).clear()
 
     def __or__(self, flow: Flow) -> None:
         self.once(flow)
-
-    @property
-    def kit(self) -> Kit:
-        """Get the current kit.
-
-        Returns:
-            The currently active Kit instance
-        """
-        return self._kit
-
-    @kit.setter
-    def kit(self, kit: Kit) -> None:
-        """Set the current kit.
-
-        Args:
-            kit: The Kit instance to make active
-        """
-        self._kit = kit
 
     def add_hit(
         self,
@@ -934,7 +892,7 @@ class Nucleus:
             n[0] = n.sound("bd crash2 sd")
         """
         sound = add_hit(note, velocity, channel)
-        self._kit = self._kit.put(identifier, sound)
+        self.kit = self.kit.put(identifier, sound)
 
     def sound(self, pat_str: str) -> Flow:
         """Create a flow from kit hit identifiers using this nucleus's kit.
@@ -955,7 +913,34 @@ class Nucleus:
             n.sound("hh*8")              # Hi-hat repeated 8 times
             n.sound("bd sd:2 hh:3")      # Different speeds for each element
         """
-        return Flow(sound_stream(self._kit, pat_str))
+        return Flow(sound_stream(self.kit, pat_str))
+
+    def preview(self, arc: CycleArcLike) -> None:
+        """Render and play a preview of the current orbits over the given arc.
+
+        Sends the current orbit patterns over the specified arc directly to the
+        MIDI output port.
+
+        Args:
+            arc: The time arc to preview. Can be either a numeric arc (using numeric times)
+                 or a CycleArc (using cycle times). Use arc(start, end) to create one.
+
+        Returns:
+            An Event that will be set when playback completes
+
+        Examples:
+            # Preview 2 cycles of the current pattern
+            n[0] = note("c4 d4 e4 f4")
+            n.preview(arc(0, 2))
+
+            # Preview with multiple orbits
+            n[0] = note("c4 e4 g4")
+            n[1] = midinote("36 42")
+            n.preview(arc(0, 4))
+        """
+        arc = mk_cycle_arc(arc)
+        self.playing = False
+        self.live.preview(arc)
 
 
 @dataclass(frozen=True, eq=False)

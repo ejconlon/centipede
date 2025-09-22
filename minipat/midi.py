@@ -33,7 +33,6 @@ from bad_actor import (
     Task,
     new_system,
 )
-from minipat.common import Bpc, Cps, PosixTime, current_posix_time
 from minipat.ev import EvHeap
 from minipat.live import (
     BackendEvents,
@@ -60,6 +59,7 @@ from minipat.messages import (
     Velocity,
     msg_note_off,
 )
+from minipat.time import Bpc, Cps, PosixTime, now
 from spiny.seq import PSeq
 
 
@@ -107,7 +107,7 @@ class MidiSenderTask(Task):
         """
         logger.debug("MIDI sender task started")
         while True:
-            current_time = current_posix_time()
+            current_time = now()
 
             # Get the next message that's ready to send
             with self._state as st:

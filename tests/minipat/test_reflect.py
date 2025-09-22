@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from minipat.arc import CycleArc, StepArc
-from minipat.common import CycleDelta, CycleTime, StepTime
 from minipat.pat import Pat
 from minipat.reflect import (
     CycleArcSeq,
@@ -19,6 +17,7 @@ from minipat.reflect import (
     reflect_minimal,
     unquantize,
 )
+from minipat.time import CycleArc, CycleDelta, CycleTime, StepArc, StepTime
 from spiny.seq import PSeq
 
 

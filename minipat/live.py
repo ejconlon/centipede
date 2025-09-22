@@ -16,21 +16,18 @@ from threading import Event
 from typing import List, NewType, Optional, override
 
 from bad_actor import Actor, ActorEnv, Mutex, Sender, System, Task
-from minipat.arc import CycleArc
-from minipat.common import (
-    ONE,
-    ONE_HALF,
-    ZERO,
+from minipat.ev import EvHeap, ev_heap_empty
+from minipat.stream import Stream
+from minipat.time import (
     Bpc,
     Cps,
+    CycleArc,
     CycleDelta,
     CycleTime,
     PosixDelta,
     PosixTime,
     frac_ceil,
 )
-from minipat.ev import EvHeap, ev_heap_empty
-from minipat.stream import Stream
 from spiny.map import PMap
 from spiny.seq import PSeq
 
@@ -40,7 +37,7 @@ Orbit = NewType("Orbit", int)
 # Timing Constants
 # =============================================================================
 
-_DEFAULT_CPS = ONE_HALF
+_DEFAULT_CPS = Fraction(1, 2)
 """Default cycles per second (tempo)."""
 
 _DEFAULT_GENERATIONS_PER_CYCLE = 4
@@ -205,7 +202,7 @@ class TransportState:
     def initial(timing: Timing) -> TransportState:
         return TransportState(
             playing=False,
-            current_cycle=CycleTime(ZERO),
+            current_cycle=CycleTime(Fraction(0)),
             timing=timing,
             playback_start=PosixTime(0.0),
         )
@@ -356,6 +353,14 @@ class PatternOnce[T](PatternMessage[T]):
     instant: Instant
     orbit: Optional[Orbit]
     events: EvHeap[T]
+
+
+@dataclass(frozen=True)
+class PatternPreview[T](PatternMessage[T]):
+    """Generate preview of all active orbits over an arc."""
+
+    instant: Instant
+    arc: CycleArc
 
 
 class BackendMessage[U](metaclass=ABCMeta):
@@ -525,6 +530,8 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
                 self.clear_all_patterns(env.logger)
             case PatternOnce(instant, orbit, events):
                 self._generate_once(env.logger, instant, orbit, events)
+            case PatternPreview(instant, arc):
+                self._generate_preview(env.logger, instant, arc)
 
     def _generate_events(self, logger: Logger, instant: Instant) -> None:
         """Generate events for the given instant."""
@@ -656,6 +663,54 @@ class PatternActor[T, U](Actor[PatternMessage[T]]):
 
         # Clear all streams
         self._pattern_state.orbits = PMap.empty()
+
+    def _generate_preview(
+        self, logger: Logger, instant: Instant, arc: CycleArc
+    ) -> None:
+        """Generate preview events for all active orbits over the specified arc."""
+        logger.debug("Generating preview for arc %s-%s", arc.start, arc.end)
+
+        # Check if any orbits are soloed
+        has_solo = any(
+            orbit_state.solo for _, orbit_state in self._pattern_state.orbits
+        )
+
+        # Collect and process events from all active orbits
+        all_processed_events: List[U] = []
+
+        for orbit, orbit_state in self._pattern_state.orbits:
+            if orbit_state.stream is None:
+                continue
+
+            # Skip muted orbits, unless they're soloed
+            if orbit_state.muted and not orbit_state.solo:
+                continue
+
+            # If there are soloed orbits, only play soloed ones
+            if has_solo and not orbit_state.solo:
+                continue
+
+            # Generate events using the orbit stream over the full arc
+            events = orbit_state.stream.unstream(arc)
+
+            # Convert events to EvHeap
+            if events:
+                event_heap: EvHeap[T] = ev_heap_empty()
+                for span, ev in events:
+                    event_heap = event_heap.insert(span, ev)
+
+                # Process events for this orbit
+                processed_events = self._processor.process(instant, orbit, event_heap)
+                all_processed_events.extend(processed_events)
+                logger.debug(
+                    "Generated %s preview events for orbit %s", len(events), orbit
+                )
+
+        # Send all processed events to backend if any exist
+        if all_processed_events:
+            combined_events: PSeq[U] = PSeq.mk(all_processed_events)
+            self._backend_sender.send(BackendEvents(combined_events))
+            logger.debug("Sent %d preview events to backend", len(all_processed_events))
 
 
 class LiveSystem[T, U]:
@@ -904,7 +959,7 @@ class LiveSystem[T, U]:
             aligned: If True, start at the next cycle boundary; if False, start immediately.
             orbit: Optional orbit to use for event processing.
         """
-        length = length if length is not None else CycleDelta(ONE)
+        length = length if length is not None else CycleDelta(Fraction(1))
         aligned = aligned if aligned is not None else False
 
         # Eagerly evaluate the stream
@@ -963,8 +1018,54 @@ class LiveSystem[T, U]:
             len(event_heap),
         )
 
+    def preview(self, arc: CycleArc) -> None:
+        """Generate and send a preview of all active orbits over the specified arc.
+
+        This method sends a message to the PatternActor to generate events for all
+        currently active orbits over the given arc. The events are sent directly
+        to the backend for immediate playback.
+
+        Args:
+            arc: The cycle arc to preview (e.g., arc(0, 2) for 2 cycles).
+        """
+        # Get current timing information
+        with self._transport_state_mutex as ts:
+            current_cps = ts.timing.cps
+            current_cycle = ts.current_cycle
+            gpc = ts.timing.generations_per_cycle
+            real_posix_start = ts.playback_start
+
+        # Calculate when the next generation step will occur
+        generation_cycle_length = Fraction(1) / gpc
+        next_generation_cycle = current_cycle + generation_cycle_length
+
+        # Calculate the posix time when the next generation step will occur
+        cycle_duration_to_next_gen = float(next_generation_cycle - current_cycle)
+        next_generation_posix = PosixTime(
+            float(real_posix_start)
+            + (float(current_cycle) + cycle_duration_to_next_gen) / float(current_cps)
+        )
+
+        # Calculate fake posix_start so that arc.start aligns with next_generation_posix
+        # We want: arc.start / cps + fake_posix_start = next_generation_posix
+        # So: fake_posix_start = next_generation_posix - arc.start / cps
+        fake_posix_start = PosixTime(
+            float(next_generation_posix) - float(arc.start) / float(current_cps)
+        )
+
+        # Create an instant for the preview
+        instant = Instant(
+            cycle_time=arc.start, cps=current_cps, posix_start=fake_posix_start
+        )
+
+        # Send preview message to the pattern actor
+        preview_message: PatternPreview[T] = PatternPreview(instant=instant, arc=arc)
+        self._pattern_sender.send(preview_message)
+
+        self._logger.debug("Sent preview message for arc %s-%s", arc.start, arc.end)
+
     def panic(self) -> None:
         """Emergency stop - pause, reset cycle, and clear all patterns."""
         self.pause()
-        self.set_cycle(CycleTime(ZERO))
+        self.set_cycle(CycleTime(Fraction(0)))
         self.clear_orbits()
