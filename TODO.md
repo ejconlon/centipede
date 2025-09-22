@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#23}
+Next available task ID: {#26}
 
 ### Active
 
@@ -35,6 +35,9 @@ Next available task ID: {#23}
 ### Upcoming
 
 - {#22} Add " | delta: [fractional seconds since last column msg]" column to minipat nvim monitor output
+- {#24} Add `type FlowLike = str | Stream[MidiAttrs] | Flow` to dsl and expand accepted argument types
+- {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
+- {#23} Add `Flow.transpose(self, pat_str: str) -> Flow` to transpose notes
 - {#21} Configure "generations ahead" to give more generation time
 
 ### Done
