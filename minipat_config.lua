@@ -1,7 +1,7 @@
 return {
   config = {
     backend = {
-      command = "fluidsynth -qsi"
-    }
-  }
+      command = "fluidsynth -qsid",
+    },
+  },
 }

@@ -391,7 +391,7 @@ local function start_subprocess(name, args, command, cwd, env, on_exit_callback)
       500,
       500,
       vim.schedule_wrap(function()
-        if not vim.api.nvim_buf_is_valid(subprocess.buffer) then
+        if not subprocess.buffer or not vim.api.nvim_buf_is_valid(subprocess.buffer) then
           subprocess.scroll_timer:stop()
           subprocess.scroll_timer:close()
           subprocess.scroll_timer = nil

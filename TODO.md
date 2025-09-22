@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#21}
+Next available task ID: {#23}
 
 ### Active
 
@@ -34,6 +34,8 @@ Next available task ID: {#21}
 
 ### Upcoming
 
+- {#22} Add " | delta: [fractional seconds since last column msg]" column to minipat nvim monitor output
+- {#21} Configure "generations ahead" to give more generation time
 
 ### Done
 
