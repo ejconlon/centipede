@@ -43,6 +43,9 @@ _DEFAULT_CPS = Fraction(1, 2)
 _DEFAULT_GENERATIONS_PER_CYCLE = 4
 """Default number of event generations to calculate per cycle."""
 
+_DEFAULT_GENERATIONS_AHEAD = 1
+"""Default number of generation cycles to calculate ahead (for more generation time)."""
+
 _DEFAULT_WAIT_FACTOR = Fraction(1, 4)
 """Default factor for calculating sleep intervals - use 1/4 of generation interval for responsive polling."""
 
@@ -971,10 +974,12 @@ class LiveSystem[T, U]:
 
         # Calculate start time
         generation_cycle_length = Fraction(1) / gpc
-        minimum_future_time = current_cycle + generation_cycle_length
+        minimum_future_time = current_cycle + (
+            generation_cycle_length * _DEFAULT_GENERATIONS_AHEAD
+        )
 
         if aligned:
-            # Start at the next cycle boundary, but ensure it's at least one generation cycle ahead
+            # Start at the next cycle boundary, but ensure it's at least the minimum future time
             next_cycle_boundary = CycleTime(Fraction(frac_ceil(current_cycle)))
             if next_cycle_boundary < minimum_future_time:
                 # Next cycle boundary is too close, use the one after that
@@ -982,7 +987,7 @@ class LiveSystem[T, U]:
             else:
                 start_cycle = next_cycle_boundary
         else:
-            # Start at one generation cycle in the future
+            # Start at the configured number of generation cycles in the future
             start_cycle = CycleTime(minimum_future_time)
 
         # Calculate end time
@@ -1037,7 +1042,9 @@ class LiveSystem[T, U]:
 
         # Calculate when the next generation step will occur
         generation_cycle_length = Fraction(1) / gpc
-        next_generation_cycle = current_cycle + generation_cycle_length
+        next_generation_cycle = current_cycle + (
+            generation_cycle_length * _DEFAULT_GENERATIONS_AHEAD
+        )
 
         # Calculate the posix time when the next generation step will occur
         cycle_duration_to_next_gen = float(next_generation_cycle - current_cycle)
