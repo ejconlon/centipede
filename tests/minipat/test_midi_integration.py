@@ -19,7 +19,13 @@ from minipat.live import (
     LiveSystem,
     Orbit,
 )
-from minipat.messages import MidiAttrs, MsgTypeField, NoteField, TimedMessage
+from minipat.messages import (
+    MidiAttrs,
+    MsgTypeField,
+    NoteField,
+    TimedMessage,
+    mido_bundle_iterator,
+)
 from minipat.midi import start_midi_live_system
 from minipat.time import PosixTime, mk_cps
 
@@ -46,7 +52,7 @@ class MockMidiPort:
         self.send_times.append(current_time)
 
         # Also put TimedMessage in queue for better testing
-        timed_msg = TimedMessage(time=PosixTime(current_time), message=msg)
+        timed_msg = TimedMessage(time=PosixTime(current_time), bundle=msg)
         self.timed_message_queue.put(timed_msg)
 
     def wait_for_message(self, timeout: float = 1.0) -> TimedMessage | None:
@@ -217,10 +223,14 @@ class TestMidiLiveSystemIntegration:
         # Build the actual sequence of (event_type, note_number) tuples
         actual_sequence = []
         for msg in messages:
-            msg_type = MsgTypeField.get(msg.message)
-            if msg_type in ["note_on", "note_off"]:
-                note_num = NoteField.unmk(NoteField.get(msg.message))
-                actual_sequence.append((msg_type, note_num))
+            # Extract first message from bundle
+            bundle_messages = list(mido_bundle_iterator(msg.bundle))
+            if bundle_messages:
+                first_msg = bundle_messages[0]
+                msg_type = MsgTypeField.get(first_msg)
+                if msg_type in ["note_on", "note_off"]:
+                    note_num = NoteField.unmk(NoteField.get(first_msg))
+                    actual_sequence.append((msg_type, note_num))
 
         # We should have at least 2 complete cycles (16 messages: 8 on + 8 off)
         assert len(actual_sequence) >= 16, (
@@ -252,11 +262,15 @@ class TestMidiLiveSystemIntegration:
             note_off_messages = []
 
             for msg in messages:
-                msg_type = MsgTypeField.get(msg.message)
-                if msg_type == "note_on":
-                    note_on_messages.append(msg)
-                elif msg_type == "note_off":
-                    note_off_messages.append(msg)
+                # Extract first message from bundle
+                bundle_messages = list(mido_bundle_iterator(msg.bundle))
+                if bundle_messages:
+                    first_msg = bundle_messages[0]
+                    msg_type = MsgTypeField.get(first_msg)
+                    if msg_type == "note_on":
+                        note_on_messages.append(msg)
+                    elif msg_type == "note_off":
+                        note_off_messages.append(msg)
 
             # Now check timing between consecutive note_on messages
             # Each should be approximately 0.125 seconds apart (125ms)
@@ -355,10 +369,14 @@ class TestMidiLiveSystemIntegration:
         # Extract only note_on events with their notes
         note_on_sequence = []
         for msg in messages:
-            msg_type = MsgTypeField.get(msg.message)
-            if msg_type == "note_on":
-                note_num = NoteField.unmk(NoteField.get(msg.message))
-                note_on_sequence.append(note_num)
+            # Extract first message from bundle
+            bundle_messages = list(mido_bundle_iterator(msg.bundle))
+            if bundle_messages:
+                first_msg = bundle_messages[0]
+                msg_type = MsgTypeField.get(first_msg)
+                if msg_type == "note_on":
+                    note_num = NoteField.unmk(NoteField.get(first_msg))
+                    note_on_sequence.append(note_num)
 
         # We should have at least 4 note_on events for 2 cycles of "c4 f4"
         assert len(note_on_sequence) >= 4, (

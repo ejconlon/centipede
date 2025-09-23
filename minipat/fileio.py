@@ -12,12 +12,17 @@ from minipat.live import Orbit
 from minipat.messages import (
     DEFAULT_VELOCITY,
     ChannelField,
+    ControlField,
     MidiAttrs,
     MsgHeap,
     MsgTypeField,
     NoteField,
+    ProgramField,
     TimedMessage,
+    ValueField,
     Velocity,
+    VelocityField,
+    mido_bundle_iterator,
     msg_note_off,
 )
 from minipat.midi import parse_messages
@@ -116,19 +121,50 @@ def render_midi_file(
         if timed_msg is None:
             break
         abs_time = timed_msg.time
-        frozen_msg = timed_msg.message
+        time = int((abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat)
+        for frozen_msg in mido_bundle_iterator(timed_msg.bundle):
+            msg_type = MsgTypeField.get(frozen_msg)
 
-        msg_type = MsgTypeField.get(frozen_msg)
+            # Handle note tracking
+            if msg_type == "note_on":
+                channel = ChannelField.get(frozen_msg)
+                note = NoteField.get(frozen_msg)
+                velocity = VelocityField.get(frozen_msg)
+                key = (channel, note)
 
-        # Handle note tracking
-        if msg_type == "note_on":
-            channel = ChannelField.get(frozen_msg)
-            note = NoteField.get(frozen_msg)
-            key = (channel, note)
-            velocity = frozen_msg.velocity
+                if velocity == 0:
+                    # note_on with velocity=0 is equivalent to note_off
+                    if expects_note_off.get(key, False):
+                        expects_note_off[key] = False
+                        note_off_msg = mido.Message(
+                            "note_off",
+                            channel=channel,
+                            note=note,
+                            velocity=0,
+                            time=time,
+                        )
+                        track.append(note_off_msg)
+                        last_time = abs_time
+                    # else: skip this note_off as we don't expect one
+                else:
+                    # Regular note_on with velocity > 0
+                    expects_note_off[key] = True
+                    note_on_msg = mido.Message(
+                        "note_on",
+                        channel=channel,
+                        note=note,
+                        velocity=velocity,
+                        time=time,
+                    )
+                    track.append(note_on_msg)
+                    last_time = abs_time
 
-            if velocity == 0:
-                # note_on with velocity=0 is equivalent to note_off
+            elif msg_type == "note_off":
+                channel = ChannelField.get(frozen_msg)
+                note = NoteField.get(frozen_msg)
+                key = (channel, note)
+
+                # Only send note_off if we expect one
                 if expects_note_off.get(key, False):
                     expects_note_off[key] = False
                     note_off_msg = mido.Message(
@@ -136,78 +172,34 @@ def render_midi_file(
                         channel=channel,
                         note=note,
                         velocity=0,
-                        time=int(
-                            (abs_time - last_time)
-                            * float(cps)
-                            * int(bpc)
-                            * ticks_per_beat
-                        ),
+                        time=time,
                     )
                     track.append(note_off_msg)
                     last_time = abs_time
                 # else: skip this note_off as we don't expect one
-            else:
-                # Regular note_on with velocity > 0
-                expects_note_off[key] = True
-                note_on_msg = mido.Message(
-                    "note_on",
-                    channel=channel,
-                    note=note,
-                    velocity=velocity,
-                    time=int(
-                        (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
-                    ),
+
+            elif msg_type == "program_change":
+                # Program change
+                pc_msg = mido.Message(
+                    "program_change",
+                    channel=ChannelField.get(frozen_msg),
+                    program=ProgramField.get(frozen_msg),
+                    time=time,
                 )
-                track.append(note_on_msg)
+                track.append(pc_msg)
                 last_time = abs_time
 
-        elif msg_type == "note_off":
-            channel = ChannelField.get(frozen_msg)
-            note = NoteField.get(frozen_msg)
-            key = (channel, note)
-
-            # Only send note_off if we expect one
-            if expects_note_off.get(key, False):
-                expects_note_off[key] = False
-                note_off_msg = mido.Message(
-                    "note_off",
-                    channel=channel,
-                    note=note,
-                    velocity=0,
-                    time=int(
-                        (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
-                    ),
+            elif msg_type == "control_change":
+                # Control change
+                cc_msg = mido.Message(
+                    "control_change",
+                    channel=ChannelField.get(frozen_msg),
+                    control=ControlField.get(frozen_msg),
+                    value=ValueField.get(frozen_msg),
+                    time=time,
                 )
-                track.append(note_off_msg)
+                track.append(cc_msg)
                 last_time = abs_time
-            # else: skip this note_off as we don't expect one
-
-        elif msg_type == "program_change":
-            # Program change
-            pc_msg = mido.Message(
-                "program_change",
-                channel=ChannelField.get(frozen_msg),
-                program=frozen_msg.program,
-                time=int(
-                    (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
-                ),
-            )
-            track.append(pc_msg)
-            last_time = abs_time
-
-        elif msg_type == "control_change":
-            # Control change
-            cc_msg = mido.Message(
-                "control_change",
-                channel=ChannelField.get(frozen_msg),
-                control=frozen_msg.control,
-                value=frozen_msg.value,
-                time=int(
-                    (abs_time - last_time) * float(cps) * int(bpc) * ticks_per_beat
-                ),
-            )
-            track.append(cc_msg)
-            last_time = abs_time
 
     # Save the MIDI file
     midi_file.save(filepath)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Generator, List, NewType, Optional, cast, override
+from typing import Generator, List, NewType, Optional, cast, override
 
 from mido import Message
 from mido.frozen import FrozenMessage
@@ -386,28 +386,6 @@ class ControlValKey(MidiKey[ControlVal]):
 # sealed
 class MidiMessage(metaclass=ABCMeta):
     @staticmethod
-    def sort_key(msg: MidiMessage) -> int:
-        """Get sort key for a typed MIDI message.
-
-        Sort order: note_off < program_change < control_change < note_on
-        This ensures that:
-        - Note offs happen before other events (to clear previous notes)
-        - Program and control changes happen between notes (to set up the next note)
-        - Note ons happen last (to use the new program/control settings)
-        """
-        match msg:
-            case NoteOffMessage(_, _):
-                return 0
-            case ProgramMessage(_, _):
-                return 1
-            case ControlMessage(_, _):
-                return 2
-            case NoteOnMessage(_, _, _):
-                return 3
-            case _:
-                return 4
-
-    @staticmethod
     def parse_midi(midi_msg: MidoMessage) -> Optional[MidiMessage]:
         """Parse a MIDI message into a typed message.
 
@@ -589,7 +567,7 @@ class ControlMessage(MidiMessage):
 type MidiBundle = MidiMessage | PSeq[MidiMessage]
 
 
-def bundle_concat(left: MidiBundle, right: MidiBundle) -> MidiBundle:
+def midi_bundle_concat(left: MidiBundle, right: MidiBundle) -> MidiBundle:
     if isinstance(left, MidiMessage):
         if isinstance(right, MidiMessage):
             return PSeq.mk([left, right])
@@ -602,7 +580,7 @@ def bundle_concat(left: MidiBundle, right: MidiBundle) -> MidiBundle:
             return left.concat(right)
 
 
-def bundle_iterator(bundle: MidiBundle) -> Generator[MidiMessage]:
+def midi_bundle_iterator(bundle: MidiBundle) -> Generator[MidiMessage]:
     if isinstance(bundle, MidiMessage):
         yield bundle
     else:
@@ -614,13 +592,36 @@ def bundle_iterator(bundle: MidiBundle) -> Generator[MidiMessage]:
 # =============================================================================
 
 
-def midi_message_sort_key(msg: MidoMessage) -> int:
+type MidoBundle = FrozenMessage | PSeq[FrozenMessage]
+
+
+def mido_bundle_concat(left: MidoBundle, right: MidoBundle) -> MidoBundle:
+    if isinstance(left, FrozenMessage):
+        if isinstance(right, FrozenMessage):
+            return PSeq.mk([left, right])
+        else:
+            return right.cons(left)
+    else:
+        if isinstance(right, FrozenMessage):
+            return left.snoc(right)
+        else:
+            return left.concat(right)
+
+
+def mido_bundle_iterator(bundle: MidoBundle) -> Generator[FrozenMessage]:
+    if isinstance(bundle, FrozenMessage):
+        yield bundle
+    else:
+        yield from bundle
+
+
+def mido_bundle_sort_key(bundle: MidoBundle) -> int:
     """Get sort key for a MIDI message.
 
     Returns a numeric priority for sorting MIDI messages.
     Lower values come first in the sort order.
 
-    Sort order: note_off < program_change < control_change < note_on
+    Sort order: note_off < {program_change, control_change, bundle} < note_on
 
     This ensures that:
     - Note offs happen before other events (to clear previous notes)
@@ -633,44 +634,36 @@ def midi_message_sort_key(msg: MidoMessage) -> int:
     Returns:
         An integer sort key (lower values sort first)
     """
-    if MsgTypeField.exists(msg):
-        msg_type = MsgTypeField.get(msg)
-        if msg_type == "note_off":
-            return 0
-        elif msg_type == "program_change":
-            return 1
-        elif msg_type == "control_change":
-            return 2
-        elif msg_type == "note_on":
-            return 3
-    return 4
+    if isinstance(bundle, FrozenMessage):
+        if MsgTypeField.exists(bundle):
+            msg_type = MsgTypeField.get(bundle)
+            if msg_type == "note_off":
+                return -1
+            elif msg_type == "note_on":
+                return 1
+    return 0
 
 
-@dataclass(frozen=True, order=False)
+@dataclass(frozen=True, eq=True, order=False)
 class TimedMessage:
     """A timed message with POSIX timestamp."""
 
     time: PosixTime
     """Timestamp when the message should be sent (POSIX time)."""
 
-    message: FrozenMessage
+    bundle: MidoBundle
     """The frozen MIDI message."""
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, TimedMessage):
-            return False
-        return self.time == other.time and self.message == other.message
 
     def __lt__(self, other: TimedMessage) -> bool:
         """Compare timed messages by time first, then by message type priority."""
         if self.time != other.time:
             return self.time < other.time
-        return midi_message_sort_key(self.message) < midi_message_sort_key(
-            other.message
-        )
+        return mido_bundle_sort_key(self.bundle) < mido_bundle_sort_key(other.bundle)
 
     def __le__(self, other: TimedMessage) -> bool:
-        return self == other or self < other
+        if self.time != other.time:
+            return self.time < other.time
+        return mido_bundle_sort_key(self.bundle) <= mido_bundle_sort_key(other.bundle)
 
     def __gt__(self, other: TimedMessage) -> bool:
         return not (self <= other)

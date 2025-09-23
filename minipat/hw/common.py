@@ -18,7 +18,7 @@ from minipat.messages import (
     MidiMessage,
     Program,
     ProgramMessage,
-    bundle_concat,
+    midi_bundle_concat,
 )
 from spiny.seq import PSeq
 
@@ -346,4 +346,4 @@ def reinit(chan: Channel) -> MidiBundle:
             set_chorus(chan, ControlVal(0)),  # No chorus
         ]
     )
-    return bundle_concat(left, right)
+    return midi_bundle_concat(left, right)

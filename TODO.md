@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#29}
+Next available task ID: {#30}
 
 ### Active
 
@@ -38,6 +38,7 @@ Next available task ID: {#29}
 
 ### Done
 
+- {#29} Midi message bundles
 - {#28} Create patch list of ~/.local/share/minipat/sf/default.sf2 using sf2dump output and add to minipat.hw.fluid
   - Created minipat/hw/fluid.py module with FluidR3_GM preset list
   - Extracted 189 presets using sf2dump with proper (bank, preset, name) format

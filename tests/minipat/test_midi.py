@@ -19,7 +19,9 @@ from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
 from minipat.messages import (
     DEFAULT_VELOCITY,
+    Channel,
     ChannelField,
+    ChannelKey,
     ControlField,
     ControlNum,
     ControlNumKey,
@@ -27,6 +29,7 @@ from minipat.messages import (
     ControlValKey,
     MidiAttrs,
     MidiDom,
+    MidiMessage,
     MsgHeap,
     MsgTypeField,
     Note,
@@ -40,7 +43,11 @@ from minipat.messages import (
     Velocity,
     VelocityField,
     VelocityKey,
-    midi_message_sort_key,
+    midi_bundle_concat,
+    midi_bundle_iterator,
+    mido_bundle_concat,
+    mido_bundle_iterator,
+    mido_bundle_sort_key,
 )
 from minipat.midi import (
     MidiProcessor,
@@ -182,25 +189,33 @@ def test_midi_processor() -> None:
     note_on_msg = message_list[0]
     note_off_msg = message_list[1]
 
-    # Check note on message
+    # Check note on message using bundle iterator
+    note_on_messages = list(mido_bundle_iterator(note_on_msg.bundle))
+    assert len(note_on_messages) == 1
+    note_on_message = note_on_messages[0]
+
     assert (
-        MsgTypeField.exists(note_on_msg.message)
-        and MsgTypeField.get(note_on_msg.message) == "note_on"
+        MsgTypeField.exists(note_on_message)
+        and MsgTypeField.get(note_on_message) == "note_on"
     )
-    assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 60
-    assert VelocityField.unmk(VelocityField.get(note_on_msg.message)) == 80
+    assert NoteField.unmk(NoteField.get(note_on_message)) == 60
+    assert VelocityField.unmk(VelocityField.get(note_on_message)) == 80
     assert (
-        ChannelField.unmk(ChannelField.get(note_on_msg.message)) == 0
+        ChannelField.unmk(ChannelField.get(note_on_message)) == 0
     )  # Orbit 0 -> Channel 0
 
-    # Check note off message
+    # Check note off message using bundle iterator
+    note_off_messages = list(mido_bundle_iterator(note_off_msg.bundle))
+    assert len(note_off_messages) == 1
+    note_off_message = note_off_messages[0]
+
     assert (
-        MsgTypeField.exists(note_off_msg.message)
-        and MsgTypeField.get(note_off_msg.message) == "note_off"
+        MsgTypeField.exists(note_off_message)
+        and MsgTypeField.get(note_off_message) == "note_off"
     )
-    assert NoteField.unmk(NoteField.get(note_off_msg.message)) == 60
-    assert VelocityField.unmk(VelocityField.get(note_off_msg.message)) == 0
-    assert ChannelField.unmk(ChannelField.get(note_off_msg.message)) == 0
+    assert NoteField.unmk(NoteField.get(note_off_message)) == 60
+    assert VelocityField.unmk(VelocityField.get(note_off_message)) == 0
+    assert ChannelField.unmk(ChannelField.get(note_off_message)) == 0
 
     # Check timing
     assert note_on_msg.time == PosixTime(0.0)  # Start of arc
@@ -235,11 +250,14 @@ def test_midi_processor_defaults() -> None:
     note_on_msg = message_list[0]
 
     # Should use default velocity and orbit as channel
-    assert VelocityField.unmk(VelocityField.get(note_on_msg.message)) == 100
+    note_on_messages = list(mido_bundle_iterator(note_on_msg.bundle))
+    note_on_message = note_on_messages[0]
+
+    assert VelocityField.unmk(VelocityField.get(note_on_message)) == 100
     assert (
-        ChannelField.unmk(ChannelField.get(note_on_msg.message)) == 1
+        ChannelField.unmk(ChannelField.get(note_on_message)) == 1
     )  # Orbit 1 -> Channel 1
-    assert NoteField.unmk(NoteField.get(note_on_msg.message)) == 72
+    assert NoteField.unmk(NoteField.get(note_on_message)) == 72
 
 
 def test_midi_processor_empty_events() -> None:
@@ -310,7 +328,9 @@ def test_midi_processor_orbit_as_channel() -> None:
         message_list = list(timed_messages)
 
         assert len(message_list) == 2  # note_on and note_off
-        assert ChannelField.unmk(ChannelField.get(message_list[0].message)) == orbit_num
+        first_messages = list(mido_bundle_iterator(message_list[0].bundle))
+        first_message = first_messages[0]
+        assert ChannelField.unmk(ChannelField.get(first_message)) == orbit_num
 
     # Test invalid orbit (out of range) - should log and skip
     timed_messages = processor.process(instant, Orbit(20), event_heap)
@@ -654,6 +674,92 @@ def test_parse_messages_velocity_only() -> None:
     assert len(messages) == 0
 
 
+def test_midi_message_parsing() -> None:
+    """Test MIDI message parsing from mido messages and attributes."""
+    from minipat.messages import NoteOnMessage, ProgramMessage
+
+    # Test parsing from mido message
+    mido_msg = FrozenMessage("note_on", channel=0, note=60, velocity=80)
+    parsed_msg = MidiMessage.parse_midi(mido_msg)
+    assert isinstance(parsed_msg, NoteOnMessage)
+    assert parsed_msg.channel == Channel(0)
+    assert parsed_msg.note == Note(60)
+    assert parsed_msg.velocity == Velocity(80)
+
+    # Test parsing unsupported message type
+    unknown_msg = FrozenMessage("sysex", data=[0x41, 0x10])
+    parsed_unknown = MidiMessage.parse_midi(unknown_msg)
+    assert parsed_unknown is None
+
+    # Test parsing from attributes with multiple message types
+    attrs: MidiAttrs = (
+        DMap.empty(MidiDom)
+        .put(ChannelKey(), ChannelField.mk(1))
+        .put(NoteKey(), NoteField.mk(72))
+        .put(VelocityKey(), VelocityField.mk(100))
+        .put(ProgramKey(), ProgramField.mk(42))
+    )
+
+    parsed_messages = MidiMessage.parse_attrs(attrs)
+    assert len(parsed_messages) == 2  # program change + note on
+
+    # Find each message type
+    program_msg = None
+    note_msg = None
+    for msg in parsed_messages:
+        if isinstance(msg, ProgramMessage):
+            program_msg = msg
+        elif isinstance(msg, NoteOnMessage):
+            note_msg = msg
+
+    assert program_msg is not None
+    assert program_msg.channel == Channel(1)
+    assert program_msg.program == Program(42)
+
+    assert note_msg is not None
+    assert note_msg.channel == Channel(1)
+    assert note_msg.note == Note(72)
+    assert note_msg.velocity == Velocity(100)
+
+
+def test_midi_bundle_operations() -> None:
+    """Test MIDI message bundle concatenation and iteration."""
+    from minipat.messages import NoteOnMessage, ProgramMessage
+    from spiny.seq import PSeq
+
+    # Create test MIDI messages
+    note_on = NoteOnMessage(channel=Channel(0), note=Note(60), velocity=Velocity(80))
+    program_change = ProgramMessage(channel=Channel(0), program=Program(42))
+
+    # Test single message bundles
+    single_bundle = note_on
+    messages = list(midi_bundle_iterator(single_bundle))
+    assert len(messages) == 1
+    assert messages[0] == note_on
+
+    # Test sequence bundle
+    seq_bundle = PSeq.mk([note_on, program_change])
+    seq_messages = list(midi_bundle_iterator(seq_bundle))
+    assert len(seq_messages) == 2
+    assert seq_messages[0] == note_on
+    assert seq_messages[1] == program_change
+
+    # Test bundle concatenation: single + single
+    concat_single_single = midi_bundle_concat(note_on, program_change)
+    concat_messages = list(midi_bundle_iterator(concat_single_single))
+    assert len(concat_messages) == 2
+    assert concat_messages[0] == note_on
+    assert concat_messages[1] == program_change
+
+    # Test bundle concatenation: single + sequence
+    concat_single_seq = midi_bundle_concat(program_change, seq_bundle)
+    concat_single_seq_messages = list(midi_bundle_iterator(concat_single_seq))
+    assert len(concat_single_seq_messages) == 3
+    assert concat_single_seq_messages[0] == program_change
+    assert concat_single_seq_messages[1] == note_on
+    assert concat_single_seq_messages[2] == program_change
+
+
 def test_midi_processor_with_parse_messages() -> None:
     """Test MidiProcessor can handle different message types via parse_messages."""
     processor = MidiProcessor()
@@ -679,7 +785,9 @@ def test_midi_processor_with_parse_messages() -> None:
 
     # Should have one program change message
     assert len(message_list) == 1
-    msg = message_list[0].message
+    msg_bundle = message_list[0].bundle
+    messages = list(mido_bundle_iterator(msg_bundle))
+    msg = messages[0]
 
     assert MsgTypeField.get(msg) == "program_change"
     assert ChannelField.unmk(ChannelField.get(msg)) == 1
@@ -695,12 +803,14 @@ def test_midi_processor_with_parse_messages() -> None:
     control_event = Ev(span, control_attrs)
     control_heap = ev_heap_singleton(control_event)
 
-    control_messages = processor.process(instant, Orbit(2), control_heap)
-    control_list = list(control_messages)
+    control_timed_messages = processor.process(instant, Orbit(2), control_heap)
+    control_list = list(control_timed_messages)
 
     # Should have one control change message
     assert len(control_list) == 1
-    control_msg = control_list[0].message
+    control_bundle = control_list[0].bundle
+    control_messages = list(mido_bundle_iterator(control_bundle))
+    control_msg = control_messages[0]
 
     assert MsgTypeField.get(control_msg) == "control_change"
     assert ChannelField.unmk(ChannelField.get(control_msg)) == 2
@@ -753,30 +863,36 @@ def test_parse_messages_mixed_types() -> None:
     assert "control_change" in msg_types_all
 
 
-def test_midi_message_sort_key() -> None:
-    """Test MIDI message sorting order."""
+def test_mido_bundle_sort_key() -> None:
+    """Test MIDI bundle sorting order."""
     # Create test messages
     note_on_msg = FrozenMessage("note_on", channel=0, note=60, velocity=64)
     note_off_msg = FrozenMessage("note_off", channel=0, note=60, velocity=0)
     program_msg = FrozenMessage("program_change", channel=0, program=42)
     control_msg = FrozenMessage("control_change", channel=0, control=7, value=100)
 
-    # Test sort keys
-    assert midi_message_sort_key(note_off_msg) < midi_message_sort_key(program_msg)
-    assert midi_message_sort_key(program_msg) < midi_message_sort_key(control_msg)
-    assert midi_message_sort_key(control_msg) < midi_message_sort_key(note_on_msg)
+    # Test sort keys for single messages (which are valid bundles)
+    assert mido_bundle_sort_key(note_off_msg) < mido_bundle_sort_key(program_msg)
+    assert mido_bundle_sort_key(program_msg) == mido_bundle_sort_key(
+        control_msg
+    )  # Both are 0
+    assert mido_bundle_sort_key(control_msg) < mido_bundle_sort_key(note_on_msg)
 
     # Test sorting a list of messages
     messages = [note_on_msg, control_msg, note_off_msg, program_msg]
-    sorted_messages = sorted(messages, key=midi_message_sort_key)
+    sorted_messages = sorted(messages, key=mido_bundle_sort_key)
 
     assert sorted_messages[0] == note_off_msg
-    assert sorted_messages[1] == program_msg
-    assert sorted_messages[2] == control_msg
+    # program_msg and control_msg can be in either order since they have the same sort key
+    assert sorted_messages[1] in [program_msg, control_msg]
+    assert sorted_messages[2] in [program_msg, control_msg]
     assert sorted_messages[3] == note_on_msg
 
-    # Test that the sort key function is resilient (though FrozenMessage ensures valid types)
-    assert midi_message_sort_key(note_on_msg) == 3  # Should still work normally
+    # Test that the sort key function works correctly
+    assert mido_bundle_sort_key(note_off_msg) == -1  # note_off sorts first
+    assert mido_bundle_sort_key(program_msg) == 0  # program_change sorts in middle
+    assert mido_bundle_sort_key(control_msg) == 0  # control_change sorts in middle
+    assert mido_bundle_sort_key(note_on_msg) == 1  # note_on sorts last
 
 
 def test_midi_processor_with_mixed_messages() -> None:
@@ -810,30 +926,62 @@ def test_midi_processor_with_mixed_messages() -> None:
     # Should have 4 messages: program_change, control_change, note_on, note_off
     assert len(message_list) == 4
 
-    on_msg = next(
-        tm for tm in message_list if MsgTypeField.get(tm.message) == "note_on"
-    )
-    assert NoteField.get(on_msg.message) == Note(60)
-    assert VelocityField.get(on_msg.message) == Velocity(100)
+    # Find note_on message
+    on_msg = None
+    for tm in message_list:
+        for msg in mido_bundle_iterator(tm.bundle):
+            if MsgTypeField.get(msg) == "note_on":
+                on_msg = tm
+                on_message = msg
+                break
+        if on_msg:
+            break
+    assert on_msg is not None
+    assert NoteField.get(on_message) == Note(60)
+    assert VelocityField.get(on_message) == Velocity(100)
     assert on_msg.time == PosixTime(0.0)
 
-    prog_msg = next(
-        tm for tm in message_list if MsgTypeField.get(tm.message) == "program_change"
-    )
-    assert ProgramField.get(prog_msg.message) == Program(42)
+    # Find program_change message
+    prog_msg = None
+    for tm in message_list:
+        for msg in mido_bundle_iterator(tm.bundle):
+            if MsgTypeField.get(msg) == "program_change":
+                prog_msg = tm
+                prog_message = msg
+                break
+        if prog_msg:
+            break
+    assert prog_msg is not None
+    assert ProgramField.get(prog_message) == Program(42)
     assert prog_msg.time == PosixTime(0.0)
 
-    con_msg = next(
-        tm for tm in message_list if MsgTypeField.get(tm.message) == "control_change"
-    )
-    assert ControlField.get(con_msg.message) == ControlNum(43)
-    assert ValueField.get(con_msg.message) == ControlVal(44)
+    # Find control_change message
+    con_msg = None
+    for tm in message_list:
+        for msg in mido_bundle_iterator(tm.bundle):
+            if MsgTypeField.get(msg) == "control_change":
+                con_msg = tm
+                con_message = msg
+                break
+        if con_msg:
+            break
+    assert con_msg is not None
+    assert ControlField.get(con_message) == ControlNum(43)
+    assert ValueField.get(con_message) == ControlVal(44)
     assert con_msg.time == PosixTime(0.0)
 
-    off_msg = next(
-        tm for tm in message_list if MsgTypeField.get(tm.message) == "note_off"
-    )
-    assert NoteField.get(off_msg.message) == Note(60)
+    # Find note_off message
+    off_msg = None
+    for tm in message_list:
+        for msg in mido_bundle_iterator(tm.bundle):
+            if MsgTypeField.get(msg) == "note_off":
+                off_msg = tm
+                off_message = msg
+                break
+        if off_msg:
+            break
+    assert off_msg is not None
+    assert NoteField.get(off_message) == Note(60)
     assert off_msg.time == PosixTime(0.25)
 
 
@@ -893,14 +1041,16 @@ def test_timed_message_comparison() -> None:
 
     # Test __lt__ (less than)
     assert tm_note_off < tm_program  # note_off sorts before program_change
-    assert tm_program < tm_control  # program_change sorts before control
+    assert not (
+        tm_program < tm_control
+    )  # program_change and control have same sort key
     assert tm_control < tm_note_on  # control_change sorts before note_on
     assert tm_note_on < tm_note_on_later  # earlier time sorts first
     assert not (tm_program < tm_note_off)  # program doesn't sort before note_off
 
     # Test __le__ (less than or equal)
     assert tm_note_off <= tm_program
-    assert tm_program <= tm_control
+    assert tm_program <= tm_control  # Equal sort keys are <=
     assert tm_control <= tm_note_on
     assert tm_note_on <= tm_note_on_later
     assert tm_note_off <= tm_note_off  # equal to itself
@@ -908,14 +1058,14 @@ def test_timed_message_comparison() -> None:
 
     # Test __gt__ (greater than)
     assert tm_program > tm_note_off
-    assert tm_control > tm_program
+    assert not (tm_control > tm_program)  # Equal sort keys
     assert tm_note_on > tm_control
     assert tm_note_on_later > tm_note_on
     assert not (tm_note_off > tm_program)
 
     # Test __ge__ (greater than or equal)
     assert tm_program >= tm_note_off
-    assert tm_control >= tm_program
+    assert tm_control >= tm_program  # Equal sort keys are >=
     assert tm_note_on >= tm_control
     assert tm_note_on_later >= tm_note_on
     assert tm_note_off >= tm_note_off  # equal to itself
@@ -937,8 +1087,12 @@ def test_timed_message_comparison() -> None:
     sorted_messages = sorted(messages)
 
     # Should be ordered by time first, then by message type priority
-    expected_order = [tm_note_off, tm_program, tm_control, tm_note_on, tm_note_on_later]
-    assert sorted_messages == expected_order
+    # Note: program and control can be in either order since they have same sort key
+    assert sorted_messages[0] == tm_note_off
+    assert sorted_messages[1] in [tm_program, tm_control]
+    assert sorted_messages[2] in [tm_program, tm_control]
+    assert sorted_messages[3] == tm_note_on
+    assert sorted_messages[4] == tm_note_on_later
 
     # Test heap ordering with the new MsgHeap implementation
     heap = MsgHeap.empty()
@@ -955,7 +1109,67 @@ def test_timed_message_comparison() -> None:
         popped_messages.append(ptm)
 
     # Should be ordered by time first, then by message type priority
-    assert popped_messages == expected_order
+    # Note: program and control can be in either order since they have same sort key
+    assert popped_messages[0] == tm_note_off
+    assert popped_messages[1] in [tm_program, tm_control]
+    assert popped_messages[2] in [tm_program, tm_control]
+    assert popped_messages[3] == tm_note_on
+    assert popped_messages[4] == tm_note_on_later
+
+
+def test_mido_bundle_operations() -> None:
+    """Test MIDI bundle concatenation and iteration."""
+    from spiny.seq import PSeq
+
+    # Create test messages
+    note_on_msg = FrozenMessage("note_on", channel=0, note=60, velocity=64)
+    note_off_msg = FrozenMessage("note_off", channel=0, note=60, velocity=0)
+    program_msg = FrozenMessage("program_change", channel=0, program=42)
+
+    # Test single message bundles
+    single_bundle = note_on_msg
+    messages = list(mido_bundle_iterator(single_bundle))
+    assert len(messages) == 1
+    assert messages[0] == note_on_msg
+
+    # Test sequence bundle
+    seq_bundle = PSeq.mk([note_on_msg, note_off_msg])
+    seq_messages = list(mido_bundle_iterator(seq_bundle))
+    assert len(seq_messages) == 2
+    assert seq_messages[0] == note_on_msg
+    assert seq_messages[1] == note_off_msg
+
+    # Test bundle concatenation: single + single
+    concat_single_single = mido_bundle_concat(note_on_msg, program_msg)
+    concat_messages = list(mido_bundle_iterator(concat_single_single))
+    assert len(concat_messages) == 2
+    assert concat_messages[0] == note_on_msg
+    assert concat_messages[1] == program_msg
+
+    # Test bundle concatenation: single + sequence
+    concat_single_seq = mido_bundle_concat(program_msg, seq_bundle)
+    concat_single_seq_messages = list(mido_bundle_iterator(concat_single_seq))
+    assert len(concat_single_seq_messages) == 3
+    assert concat_single_seq_messages[0] == program_msg
+    assert concat_single_seq_messages[1] == note_on_msg
+    assert concat_single_seq_messages[2] == note_off_msg
+
+    # Test bundle concatenation: sequence + single
+    concat_seq_single = mido_bundle_concat(seq_bundle, program_msg)
+    concat_seq_single_messages = list(mido_bundle_iterator(concat_seq_single))
+    assert len(concat_seq_single_messages) == 3
+    assert concat_seq_single_messages[0] == note_on_msg
+    assert concat_seq_single_messages[1] == note_off_msg
+    assert concat_seq_single_messages[2] == program_msg
+
+    # Test bundle concatenation: sequence + sequence
+    seq2_bundle = PSeq.mk([program_msg])
+    concat_seq_seq = mido_bundle_concat(seq_bundle, seq2_bundle)
+    concat_seq_seq_messages = list(mido_bundle_iterator(concat_seq_seq))
+    assert len(concat_seq_seq_messages) == 3
+    assert concat_seq_seq_messages[0] == note_on_msg
+    assert concat_seq_seq_messages[1] == note_off_msg
+    assert concat_seq_seq_messages[2] == program_msg
 
 
 def test_midi_processor_whole_arc_timing() -> None:
@@ -998,7 +1212,9 @@ def test_midi_processor_whole_arc_timing() -> None:
     # Not 0.375 which would be 3/4 cycle at 2 cps (active arc end)
 
     # Verify it's actually a note_off message
-    assert MsgTypeField.get(note_off_msg.message) == "note_off"
+    note_off_messages = list(mido_bundle_iterator(note_off_msg.bundle))
+    note_off_message = note_off_messages[0]
+    assert MsgTypeField.get(note_off_message) == "note_off"
 
 
 def test_timed_message_comparison_edge_cases() -> None:
@@ -1024,7 +1240,8 @@ def test_timed_message_comparison_edge_cases() -> None:
     # <= is (self == other) or (self < other), so it's False
     # This asymmetry shows the issue with the current implementation
     assert tm1 >= tm2  # This is True because not (tm1 < tm2)
-    assert not (tm1 <= tm2)  # This is False because tm1 != tm2 and not (tm1 < tm2)
+    # Since tm1 and tm2 have same time and same sort key, tm1 <= tm2 should be True
+    assert tm1 <= tm2  # Same time, same sort key means <=
 
     # Messages with identical content should be equal
     tm1_copy = TimedMessage(time1, note_on_msg1)

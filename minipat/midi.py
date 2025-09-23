@@ -57,6 +57,7 @@ from minipat.messages import (
     NoteField,
     TimedMessage,
     Velocity,
+    mido_bundle_iterator,
     msg_note_off,
 )
 from minipat.time import Bpc, Cps, PosixTime, now
@@ -116,7 +117,8 @@ class MidiSenderTask(Task):
 
             if msgs:
                 for timed_msg in msgs:
-                    self._output.send(timed_msg.message)
+                    for msg in mido_bundle_iterator(timed_msg.bundle):
+                        self._output.send(msg)
 
             # Sleep based on current timing configuration
             # Use halt.wait() instead of sleep() to be responsive to shutdown
