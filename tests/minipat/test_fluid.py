@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from minipat.fluid import (
+from minipat.setup import (
     DEFAULT_SF_NAME,
     FluidSynthConfig,
     get_default_soundfont,

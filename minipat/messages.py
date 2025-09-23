@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List, NewType, Optional, cast, override
+from typing import Any, Generator, List, NewType, Optional, cast, override
 
 from mido import Message
 from mido.frozen import FrozenMessage
@@ -10,6 +10,7 @@ from mido.frozen import FrozenMessage
 from minipat.time import PosixTime
 from spiny.dmap import DKey, DMap
 from spiny.heap import PHeap
+from spiny.seq import PSeq
 
 type MidoMessage = Message | FrozenMessage
 
@@ -583,6 +584,29 @@ class ControlMessage(MidiMessage):
         attrs = attrs.put(ControlNumKey(), self.control)
         attrs = attrs.put(ControlValKey(), self.value)
         return attrs
+
+
+type MidiBundle = MidiMessage | PSeq[MidiMessage]
+
+
+def bundle_concat(left: MidiBundle, right: MidiBundle) -> MidiBundle:
+    if isinstance(left, MidiMessage):
+        if isinstance(right, MidiMessage):
+            return PSeq.mk([left, right])
+        else:
+            return right.cons(left)
+    else:
+        if isinstance(right, MidiMessage):
+            return left.snoc(right)
+        else:
+            return left.concat(right)
+
+
+def bundle_iterator(bundle: MidiBundle) -> Generator[MidiMessage]:
+    if isinstance(bundle, MidiMessage):
+        yield bundle
+    else:
+        yield from bundle
 
 
 # =============================================================================

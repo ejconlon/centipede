@@ -9,303 +9,39 @@ with predefined instrument and drum set collections.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Sequence
 
-from mido.frozen import FrozenMessage
-
-from minipat.messages import (
-    ChannelField,
-    ControlNum,
-    ControlVal,
-    ProgramField,
-    msg_cc,
-    msg_pc,
-)
-from spiny.seq import PSeq
-
-
-def set_control(chan: int, control: int, value: int) -> PSeq[FrozenMessage]:
-    """Create a control change message for the specified channel.
-
-    Args:
-        chan: MIDI channel (0-15)
-        control: Control number (0-127)
-        value: Control value (0-127)
-
-    Returns:
-        Sequence containing a single control change message
-    """
-    channel = ChannelField.mk(chan)
-    control_num = ControlNum(control)
-    control_val = ControlVal(value)
-    return PSeq.singleton(msg_cc(channel, control_num, control_val))
-
-
-def set_program(chan: int, program: int) -> PSeq[FrozenMessage]:
-    """Create a program change message for the specified channel.
-
-    Args:
-        chan: MIDI channel (0-15)
-        program: Program number (0-127)
-
-    Returns:
-        Sequence containing a single program change message
-    """
-    channel = ChannelField.mk(chan)
-    prog = ProgramField.mk(program)
-    return PSeq.singleton(msg_pc(channel, prog))
-
-
-def set_sound(chan: int, inst: int, var: int) -> PSeq[FrozenMessage]:
-    """Set a complete sound on the specified channel.
-
-    This function sends the sequence of messages needed to properly
-    set an instrument on an SC-88 compatible device:
-    1. Bank Select MSB (CC 0) with variation
-    2. Bank Select LSB (CC 32) with 0
-    3. Program Change with instrument
-
-    Args:
-        chan: MIDI channel (0-15)
-        inst: Instrument/program number (0-127)
-        var: Instrument variation (0-127)
-
-    Returns:
-        Sequence containing the control changes and program change
-    """
-    messages: list[FrozenMessage] = []
-    messages.extend(set_control(chan, 0, var))  # Bank Select MSB
-    messages.extend(set_control(chan, 32, 0))  # Bank Select LSB
-    messages.extend(set_program(chan, inst))  # Program Change
-    return PSeq.mk(messages)
-
-
-def set_level(chan: int, level: int) -> PSeq[FrozenMessage]:
-    """Set the volume level for a channel.
-
-    Args:
-        chan: MIDI channel (0-15)
-        level: Volume level (0-127)
-
-    Returns:
-        Sequence containing a volume control change message
-    """
-    return set_control(chan, 7, level)
-
-
-def set_pan(chan: int, pan: int) -> PSeq[FrozenMessage]:
-    """Set the pan position for a channel.
-
-    Args:
-        chan: MIDI channel (0-15)
-        pan: Pan position (0=left, 64=center, 127=right)
-
-    Returns:
-        Sequence containing a pan control change message
-    """
-    return set_control(chan, 10, pan)
-
-
-def set_reverb(chan: int, reverb: int) -> PSeq[FrozenMessage]:
-    """Set the reverb level for a channel.
-
-    Args:
-        chan: MIDI channel (0-15)
-        reverb: Reverb level (0-127)
-
-    Returns:
-        Sequence containing a reverb control change message
-    """
-    return set_control(chan, 91, reverb)
-
-
-def set_chorus(chan: int, chorus: int) -> PSeq[FrozenMessage]:
-    """Set the chorus level for a channel.
-
-    Args:
-        chan: MIDI channel (0-15)
-        chorus: Chorus level (0-127)
-
-    Returns:
-        Sequence containing a chorus control change message
-    """
-    return set_control(chan, 93, chorus)
-
-
-def all_sounds_off(chan: int) -> PSeq[FrozenMessage]:
-    """Turn off all sounds on a channel immediately.
-
-    Args:
-        chan: MIDI channel (0-15)
-
-    Returns:
-        Sequence containing an all sounds off message
-    """
-    return set_control(chan, 120, 0)
-
-
-def all_notes_off(chan: int) -> PSeq[FrozenMessage]:
-    """Turn off all non-sustained notes on a channel.
-
-    This respects sustain pedal settings - sustained notes will
-    continue until the sustain pedal is released.
-
-    Args:
-        chan: MIDI channel (0-15)
-
-    Returns:
-        Sequence containing an all notes off message
-    """
-    return set_control(chan, 123, 0)
-
-
-def reinit(chan: int) -> PSeq[FrozenMessage]:
-    """Reinitialize a channel to default settings.
-
-    Sets the channel to:
-    - Sound: Piano (program 0, variation 0)
-    - Level: 100
-    - Pan: Center (64)
-    - Reverb: 40
-    - Chorus: 0
-
-    Args:
-        chan: MIDI channel (0-15)
-
-    Returns:
-        Sequence containing all initialization messages
-    """
-    messages: list[FrozenMessage] = []
-    messages.extend(set_sound(chan, 0, 0))  # Piano
-    messages.extend(set_level(chan, 100))  # Full volume
-    messages.extend(set_pan(chan, 64))  # Center pan
-    messages.extend(set_reverb(chan, 40))  # Some reverb
-    messages.extend(set_chorus(chan, 0))  # No chorus
-    return PSeq.mk(messages)
-
-
-@dataclass(frozen=True)
-class Inst:
-    """Represents an SC-88 instrument with its parameters.
-
-    Attributes:
-        ix: Index in the instrument list
-        prog: MIDI program number (0-indexed)
-        var: Instrument variation
-        name: Display name of the instrument
-    """
-
-    ix: int
-    prog: int
-    var: int
-    name: str
-
-
-def _mk_inst(i: int, prog_var_name: tuple[int, int, str]) -> Inst:
-    """Create an Inst from a tuple, adjusting program number."""
-    prog, var, name = prog_var_name
-    return Inst(i, prog - 1, var, name)  # Convert to 0-indexed
-
-
-def _process_name(name: str) -> str:
-    """Process instrument name for searching.
-
-    Converts to lowercase and replaces hyphens/underscores with spaces.
-    """
-    return name.lower().replace("-", " ").replace("_", " ")
-
-
-def _match_name(fragment: str, name: str) -> bool:
-    """Check if a name fragment matches an instrument name."""
-    processed_fragment = _process_name(fragment)
-    processed_name = _process_name(name)
-    return processed_fragment in processed_name
-
-
-def find_instrument(fragment: str) -> Optional[Inst]:
-    """Find an instrument by name fragment.
-
-    Searches through the instrument list for the first instrument
-    whose name contains the given fragment (case-insensitive).
-
-    Args:
-        fragment: Text fragment to search for in instrument names
-
-    Returns:
-        The first matching instrument, or None if not found
-
-    Examples:
-        >>> find_instrument("piano")  # May find "Piano 1"
-        >>> find_instrument("string")  # May find "Strings"
-    """
-    for i, (prog, var, name) in enumerate(INSTRUMENTS):
-        if _match_name(fragment, name):
-            return _mk_inst(i, (prog, var, name))
-    return None
-
-
-def first_instrument() -> Inst:
-    """Get the first instrument in the list."""
-    return _mk_inst(0, INSTRUMENTS[0])
-
-
-def next_instrument(inst: Inst) -> Inst:
-    """Get the next instrument in the list, wrapping to the beginning."""
-    if inst.ix >= len(INSTRUMENTS) - 1:
-        return first_instrument()
-    else:
-        j = inst.ix + 1
-        return _mk_inst(j, INSTRUMENTS[j])
-
-
-def set_sound_named(chan: int, fragment: str) -> PSeq[FrozenMessage]:
-    """Set a sound by name fragment.
-
-    Args:
-        chan: MIDI channel (0-15)
-        fragment: Text fragment to search for in instrument names
-
-    Returns:
-        Sequence containing messages to set the sound
-
-    Raises:
-        ValueError: If no instrument matching the fragment is found
-    """
-    inst = find_instrument(fragment)
-    if inst is None:
-        raise ValueError(f"Could not find instrument: {fragment}")
-    return set_sound(chan, inst.prog, inst.var)
-
+from minipat.hw.common import Hardware
 
 # SC-88 Instrument Database
-# Each tuple is (program, variation, name)
-INSTRUMENTS: Sequence[tuple[int, int, str]] = (
-    (1, 0, "Piano 1"),
-    (1, 8, "Piano 1w"),
-    (1, 16, "Piano 1d"),
-    (2, 0, "Piano 2"),
-    (2, 8, "Piano 2w"),
-    (3, 0, "Piano 3"),
-    (3, 1, "EG+Rhodes1"),
-    (3, 2, "EG+Rhodes2"),
-    (3, 8, "Piano 3w"),
-    (4, 0, "Honky-tonk"),
-    (4, 8, "Old Upright"),
-    (5, 0, "E.Piano 1"),
-    (5, 8, "St.Soft EP"),
-    (5, 16, "FM+SA EP"),
-    (5, 24, "60's E.Piano"),
-    (5, 25, "Hard Rhodes"),
-    (5, 26, "MellowRhodes"),
-    (6, 0, "E.Piano 2"),
-    (6, 8, "Detuned EP 2"),
-    (6, 16, "St.FM EP"),
-    (6, 24, "Hard FM EP"),
-    (7, 0, "Harpsichord"),
-    (7, 8, "Coupled Hps."),
-    (7, 16, "Harpsi.w"),
-    (7, 24, "Harpsi.o"),
-    (8, 0, "Clav."),
+# Each tuple is (bank, program, name)
+SC88_HARDWARE: Hardware = Hardware.mk(
+    (0, 0, "Piano 1"),
+    (8, 0, "Piano 1w"),
+    (16, 0, "Piano 1d"),
+    (0, 1, "Piano 2"),
+    (8, 1, "Piano 2w"),
+    (0, 2, "Piano 3"),
+    (1, 2, "EG+Rhodes1"),
+    (2, 2, "EG+Rhodes2"),
+    (8, 2, "Piano 3w"),
+    (0, 3, "Honky-tonk"),
+    (8, 3, "Old Upright"),
+    (0, 4, "E.Piano 1"),
+    (8, 4, "St.Soft EP"),
+    (16, 4, "FM+SA EP"),
+    (24, 4, "60's E.Piano"),
+    (25, 4, "Hard Rhodes"),
+    (26, 4, "MellowRhodes"),
+    (0, 5, "E.Piano 2"),
+    (8, 5, "Detuned EP 2"),
+    (16, 5, "St.FM EP"),
+    (24, 5, "Hard FM EP"),
+    (0, 6, "Harpsichord"),
+    (8, 6, "Coupled Hps."),
+    (16, 6, "Harpsi.w"),
+    (24, 6, "Harpsi.o"),
+    (0, 7, "Clav."),
     (9, 0, "Celesta"),
     (10, 0, "Glockenspiel"),
     (11, 0, "Music Box"),
@@ -848,19 +584,19 @@ def _mk_drum_set(
     return DrumSet(i, prog, name, hits)
 
 
-def find_drum_set(fragment: str) -> Optional[DrumSet]:
-    """Find a drum set by name fragment.
-
-    Args:
-        fragment: Text fragment to search for in drum set names
-
-    Returns:
-        The first matching drum set, or None if not found
-    """
-    for i, (prog, name, hits) in enumerate(DRUM_SETS):
-        if _match_name(fragment, name):
-            return _mk_drum_set(i, (prog, name, hits))
-    return None
+# def find_drum_set(fragment: str) -> Optional[DrumSet]:
+#     """Find a drum set by name fragment.
+#
+#     Args:
+#         fragment: Text fragment to search for in drum set names
+#
+#     Returns:
+#         The first matching drum set, or None if not found
+#     """
+#     for i, (prog, name, hits) in enumerate(DRUM_SETS):
+#         if match_name_fragment(fragment, name):
+#             return _mk_drum_set(i, (prog, name, hits))
+#     return None
 
 
 def first_drum_set() -> DrumSet:

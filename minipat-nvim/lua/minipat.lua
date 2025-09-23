@@ -958,7 +958,7 @@ local function help_minipat()
       .. ".playing)",
     "  :" .. prefix .. "At <code> - Send Python code to minipat (boots if needed)",
     "  :" .. prefix .. "Config  - Edit the minipat configuration file",
-    "  :" .. prefix .. "Setup   - Run minipat.fluid setup",
+    "  :" .. prefix .. "Setup   - Run minipat.setup setup",
     "  :" .. prefix .. "Help    - Show this help",
     "",
     "Keybindings (in *." .. current_config.config.file_ext .. " files):",
@@ -1006,7 +1006,7 @@ local function help_minipat()
     "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.panic .. "  - Panic (stop playback)",
     "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.toggle .. "  - Toggle playback",
     "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.config .. "  - Edit config file",
-    "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.setup .. "  - Run minipat.fluid setup",
+    "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.setup .. "  - Run minipat.setup setup",
     "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.help .. "  - Show this help",
     "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.at .. "  - Send code to minipat (MpAt)",
     "",
@@ -1564,7 +1564,7 @@ local function run_fluid_setup()
   vim.api.nvim_buf_set_option(buf, "filetype", "minipatfluid")
 
   -- Run the command and capture output
-  local command = python_cmd .. " -m minipat.fluid setup"
+  local command = python_cmd .. " -m minipat.setup setup"
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {"Running: " .. command, ""})
 
   -- Use jobstart to run the command asynchronously
@@ -1803,7 +1803,7 @@ function M.setup(user_args)
   vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "Send code", nargs = "+" })
   vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "Show help" })
   vim.api.nvim_create_user_command(prefix .. "Config", open_config, { desc = "Edit configuration file" })
-  vim.api.nvim_create_user_command(prefix .. "Setup", run_fluid_setup, { desc = "Run minipat.fluid setup" })
+  vim.api.nvim_create_user_command(prefix .. "Setup", run_fluid_setup, { desc = "Run minipat.setup setup" })
   vim.api.nvim_create_user_command(prefix .. "ReloadConfig", function()
     invalidate_config_cache()
     local new_config = get_current_config(true)
@@ -1917,7 +1917,7 @@ function M.setup(user_args)
       end, { desc = "Send code" })
     end
     if args.global_keymaps and args.global_keymaps.setup then
-      vim.keymap.set("n", leader_prefix .. args.global_keymaps.setup, run_fluid_setup, { desc = "Run minipat.fluid setup" })
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.setup, run_fluid_setup, { desc = "Run minipat.setup setup" })
     end
     if args.global_keymaps and args.global_keymaps.config then
       vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, open_config, { desc = "Edit configuration file" })

@@ -139,7 +139,7 @@ def get_default_soundfont() -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="python -m minipat.fluid",
+        prog="python -m minipat.setup",
         description="Manage FluidSynth configuration and soundfonts for minipat",
     )
 
@@ -226,7 +226,7 @@ def main() -> None:
                 print(f"  - {sf.name}{is_default}")
         else:
             print(
-                "No soundfonts found. Run 'python -m minipat.fluid soundfonts' to download."
+                "No soundfonts found. Run 'python -m minipat.setup soundfonts' to download."
             )
 
 

@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#28}
+Next available task ID: {#29}
 
 ### Active
 
@@ -38,6 +38,12 @@ Next available task ID: {#28}
 
 ### Done
 
+- {#28} Create patch list of ~/.local/share/minipat/sf/default.sf2 using sf2dump output and add to minipat.hw.fluid
+  - Created minipat/hw/fluid.py module with FluidR3_GM preset list
+  - Extracted 189 presets using sf2dump with proper (bank, preset, name) format
+  - Includes multiple banks: 0 (GM standard), 8 (variations), 9, 16, 128 (drum kits)
+  - Added utility functions: get_preset(), find_preset(), list_presets(), search_presets(), get_banks(), get_gm_preset()
+  - Follows General MIDI standard: Bank 0, Preset 0 = "Yamaha Grand Piano"
 - {#27} Add minipat.fluid to manage fluidsynth config and resources
   - Created minipat/fluid.py module with FluidSynthConfig class
   - Created ~/.local/share/minipat/sf directory for soundfonts
