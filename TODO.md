@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#26}
+Next available task ID: {#27}
 
 ### Active
 
@@ -40,6 +40,7 @@ Next available task ID: {#26}
 
 ### Done
 
+- {#26} Fix event generation by making whole required and correcting constructor sites in streams
 - {#21} Configure "generations ahead" to give more generation time
   - Added _DEFAULT_GENERATIONS_AHEAD = 2 static configuration in live.py
   - Updated once() method to use generation_cycle_length * _DEFAULT_GENERATIONS_AHEAD for minimum_future_time

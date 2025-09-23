@@ -18,7 +18,9 @@ def test_pure_pattern() -> None:
     assert len(event_list) == 1
     _, event = event_list[0]
     assert event.span.active == arc
-    assert event.span.whole is None  # Pure pattern should have no wider context
+    assert (
+        event.span.whole == event.span.active
+    )  # Pure pattern should have no wider context
     assert event.val == "x"
 
 
@@ -50,14 +52,18 @@ def test_sequence_pattern() -> None:
     _, first_event = event_list[0]
     assert first_event.span.active.start == Fraction(0)
     assert first_event.span.active.end == Fraction(1, 2)
-    assert first_event.span.whole is None  # Sequence elements have no wider context
+    assert (
+        first_event.span.whole == first_event.span.active
+    )  # Sequence elements have no wider context
     assert first_event.val == "x"
 
     # Second event: y from 0.5 to 1
     _, second_event = event_list[1]
     assert second_event.span.active.start == Fraction(1, 2)
     assert second_event.span.active.end == Fraction(1)
-    assert second_event.span.whole is None  # Sequence elements have no wider context
+    assert (
+        second_event.span.whole == second_event.span.active
+    )  # Sequence elements have no wider context
     assert second_event.val == "y"
 
 
@@ -77,7 +83,7 @@ def test_parallel_pattern() -> None:
     for _, event in event_list:
         assert event.span.active == arc
         assert (
-            event.span.whole is None
+            event.span.whole == event.span.active
         )  # Parallel events fill full arc, no wider context
         assert event.val in ["x", "y"]
 
@@ -105,7 +111,7 @@ def test_repetition_fast() -> None:
     assert first_event.span.active.start == Fraction(0)
     assert first_event.span.active.end == Fraction(1, 2)
     assert (
-        first_event.span.whole is None
+        first_event.span.whole == first_event.span.active
     )  # Fast repetitions create separate active spans
     assert first_event.val == "x"
 
@@ -114,7 +120,7 @@ def test_repetition_fast() -> None:
     assert second_event.span.active.start == Fraction(1, 2)
     assert second_event.span.active.end == Fraction(1)
     assert (
-        second_event.span.whole is None
+        second_event.span.whole == second_event.span.active
     )  # Fast repetitions create separate active spans
     assert second_event.val == "x"
 
@@ -137,7 +143,7 @@ def test_repetition_slow() -> None:
     assert event.span.active.end == Fraction(
         1
     )  # Actually fills the whole arc after scaling back
-    assert event.span.whole is None  # Fills entire arc, no wider context
+    assert event.span.whole == event.span.active  # Fills entire arc, no wider context
     assert event.val == "x"
 
 
@@ -159,7 +165,7 @@ def test_elongation_pattern() -> None:
     assert event.span.active.end == Fraction(
         1
     )  # Actually fills the whole arc after scaling back
-    assert event.span.whole is None  # Fills entire arc, no wider context
+    assert event.span.whole == event.span.active  # Fills entire arc, no wider context
     assert event.val == "x"
 
 
@@ -176,7 +182,7 @@ def test_choice_pattern() -> None:
 
     assert len(event_list0) == 1
     _, event0 = event_list0[0]
-    assert event0.span.whole is None  # Choice events fill full arc
+    assert event0.span.whole == event0.span.active  # Choice events fill full arc
     assert event0.val == "x" and len(event_list0) == 1
     _, event0 = event_list0[0]
 
@@ -187,7 +193,7 @@ def test_choice_pattern() -> None:
 
     assert len(event_list1) == 1
     _, event1 = event_list1[0]
-    assert event1.span.whole is None  # Choice events fill full arc
+    assert event1.span.whole == event1.span.active  # Choice events fill full arc
     assert event1.val == "y" and len(event_list1) == 1
     _, event1 = event_list1[0]
 
@@ -216,7 +222,9 @@ def test_euclidean_pattern() -> None:
 
     # Events should be at positions determined by euclidean algorithm
     for i, (_, event) in enumerate(event_list):
-        assert event.span.whole is None  # Euclidean events create separate active spans
+        assert (
+            event.span.whole == event.span.active
+        )  # Euclidean events create separate active spans
         # Each event should span one step
         assert event.span.active.length() == step_duration
 
@@ -239,10 +247,10 @@ def test_polymetric_pattern() -> None:
     assert len(event_list) == 3
 
     # All events should span the full arc
-    values = []
+    values: list[str] = []
     for _, event in event_list:
         assert event.span.active == arc
-        assert event.span.whole is None  # Polymetric events fill full arc
+        assert event.span.whole == event.span.active  # Polymetric events fill full arc
         values.append(event.val)
 
     # Should have all three values
@@ -265,7 +273,7 @@ def test_alternating_pattern() -> None:
 
     assert len(event_list0) == 1
     _, event0 = event_list0[0]
-    assert event0.span.whole is None  # Alternating events fill full arc
+    assert event0.span.whole == event0.span.active  # Alternating events fill full arc
     assert event0.val == "x" and len(event_list0) == 1
     _, event0 = event_list0[0]
 
@@ -275,7 +283,7 @@ def test_alternating_pattern() -> None:
 
     assert len(event_list1) == 1
     _, event1 = event_list1[0]
-    assert event1.span.whole is None  # Alternating events fill full arc
+    assert event1.span.whole == event1.span.active  # Alternating events fill full arc
     assert event1.val == "y" and len(event_list1) == 1
     _, event1 = event_list1[0]
 
@@ -292,7 +300,7 @@ def test_probability_pattern() -> None:
 
     assert len(event_list) == 1
     _, event = event_list[0]
-    assert event.span.whole is None  # Probability events fill full arc
+    assert event.span.whole == event.span.active  # Probability events fill full arc
     assert event.val == "x"
 
     # Test with 0 probability
@@ -324,7 +332,7 @@ def test_complex_nested_pattern() -> None:
     assert first_event.span.active.start == Fraction(0)
     assert first_event.span.active.end == Fraction(1, 4)
     assert (
-        first_event.span.whole is None
+        first_event.span.whole == first_event.span.active
     )  # Replicated sequence elements have no wider context
     assert first_event.val == "x"
 
@@ -332,7 +340,7 @@ def test_complex_nested_pattern() -> None:
     assert second_event.span.active.start == Fraction(1, 4)
     assert second_event.span.active.end == Fraction(1, 2)
     assert (
-        second_event.span.whole is None
+        second_event.span.whole == second_event.span.active
     )  # Replicated sequence elements have no wider context
     assert second_event.val == "y"
 
@@ -341,7 +349,7 @@ def test_complex_nested_pattern() -> None:
     assert third_event.span.active.start == Fraction(1, 2)
     assert third_event.span.active.end == Fraction(3, 4)
     assert (
-        third_event.span.whole is None
+        third_event.span.whole == third_event.span.active
     )  # Replicated sequence elements have no wider context
     assert third_event.val == "x"
 
@@ -349,7 +357,7 @@ def test_complex_nested_pattern() -> None:
     assert fourth_event.span.active.start == Fraction(3, 4)
     assert fourth_event.span.active.end == Fraction(1)
     assert (
-        fourth_event.span.whole is None
+        fourth_event.span.whole == fourth_event.span.active
     )  # Replicated sequence elements have no wider context
     assert fourth_event.val == "y"
 
@@ -432,12 +440,13 @@ def test_pure_pattern_partial_queries() -> None:
     assert len(first_list) == 1
     assert len(second_list) == 0
 
-    # The first event should span the full cycle
+    # The first event should have full cycle in whole, active clipped to query
     event = first_list[0][1]
     assert event.val == "c"
     assert event.span.active.start == CycleTime(Fraction(0))
-    assert event.span.active.end == CycleTime(Fraction(1))
-    assert event.span.whole is None  # Pure pattern has no wider context
+    assert event.span.active.end == CycleTime(Fraction(1, 2))  # Clipped to query arc
+    assert event.span.whole.start == CycleTime(Fraction(0))
+    assert event.span.whole.end == CycleTime(Fraction(1))  # Full pattern extent
 
     # Test that queries starting after cycle 0 don't get cycle 0 events
     late_query = CycleArc(CycleTime(Fraction(1, 4)), CycleTime(Fraction(3, 4)))
@@ -720,7 +729,7 @@ def test_choice_sub_cycle_splitting() -> None:
             assert len(event_list) <= 1
             _, event = event_list[0]
             choice_values.add(event.val)
-            assert event.span.whole is None  # Choice events fill full arc
+            assert event.span.whole == event.span.active  # Choice events fill full arc
 
     # Should see different choices across cycles
     assert len(choice_values) >= 1  # At least one choice should be made
@@ -744,7 +753,9 @@ def test_alternating_sub_cycle_splitting() -> None:
             assert len(event_list) == 1
             _, event = event_list[0]
             values_by_cycle.append(event.val)
-            assert event.span.whole is None  # Alternating events fill full arc
+            assert (
+                event.span.whole == event.span.active
+            )  # Alternating events fill full arc
 
     # Should alternate between patterns
     assert len(values_by_cycle) >= 2
@@ -773,7 +784,9 @@ def test_probability_sub_cycle_splitting() -> None:
         if event_list:
             _, event = event_list[0]
             assert event.val == "x"
-            assert event.span.whole is None  # Probability events fill full arc
+            assert (
+                event.span.whole == event.span.active
+            )  # Probability events fill full arc
 
     # With 50% probability over 10 cycles, should see some variation
     # (not always 0 or always 10)

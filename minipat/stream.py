@@ -57,13 +57,7 @@ def _create_span(original_arc: CycleArc, query_arc: CycleArc) -> Optional[CycleS
     if active.null():
         return None
 
-    # Only set whole if original extends beyond the active area
-    if original_arc == active:
-        whole = None
-    else:
-        whole = original_arc
-
-    return CycleSpan(active, whole)
+    return CycleSpan.mk(whole=original_arc, active=active)
 
 
 class Stream[T](metaclass=ABCMeta):
@@ -256,10 +250,6 @@ class Stream[T](metaclass=ABCMeta):
             # The pattern repeats infinitely every 4 cycles
             song = Stream.compose(sections)
         """
-        if not sections:
-            return Stream.silent()
-
-        # Use ComposeStream.mk which handles sorting and validation
         return ComposeStream.mk(sections)
 
     @staticmethod
@@ -366,21 +356,20 @@ class ComposeStream[T](Stream[T]):
     sections: List[Section[T]]
 
     @staticmethod
-    def mk(sections: List[Section[T]]) -> Stream[T]:
-        if not sections:
-            return SilentStream()
+    def mk(sections: List[Section[T]]) -> ComposeStream[T]:
+        containing_arc = CycleArc.empty()
+        sorted_sections: List[Section[T]] = []
+        if sections:
+            # Sort sections by their arc start time to ensure chronological ordering
+            sorted_sections = sorted(sections, key=lambda section: section[0].start)
 
-        # Sort sections by their arc start time to ensure chronological ordering
-        sorted_sections = sorted(sections, key=lambda section: section[0].start)
+            # Calculate the containing arc (0 to max end time of all sections)
+            max_end = max(section_arc.end for section_arc, _ in sorted_sections)
+            containing_arc = CycleArc(CycleTime(Fraction(0)), CycleTime(max_end))
 
-        # Calculate the containing arc (0 to max end time of all sections)
-        max_end = max(section_arc.end for section_arc, _ in sorted_sections)
-        containing_arc = CycleArc(CycleTime(Fraction(0)), CycleTime(max_end))
-
-        if containing_arc.null():
-            return SilentStream()
-        else:
-            return ComposeStream(containing_arc, sorted_sections)
+            if containing_arc.null():
+                sorted_sections = []
+        return ComposeStream(containing_arc, sorted_sections)
 
     def unstream_all(self) -> PHeapMap[CycleSpan, Ev[T]]:
         return self.unstream(self.containing_arc)
@@ -448,10 +437,8 @@ class ComposeStream[T](Stream[T]):
                                 CycleTime(whole_start), CycleTime(whole_end)
                             )
 
-                            # Only set whole if it's different from active (i.e., the event was clipped)
-                            final_whole = whole_arc if whole_arc != active_arc else None
-
-                            span = CycleSpan(active_arc, final_whole)
+                            # Use whole_arc as the logical boundary for this event
+                            span = CycleSpan.mk(whole=whole_arc, active=active_arc)
                             shifted_ev = Ev(span, ev.val)
                             result = ev_heap_push(shifted_ev, result)
 
@@ -496,7 +483,7 @@ class PureStream[T](Stream[T]):
                 # Only include the event if the query arc contains the cycle start
                 # This ensures each event is only included once across multiple partial queries
                 if arc.start <= cycle_start < arc.end:
-                    span = CycleSpan(cycle_arc, None)
+                    span = CycleSpan.mk(whole=cycle_arc, active=intersection)
                     result = ev_heap_push(Ev(span, self.value), result)
 
         return result
@@ -572,7 +559,11 @@ class WeightedSeqStream[T](Stream[T]):
                         # Check if mapped arc intersects with query arc
                         intersection = mapped_arc.intersect(arc)
                         if not intersection.null():
-                            span = CycleSpan(intersection, ev.span.whole)
+                            # Set whole span to the full allocated slot for this child
+                            whole_arc = CycleArc(
+                                CycleTime(child_start), CycleTime(child_end)
+                            )
+                            span = CycleSpan.mk(whole=whole_arc, active=intersection)
                             new_ev = Ev(span, ev.val)
                             seq_result = ev_heap_push(new_ev, seq_result)
 
@@ -647,7 +638,11 @@ class SeqStream[T](Stream[T]):
                         # Check if mapped arc intersects with query arc
                         intersection = mapped_arc.intersect(arc)
                         if not intersection.null():
-                            span = CycleSpan(intersection, ev.span.whole)
+                            # Set whole span to the full allocated slot for this child
+                            whole_arc = CycleArc(
+                                CycleTime(child_start), CycleTime(child_end)
+                            )
+                            span = CycleSpan.mk(whole=whole_arc, active=intersection)
                             new_ev = Ev(span, ev.val)
                             seq_result = ev_heap_push(new_ev, seq_result)
 
@@ -746,7 +741,9 @@ class EucStream[T](Stream[T]):
                     if not step_intersection.null():
                         # For each atom event, create a step event
                         for _, atom_ev in atom_events:
-                            span = CycleSpan(step_intersection, None)
+                            span = CycleSpan.mk(
+                                whole=step_intersection, active=step_intersection
+                            )
                             step_ev = Ev(span, atom_ev.val)
                             euc_result = ev_heap_push(step_ev, euc_result)
 
@@ -785,7 +782,7 @@ class PolyStream[T](Stream[T]):
                     span = _create_span(scaled_ev.span.active, arc)
                     if span is not None:
                         # Use None for whole to be consistent with other streams
-                        span = CycleSpan(span.active, None)
+                        span = CycleSpan.mk(whole=span.active, active=span.active)
                         new_ev = Ev(span, scaled_ev.val)
                         polymetric_result = ev_heap_push(new_ev, polymetric_result)
 
@@ -847,7 +844,9 @@ class SpeedStream[T](Stream[T]):
                         # Check if scaled arc intersects with query arc
                         intersection = scaled_arc.intersect(arc)
                         if not intersection.null():
-                            scaled_span = CycleSpan(intersection, None)
+                            scaled_span = CycleSpan.mk(
+                                whole=intersection, active=intersection
+                            )
                             scaled_ev = Ev(scaled_span, ev.val)
                             result = ev_heap_push(scaled_ev, result)
 
@@ -886,7 +885,9 @@ class SpeedStream[T](Stream[T]):
                             # Check if scaled arc intersects with query arc
                             intersection = scaled_arc.intersect(arc)
                             if not intersection.null():
-                                scaled_span = CycleSpan(intersection, None)
+                                scaled_span = CycleSpan.mk(
+                                    whole=intersection, active=intersection
+                                )
                                 scaled_ev = Ev(scaled_span, ev.val)
                                 result = ev_heap_push(scaled_ev, result)
 
@@ -1029,7 +1030,7 @@ class RepeatStream[T](Stream[T]):
                             CycleTime(scaled_start), CycleTime(scaled_end)
                         )
 
-                        scaled_span = CycleSpan(scaled_arc, None)
+                        scaled_span = CycleSpan.mk(whole=scaled_arc, active=scaled_arc)
                         scaled_ev = Ev(scaled_span, ev.val)
                         result = ev_heap_push(scaled_ev, result)
 
@@ -1062,7 +1063,9 @@ class RepeatStream[T](Stream[T]):
                             scaled_arc = CycleArc(
                                 CycleTime(scaled_start), CycleTime(scaled_end)
                             )
-                            scaled_span = CycleSpan(scaled_arc, None)
+                            scaled_span = CycleSpan.mk(
+                                whole=scaled_arc, active=scaled_arc
+                            )
                             scaled_ev = Ev(scaled_span, ev.val)
                             result = ev_heap_push(scaled_ev, result)
 
@@ -1142,7 +1145,9 @@ class ApplyStream[A, B, C](Stream[C]):
                 intersection = left_arc.intersect(right_arc)
                 if not intersection.null():
                     combined_val = self.func(left_ev.val, right_ev.val)
-                    combined_span = CycleSpan(intersection, None)
+                    combined_span = CycleSpan.mk(
+                        whole=intersection, active=intersection
+                    )
                     combined_ev = Ev(combined_span, combined_val)
                     result = ev_heap_push(combined_ev, result)
 
@@ -1333,13 +1338,4 @@ def compose_once[T](sections: List[Section[T]]) -> PHeapMap[CycleSpan, Ev[T]]:
     Returns:
         An EvHeap[T] containing all events from the composition rendered once
     """
-    if not sections:
-        return ev_heap_empty()
-
-    # Create a ComposeStream and render it once
-    stream = ComposeStream.mk(sections)
-    if isinstance(stream, ComposeStream):
-        return stream.unstream_all()
-    else:
-        # If mk returned SilentStream
-        return ev_heap_empty()
+    return ComposeStream.mk(sections).unstream_all()

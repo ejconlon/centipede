@@ -21,7 +21,7 @@ from minipat.live import (
 )
 from minipat.messages import MidiAttrs, MsgTypeField, NoteField, TimedMessage
 from minipat.midi import start_midi_live_system
-from minipat.time import CycleArc, CycleTime, PosixTime, mk_cps
+from minipat.time import PosixTime, mk_cps
 
 # Type aliases for brevity
 MidiLiveSystem = LiveSystem[MidiAttrs, TimedMessage]
@@ -304,47 +304,88 @@ class TestMidiLiveSystemIntegration:
                     f"got {total_time:.3f}s"
                 )
 
-    def test_preview_functionality(self, live_system: MidiLiveFixture) -> None:
-        """Test that preview method works and processes patterns correctly.
+    def test_sequential_pattern_cycling(self, live_system: MidiLiveFixture) -> None:
+        """Test that sequential patterns cycle correctly across multiple cycles.
 
-        This test verifies:
-        1. The preview method can be called without errors
-        2. Preview processes patterns from active orbits
-        3. Preview respects orbit mute/solo state
-        4. The actor message routing works correctly
+        Bug case: Pattern "c4 f4" over 2 cycles should produce:
+        Cycle 1: C4 (first half), F4 (second half)
+        Cycle 2: C4 (first half), F4 (second half)
+        Expected sequence: C4, F4, C4, F4
 
-        Note: This test focuses on the preview functionality rather than exact timing,
-        since the timing behavior depends on the backend scheduling which may not
-        be fully captured in this test environment.
+        WRONG behavior would be: C4, C4, F4, F4 (all C4s first, then all F4s)
+        This indicates the pattern is not cycling properly.
         """
         live, mock_port = live_system
 
-        # Test 1: Preview with no patterns should work without error
-        arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
-        live.preview(arc)  # Should not crash
+        # Clear any existing messages
+        mock_port.clear()
 
-        # Test 2: Preview with patterns
-        pattern1 = note_stream("c4")
-        pattern2 = note_stream("g4")
-        live.set_orbit(Orbit(0), pattern1)
-        live.set_orbit(Orbit(1), pattern2)
+        # Use a simple 2-note sequential pattern
+        pattern = note_stream("c4 f4")
+        live.set_orbit(Orbit(0), pattern)
 
-        # Should work without errors
-        live.preview(arc)
+        # Start playing
+        live.play()
 
-        # Test 3: Preview with muted orbit
-        live.mute(Orbit(1), True)
-        live.preview(arc)  # Should process only unmuted orbits
+        # Wait for exactly 2 complete cycles
+        current_cps = live.get_cps()
+        current_gpc = live.get_gpc()
+        cycles_to_wait = 2
+        expected_duration = cycles_to_wait / current_cps
+        max_wait_time = expected_duration * 1.5
 
-        # Test 4: Preview with solo orbit
-        live.unmute(Orbit(1))
-        live.solo(Orbit(0), True)
-        live.preview(arc)  # Should process only soloed orbits
+        generation_duration = 1.0 / (float(current_cps) * current_gpc)
 
-        # Test 5: Clear patterns and preview should work
-        live.unsolo(Orbit(0))
-        live.clear_orbits()
-        live.preview(arc)  # Should work with no patterns
+        start_time = time.time()
+        sleep_increment = 0.05
 
-        # If we get here, all preview operations completed successfully
-        assert True
+        while time.time() - start_time < max_wait_time:
+            current_cycle = live.get_cycle()
+            if current_cycle > cycles_to_wait:
+                time.sleep(generation_duration)
+                break
+            time.sleep(sleep_increment)
+
+        # Stop playing
+        live.pause()
+
+        # Collect all messages
+        messages = mock_port.get_all_messages()
+
+        # Extract only note_on events with their notes
+        note_on_sequence = []
+        for msg in messages:
+            msg_type = MsgTypeField.get(msg.message)
+            if msg_type == "note_on":
+                note_num = NoteField.unmk(NoteField.get(msg.message))
+                note_on_sequence.append(note_num)
+
+        # We should have at least 4 note_on events for 2 cycles of "c4 f4"
+        assert len(note_on_sequence) >= 4, (
+            f"Expected at least 4 note_on events for 2 cycles, got {len(note_on_sequence)}"
+        )
+
+        # CRITICAL TEST: Verify the pattern cycles correctly
+        # Expected: [48, 53, 48, 53, ...] (C4, F4, C4, F4, ...)
+        # Wrong:    [48, 48, 53, 53, ...] (C4, C4, F4, F4, ...)
+
+        # Check the first 4 notes to verify correct cycling
+        expected_sequence = [48, 53, 48, 53]  # C4, F4, C4, F4
+        actual_first_four = note_on_sequence[:4]
+
+        assert actual_first_four == expected_sequence, (
+            f"Pattern should cycle correctly! Expected {expected_sequence} "
+            f"(C4, F4, C4, F4), but got {actual_first_four}. "
+            f"If you see [48, 48, 53, 53] or similar, the pattern is NOT cycling properly."
+        )
+
+        # Additional check: verify alternating pattern continues
+        # The pattern should continue alternating C4/F4, not group same notes together
+        for i in range(0, min(len(note_on_sequence) - 1, 8), 2):
+            if i + 1 < len(note_on_sequence):
+                # Every pair should be C4, F4
+                pair = note_on_sequence[i : i + 2]
+                assert pair == [48, 53], (
+                    f"Expected alternating C4(48), F4(53) at position {i}, got {pair}. "
+                    f"Full sequence: {note_on_sequence}"
+                )

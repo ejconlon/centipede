@@ -20,8 +20,8 @@ def _test_pattern_events(
     def _events_to_tuples(
         events: list[tuple[CycleSpan, Ev[str]]],
     ) -> list[tuple[Fraction, Fraction, str]]:
-        """Convert events to comparable tuples."""
-        return [(ev.span.active.start, ev.span.active.end, ev.val) for _, ev in events]
+        """Convert events to comparable tuples using whole spans for logical equivalence."""
+        return [(ev.span.whole.start, ev.span.whole.end, ev.val) for _, ev in events]
 
     # Test strategy 1: (0, 2) in one call - use as golden truth
     arc_full = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))

@@ -160,7 +160,8 @@ def test_midi_processor() -> None:
 
     # Create test event heap
 
-    span = CycleSpan(CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), None)
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4)))
+    span = CycleSpan.mk(whole=arc, active=arc)
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -215,7 +216,8 @@ def test_midi_processor_defaults() -> None:
     # Create MIDI attributes with only note (no velocity)
     midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(72))
 
-    span = CycleSpan(CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), None)
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    span = CycleSpan.mk(whole=arc, active=arc)
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -265,7 +267,8 @@ def test_midi_processor_validates_values() -> None:
         DMap.empty(MidiDom).put(NoteKey(), Note(200)).put(VelocityKey(), Velocity(-10))
     )
 
-    span = CycleSpan(CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), None)
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    span = CycleSpan.mk(whole=arc, active=arc)
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -290,7 +293,8 @@ def test_midi_processor_orbit_as_channel() -> None:
     # Create test MIDI attributes
     midi_attrs: MidiAttrs = DMap.empty(MidiDom).put(NoteKey(), NoteField.mk(60))
 
-    span = CycleSpan(CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), None)
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    span = CycleSpan.mk(whole=arc, active=arc)
     event = Ev(span, midi_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -657,7 +661,8 @@ def test_midi_processor_with_parse_messages() -> None:
         ProgramKey(), ProgramField.mk(42)
     )
 
-    span = CycleSpan(CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), None)
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    span = CycleSpan.mk(whole=arc, active=arc)
     event = Ev(span, program_attrs)
     event_heap = ev_heap_singleton(event)
 
@@ -786,7 +791,8 @@ def test_midi_processor_with_mixed_messages() -> None:
         .put(ControlValKey(), ProgramField.mk(44))
     )
 
-    span = CycleSpan(CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4))), None)
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1, 4)))
+    span = CycleSpan.mk(whole=arc, active=arc)
     event = Ev(span, mixed_attrs)
     event_heap = ev_heap_singleton(event)
 

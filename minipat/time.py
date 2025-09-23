@@ -281,7 +281,7 @@ class Arc[T, D](metaclass=ABCMeta):
         raise NotImplementedError()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class CycleArc(Arc[CycleTime, CycleDelta]):
     """Arc representing a time interval in cycle time."""
 
@@ -430,7 +430,7 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
                 yield cycle_index, CycleArc(cycle_start, cycle_end)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class StepArc(Arc[StepTime, StepDelta]):
     """Arc representing a time interval in step time."""
 
@@ -515,78 +515,67 @@ class StepArc(Arc[StepTime, StepDelta]):
 # =============================================================================
 
 
-class Span[T, D, A](metaclass=ABCMeta):
-    """Abstract base class for spans (arcs with optional context)."""
+@dataclass(frozen=True, order=True)
+class CycleSpan:
+    """Span in cycle time with whole context."""
 
-    @property
-    @abstractmethod
-    def active(self) -> A:
-        """Get the active arc."""
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def whole(self) -> Optional[A]:
-        """Get the whole arc (if any)."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def shift(self, delta: D) -> Self:
-        """Shift the span by a duration."""
-        raise NotImplementedError()
-
-    @classmethod
-    @abstractmethod
-    def mk(cls, active: A, whole: Optional[A]) -> Self:
-        """Create a span from active and whole arcs."""
-        raise NotImplementedError()
-
-    @classmethod
-    @abstractmethod
-    def empty(cls) -> Self:
-        """Create an empty span."""
-        raise NotImplementedError()
-
-
-@dataclass(frozen=True)
-class CycleSpan(Span[CycleTime, CycleDelta, CycleArc]):
-    """Span in cycle time with optional whole context."""
-
+    _whole: CycleArc
     _active: CycleArc
-    _whole: Optional[CycleArc] = None
 
     @property
     def active(self) -> CycleArc:
         return self._active
 
     @property
-    def whole(self) -> Optional[CycleArc]:
+    def whole(self) -> CycleArc:
         return self._whole
 
     def shift(self, delta: CycleDelta) -> CycleSpan:
-        new_active = self._active.shift(delta)
-        new_whole = self._whole.shift(delta) if self._whole is not None else None
-        return CycleSpan(new_active, new_whole)
+        new_active = self.active.shift(delta)
+        new_whole = self.whole.shift(delta)
+        return CycleSpan.mk(whole=new_whole, active=new_active)
 
     def scale(self, factor: Fraction) -> CycleSpan:
         """Scale the span by a factor."""
-        new_active = self._active.scale(factor)
-        new_whole = self._whole.scale(factor) if self._whole is not None else None
-        return CycleSpan(new_active, new_whole)
+        new_active = self.active.scale(factor)
+        new_whole = self.whole.scale(factor)
+        return CycleSpan.mk(whole=new_whole, active=new_active)
 
     def clip(self, factor: Fraction) -> CycleSpan:
         """Clip the span to a fraction of its length."""
-        new_active = self._active.clip(factor)
-        new_whole = self._whole.clip(factor) if self._whole is not None else None
-        return CycleSpan(new_active, new_whole)
+        new_active = self.active.clip(factor)
+        new_whole = self.whole.clip(factor)
+        return CycleSpan.mk(whole=new_whole, active=new_active)
+
+    def contains_start(self) -> bool:
+        """Check if the whole start time is within the active arc."""
+        return (
+            self.whole.start >= self.active.start
+            and self.whole.start <= self.active.end
+        )
+
+    def contains_end(self) -> bool:
+        """Check if the whole end time is within the active arc."""
+        return self.whole.end >= self.active.start and self.whole.end <= self.active.end
+
+    def valid(self) -> bool:
+        """Check if active is contained within whole."""
+        return self.active.null() or (
+            self.active.start >= self.whole.start and self.active.end <= self.whole.end
+        )
 
     @classmethod
-    def mk(cls, active: CycleArc, whole: Optional[CycleArc]) -> CycleSpan:
-        return cls(active, whole)
+    def mk(cls, whole: CycleArc, active: CycleArc) -> CycleSpan:
+        span = cls(_whole=whole, _active=active)
+        assert span.valid(), (
+            f"Active arc {active} must be contained within whole arc {whole}"
+        )
+        return span
 
     @classmethod
     def empty(cls) -> CycleSpan:
-        return cls(CycleArc.empty(), None)
+        empty_arc = CycleArc.empty()
+        return cls.mk(whole=empty_arc, active=empty_arc)
 
 
 # Type aliases for arc conversion

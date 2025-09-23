@@ -32,7 +32,7 @@ def test_compose_single_section() -> None:
     assert event.val == "note"
     assert event.span.active.start == CycleTime(Fraction(0))
     assert event.span.active.end == CycleTime(Fraction(1))
-    assert event.span.whole is None  # No clipping occurred
+    assert event.span.whole == event.span.active  # No clipping occurred
 
 
 def test_compose_multiple_sections() -> None:
