@@ -108,6 +108,8 @@ local DEFAULTS = {
     toggle = "k", -- <localleader>nk - toggle playback
     help = "?", -- <localleader>n? - show help
     at = "n", -- <localleader>nn - send code
+    config = "x", -- <localleader>nx - edit configuration file
+    setup = "X", -- <localleader>nX - run minipat.fluid setup
   },
 }
 
@@ -432,10 +434,10 @@ end
 -- Configuration Resolution
 -- ==============================================================================
 
--- Load configuration from minipat_config.lua in cwd if it exists
-local function load_cwd_config()
-  local cwd = vim.fn.getcwd()
-  local config_path = cwd .. "/minipat_config.lua"
+-- Load configuration from nvim_config.lua in ~/.local/config/minipat/ if it exists
+local function load_user_config()
+  local home = vim.fn.expand("~")
+  local config_path = home .. "/.local/config/minipat/nvim_config.lua"
 
   if not file_exists(config_path) then
     return nil
@@ -444,12 +446,12 @@ local function load_cwd_config()
   -- Try to load the config file
   local ok, config = pcall(dofile, config_path)
   if not ok then
-    vim.notify("Error loading minipat_config.lua: " .. tostring(config), vim.log.levels.ERROR)
+    vim.notify("Error loading nvim_config.lua: " .. tostring(config), vim.log.levels.ERROR)
     return nil
   end
 
   if type(config) ~= "table" then
-    vim.notify("minipat_config.lua must return a table", vim.log.levels.ERROR)
+    vim.notify("nvim_config.lua must return a table", vim.log.levels.ERROR)
     return nil
   end
 
@@ -529,10 +531,10 @@ local function get_current_config(force_reload)
   -- Start with defaults and initial user args
   local args = vim.tbl_deep_extend("force", DEFAULTS, state.initial_user_args or {})
 
-  -- Load and apply local configuration from minipat_config.lua in cwd if it exists
-  local cwd_config = load_cwd_config()
-  if cwd_config then
-    args = vim.tbl_deep_extend("force", args, cwd_config)
+  -- Load and apply user configuration from nvim_config.lua if it exists
+  local user_config = load_user_config()
+  if user_config then
+    args = vim.tbl_deep_extend("force", args, user_config)
   end
 
   -- Resolve and validate backend configuration
@@ -956,6 +958,7 @@ local function help_minipat()
       .. ".playing)",
     "  :" .. prefix .. "At <code> - Send Python code to minipat (boots if needed)",
     "  :" .. prefix .. "Config  - Edit the minipat configuration file",
+    "  :" .. prefix .. "Setup   - Run minipat.fluid setup",
     "  :" .. prefix .. "Help    - Show this help",
     "",
     "Keybindings (in *." .. current_config.config.file_ext .. " files):",
@@ -1003,6 +1006,7 @@ local function help_minipat()
     "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.panic .. "  - Panic (stop playback)",
     "    " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.toggle .. "  - Toggle playback",
     "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.config .. "  - Edit config file",
+    "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.setup .. "  - Run minipat.fluid setup",
     "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.help .. "  - Show this help",
     "  " .. current_config.global_keymaps.leader_prefix .. current_config.global_keymaps.at .. "  - Send code to minipat (MpAt)",
     "",
@@ -1525,33 +1529,91 @@ local function get_all_status()
 end
 
 local function open_config()
-  local config_path = vim.fn.stdpath("config") .. "/lua/plugins/minipat.lua"
-  local config_dir = vim.fn.fnamemodify(config_path, ":h")
+  local home = vim.fn.expand("~")
+  local config_path = home .. "/.local/config/minipat/nvim_config.lua"
 
-  -- Create directory if it doesn't exist
-  if not dir_exists(config_dir) then
-    vim.fn.mkdir(config_dir, "p")
-  end
-
-  -- Create file with basic template if it doesn't exist
   if not file_exists(config_path) then
-    local template = {
-      "return {",
-      "  {",
-      '    dir = "path/to/minipat-nvim",',
-      "    lazy = true,",
-      '    ft = { "minipat" },',
-      "    init = function()",
-      '      vim.filetype.add({ extension = { minipat = "minipat" } })',
-      "    end,",
-      "    opts = {},",
-      "  },",
-      "}",
-    }
-    vim.fn.writefile(template, config_path)
+    vim.notify("Configuration file not found. Run :MpSetup to create it.", vim.log.levels.ERROR)
+    return
   end
 
   vim.cmd("edit " .. vim.fn.fnameescape(config_path))
+end
+
+local function run_fluid_setup()
+  -- Get python executable with venv support
+  local python_cmd = "python"
+
+  -- Check if we're in a project with .venv
+  local cwd = vim.fn.getcwd()
+  local venv_python = cwd .. "/.venv/bin/python"
+  if file_exists(venv_python) then
+    python_cmd = venv_python
+  end
+
+  -- Create a buffer for the output
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(buf, "minipat.fluid setup")
+
+  -- Open the buffer in a split
+  vim.cmd("split")
+  vim.api.nvim_win_set_buf(0, buf)
+
+  -- Set buffer options
+  vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
+  vim.api.nvim_buf_set_option(buf, "filetype", "minipatfluid")
+
+  -- Run the command and capture output
+  local command = python_cmd .. " -m minipat.fluid setup"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {"Running: " .. command, ""})
+
+  -- Use jobstart to run the command asynchronously
+  local job_id = vim.fn.jobstart(command, {
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = function(_, data)
+      if data then
+        local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        for _, line in ipairs(data) do
+          if line ~= "" then
+            table.insert(current_lines, line)
+          end
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, current_lines)
+      end
+    end,
+    on_stderr = function(_, data)
+      if data then
+        local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        for _, line in ipairs(data) do
+          if line ~= "" then
+            table.insert(current_lines, "ERROR: " .. line)
+          end
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, current_lines)
+      end
+    end,
+    on_exit = function(_, code)
+      local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      if code == 0 then
+        table.insert(current_lines, "")
+        table.insert(current_lines, "✓ Setup completed successfully!")
+        table.insert(current_lines, "")
+        table.insert(current_lines, "FluidSynth configuration and nvim config created.")
+        table.insert(current_lines, "You can now use the plugin with FluidSynth.")
+      else
+        table.insert(current_lines, "")
+        table.insert(current_lines, "✗ Setup failed with exit code: " .. code)
+      end
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, current_lines)
+      -- Scroll to bottom
+      vim.api.nvim_win_set_cursor(0, {#current_lines, 0})
+    end
+  })
+
+  if job_id <= 0 then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {"Error: Failed to start command"})
+  end
 end
 
 
@@ -1740,11 +1802,13 @@ function M.setup(user_args)
   vim.api.nvim_create_user_command(prefix .. "Toggle", toggle_fn, { desc = "Toggle playback" })
   vim.api.nvim_create_user_command(prefix .. "At", at_fn, { desc = "Send code", nargs = "+" })
   vim.api.nvim_create_user_command(prefix .. "Help", help_fn, { desc = "Show help" })
+  vim.api.nvim_create_user_command(prefix .. "Config", open_config, { desc = "Edit configuration file" })
+  vim.api.nvim_create_user_command(prefix .. "Setup", run_fluid_setup, { desc = "Run minipat.fluid setup" })
   vim.api.nvim_create_user_command(prefix .. "ReloadConfig", function()
     invalidate_config_cache()
     local new_config = get_current_config(true)
-    vim.notify("Configuration reloaded from minipat_config.lua", vim.log.levels.INFO)
-  end, { desc = "Reload configuration from minipat_config.lua" })
+    vim.notify("Configuration reloaded from nvim_config.lua", vim.log.levels.INFO)
+  end, { desc = "Reload configuration from nvim_config.lua" })
   vim.api.nvim_create_user_command(prefix .. "Reflow", function()
     window.reflow_windows_in_group(state.subprocesses)
     vim.notify("Windows reflowed", vim.log.levels.INFO)
@@ -1851,6 +1915,12 @@ function M.setup(user_args)
           end
         end
       end, { desc = "Send code" })
+    end
+    if args.global_keymaps and args.global_keymaps.setup then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.setup, run_fluid_setup, { desc = "Run minipat.fluid setup" })
+    end
+    if args.global_keymaps and args.global_keymaps.config then
+      vim.keymap.set("n", leader_prefix .. args.global_keymaps.config, open_config, { desc = "Edit configuration file" })
     end
 
     -- Component keymaps

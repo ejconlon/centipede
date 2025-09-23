@@ -61,6 +61,7 @@ The plugin will be lazy-loaded when you open a `*.minipat` file.
 - `:MpHide` - Hide all minipat buffers (REPL, monitor, logs)
 - `:MpShow` - Show all minipat buffers
 - `:MpConfig` - Edit the minipat configuration file
+- `:MpSetup` - Run minipat.fluid setup to configure FluidSynth
 - `:MpHelp` - Show help with current keybindings and configuration
 - `:MpBackendStart` - Start the backend process
 - `:MpBackendStop` - Stop the backend process
@@ -83,7 +84,8 @@ By default, global keymaps are available under `<localleader>n`:
 - `<localleader>nl` - Toggle log viewer
 - `<localleader>nh` - Hide all minipat buffers
 - `<localleader>nw` - Show all minipat buffers
-- `<localleader>nc` - Edit configuration
+- `<localleader>nx` - Edit configuration
+- `<localleader>nX` - Run minipat.fluid setup
 - `<localleader>n?` - Show help
 - `<localleader>nn` - Send code to minipat (MpAt command)
 
@@ -195,7 +197,8 @@ The backend process is tracked using pidfiles and can be managed independently o
 - `logs` (default: "l") - Toggle log viewer
 - `hide` (default: "h") - Hide minipat buffers
 - `show` (default: "w") - Show minipat buffers
-- `config` (default: "c") - Edit configuration
+- `config` (default: "x") - Edit configuration
+- `setup` (default: "X") - Run minipat.fluid setup
 - `help` (default: "?") - Show help
 - `at` (default: "n") - Send code to minipat (MpAt)
 

@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#27}
+Next available task ID: {#28}
 
 ### Active
 
@@ -38,6 +38,12 @@ Next available task ID: {#27}
 
 ### Done
 
+- {#27} Add minipat.fluid to manage fluidsynth config and resources
+  - Created minipat/fluid.py module with FluidSynthConfig class
+  - Created ~/.local/share/minipat/sf directory for soundfonts
+  - Downloaded fluid-soundfont from Ubuntu archive (134MB)
+  - Created symlink ~/.local/share/minipat/sf/default.sf2 -> FluidR3_GM.sf2
+  - Created config files in ~/.local/config/minipat
 - {#24} Expand accepted argument types to Flow methods
   - When accepting pattern strings, also accept Stream[T] or Flow
 - {#23} Add `Flow.transpose(self, pat_str: str) -> Flow` to transpose notes
