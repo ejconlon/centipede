@@ -34,11 +34,12 @@ Next available task ID: {#27}
 
 ### Upcoming
 
-- {#24} Add `type FlowLike = str | Stream[MidiAttrs] | Flow` to dsl and expand accepted argument types
 - {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
 
 ### Done
 
+- {#24} Expand accepted argument types to Flow methods
+  - When accepting pattern strings, also accept Stream[T] or Flow
 - {#23} Add `Flow.transpose(self, pat_str: str) -> Flow` to transpose notes
   - Implemented transpose method that takes a pattern string of semitone offset integers
   - Uses custom parser to handle positive and negative integers (e.g., "5 -3 7")

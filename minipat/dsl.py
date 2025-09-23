@@ -9,9 +9,12 @@ from typing import Callable, NoReturn, Optional
 
 from bad_actor import System, new_system
 from minipat.combinators import (
+    IntStreamLike,
+    StringStreamLike,
     channel_stream,
     combine_all,
     control_stream,
+    convert_to_int_stream,
     midinote_stream,
     note_stream,
     program_stream,
@@ -23,10 +26,9 @@ from minipat.kit import DEFAULT_KIT, Kit, add_hit
 from minipat.live import LiveSystem, Orbit
 from minipat.messages import MidiAttrs, NoteField, NoteKey, TimedMessage
 from minipat.midi import start_midi_live_system
-from minipat.parser import parse_pattern
-from minipat.pat import Pat, PatBinder, SpeedOp
+from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
-from minipat.time import (  # Arc types; Core types; Creation functions
+from minipat.time import (
     Bpc,
     BpcLike,
     Cps,
@@ -49,16 +51,36 @@ from minipat.time import (  # Arc types; Core types; Creation functions
 )
 from spiny import PSeq
 
+# =============================================================================
+# Type Aliases
+# =============================================================================
 
-class TransposeBinder(PatBinder[str, int]):
-    """Binder that converts string integers to transpose offsets."""
 
-    def apply(self, value: str) -> Pat[int]:
-        try:
-            transpose_val = int(value)
-            return Pat.pure(transpose_val)
-        except ValueError:
-            raise ValueError(f"Invalid transpose value: '{value}'. Expected integer.")
+type FlowLike = Pat[MidiAttrs] | Stream[MidiAttrs] | Flow
+"""Types accepted by Flow methods for MIDI patterns.
+
+Accepts:
+- Pat[MidiAttrs]: Pattern of MIDI attributes
+- Stream[MidiAttrs]: Pre-constructed MIDI stream
+- Flow: Another Flow to use
+"""
+
+
+# =============================================================================
+# Stream Conversion Helpers
+# =============================================================================
+
+
+def _convert_to_midi_stream(input_val: FlowLike) -> Stream[MidiAttrs]:
+    """Convert various input types to a Stream[MidiAttrs]."""
+    if isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    elif isinstance(input_val, Flow):
+        return input_val.stream
+    else:
+        raise ValueError(f"Unsupported type for FlowLike: {type(input_val)}")
 
 
 def _apply_transpose(attrs: MidiAttrs, transpose_offset: int) -> MidiAttrs:
@@ -138,11 +160,11 @@ class Flow:
         return Flow(Stream.pure(val))
 
     @staticmethod
-    def seqs(*flows: Flow) -> Flow:
+    def seqs(*flows: FlowLike) -> Flow:
         """Create a sequential flow that plays flows one after another.
 
         Args:
-            *flows: Flows to play in sequence.
+            *xs: Flows to play in sequence.
 
         Returns:
             A flow that plays each input flow sequentially.
@@ -151,11 +173,11 @@ class Flow:
             sequence = Flow.seqs(note("c4"), note("d4"), note("e4"))
             # Equivalent to: note("c4") & note("d4") & note("e4")
         """
-        streams = PSeq.mk(flow.stream for flow in flows)
+        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.seq(streams))
 
     @staticmethod
-    def pars(*flows: Flow) -> Flow:
+    def pars(*flows: FlowLike) -> Flow:
         """Create a parallel flow that plays flows simultaneously.
 
         Args:
@@ -168,11 +190,11 @@ class Flow:
             chord = Flow.pars(note("c4"), note("e4"), note("g4"))
             # Equivalent to: note("c4") | note("e4") | note("g4")
         """
-        streams = PSeq.mk(flow.stream for flow in flows)
+        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.par(streams))
 
     @staticmethod
-    def rands(*flows: Flow) -> Flow:
+    def rands(*flows: FlowLike) -> Flow:
         """Create a flow that randomly chooses between input flows.
 
         Args:
@@ -185,11 +207,11 @@ class Flow:
             random_notes = Flow.rands(note("c4"), note("d4"), note("e4"))
             # Randomly plays c4, d4, or e4 each cycle
         """
-        streams = PSeq.mk(flow.stream for flow in flows)
+        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.rand(streams))
 
     @staticmethod
-    def alts(*flows: Flow) -> Flow:
+    def alts(*flows: FlowLike) -> Flow:
         """Create a flow that alternates between input flows.
 
         Args:
@@ -203,11 +225,11 @@ class Flow:
             # Plays c4 on cycle 1, d4 on cycle 2, c4 on cycle 3, etc.
             # Equivalent to: note("c4") ^ note("d4")
         """
-        streams = PSeq.mk(flow.stream for flow in flows)
+        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.alt(streams))
 
     @staticmethod
-    def polys(*flows: Flow) -> Flow:
+    def polys(*flows: FlowLike) -> Flow:
         """Create a polymetric flow with different cycle lengths.
 
         Args:
@@ -220,11 +242,11 @@ class Flow:
             poly = Flow.polys(note("c4 d4"), note("e4 f4 g4"))
             # First flow cycles every 2 beats, second every 3 beats
         """
-        streams = PSeq.mk(flow.stream for flow in flows)
+        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.poly(streams, None))
 
     @staticmethod
-    def polysubs(subdiv: int, *flows: Flow) -> Flow:
+    def polysubs(subdiv: int, *flows: FlowLike) -> Flow:
         """Create a polymetric flow with subdivision.
 
         Args:
@@ -238,11 +260,11 @@ class Flow:
             poly_sub = Flow.polysubs(4, note("c4 d4"), note("e4 f4 g4"))
             # Subdivides each cycle into 4 parts
         """
-        streams = PSeq.mk(flow.stream for flow in flows)
+        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.poly(streams, subdiv))
 
     @staticmethod
-    def combines(*flows: Flow) -> Flow:
+    def combines(*flows: FlowLike) -> Flow:
         """Combine flows by merging their MIDI attributes.
 
         Args:
@@ -256,7 +278,7 @@ class Flow:
             # Combines note patterns with velocity patterns
             # Equivalent to: note("c4 d4") >> vel("80 100")
         """
-        streams = [flow.stream for flow in flows]
+        streams = [_convert_to_midi_stream(x) for x in flows]
         return Flow(combine_all(streams))
 
     @staticmethod
@@ -462,11 +484,12 @@ class Flow:
         """
         return self.shift(delta)
 
-    def transpose(self, pat_str: str) -> Flow:
+    def transpose(self, transpose_input: IntStreamLike) -> Flow:
         """Transpose notes by semitones specified in a pattern.
 
         Args:
-            pat_str: Pattern string containing semitone transposition values (integers).
+            transpose_input: Pattern string, list of integers, or stream containing
+                           semitone transposition values (integers).
 
         Returns:
             A flow with transposed notes.
@@ -475,42 +498,41 @@ class Flow:
             melody = note("c4 d4 e4 f4")
             transposed = melody.transpose("12")     # Up one octave
             varying = melody.transpose("0 5 7")     # Different transposition per note
+            # Various patterns possible
         """
-        # Parse pattern string directly as Pat[str], then bind str -> int
-        string_pat = parse_pattern(pat_str)
-        transpose_stream = Stream.pat_bind(string_pat, TransposeBinder())
+        transpose_stream = convert_to_int_stream(transpose_input)
 
         return Flow(
             self.stream.apply(MergeStrat.Inner, _apply_transpose, transpose_stream)
         )
 
-    def par(self, other: Flow) -> Flow:
+    def par(self, other: FlowLike) -> Flow:
         """Combine this flow with another in parallel."""
         return Flow.pars(self, other)
 
-    def seq(self, other: Flow) -> Flow:
+    def seq(self, other: FlowLike) -> Flow:
         """Combine this flow with another sequentially."""
         return Flow.seqs(self, other)
 
-    def combine(self, other: Flow) -> Flow:
+    def combine(self, other: FlowLike) -> Flow:
         """Combine this flow with another by merging attributes."""
         return Flow.combines(self, other)
 
-    def __or__(self, other: Flow) -> Flow:
+    def __or__(self, other: FlowLike) -> Flow:
         """Operator overload for parallel combination."""
         return self.par(other)
 
-    def __and__(self, other: Flow) -> Flow:
+    def __and__(self, other: FlowLike) -> Flow:
         """Operator overload for sequential combination."""
         return self.seq(other)
 
-    def __rshift__(self, other: Flow) -> Flow:
+    def __rshift__(self, other: FlowLike) -> Flow:
         """Operator overload for combining flows."""
-        return self.combine(other)
+        return Flow.combines(self, other)
 
-    def __lshift__(self, other: Flow) -> Flow:
+    def __lshift__(self, other: FlowLike) -> Flow:
         """Operator overload for combining flows (flipped)."""
-        return other.combine(self)
+        return Flow.combines(other, self)
 
     def __mul__(self, factor: Numeric) -> Flow:
         """Operator overload for fast (speed up by factor)."""
@@ -520,7 +542,7 @@ class Flow:
         """Operator overload for slow (slow down by factor)."""
         return self.slow(factor)
 
-    def __xor__(self, other: Flow) -> Flow:
+    def __xor__(self, other: FlowLike) -> Flow:
         """Operator overload for alternating flows."""
         return Flow.alts(self, other)
 
@@ -529,7 +551,7 @@ class Flow:
         return self.repeat(count)
 
     @staticmethod
-    def compose(*sections: tuple[CycleArcLike, Flow]) -> Flow:
+    def compose(*sections: tuple[CycleArcLike, FlowLike]) -> Flow:
         """Create a flow that composes multiple sections with infinite looping.
 
         The composition loops infinitely - if the sections span (0, 4), then
@@ -552,20 +574,19 @@ class Flow:
         """
         # Convert arc sections to CycleArc sections
         cycle_sections = []
-        for arc_like, flow in sections:
+        for arc_like, flow_like in sections:
             cycle_arc = mk_cycle_arc(arc_like)
-            cycle_sections.append((cycle_arc, flow.stream))
+            cycle_sections.append((cycle_arc, _convert_to_midi_stream(flow_like)))
 
         return Flow(Stream.compose(cycle_sections))
 
 
-def note(pat_str: str) -> Flow:
+def note(input_val: StringStreamLike) -> Flow:
     """Create a flow from note names.
 
-    Alias for Flow.note() that creates a Flow from musical note names.
-
     Args:
-        pat_str: Pattern string containing musical note names with octaves
+        input_val: Pattern string or stream containing
+                  musical note names with octaves
 
     Returns:
         A Flow containing MIDI note attributes
@@ -575,16 +596,15 @@ def note(pat_str: str) -> Flow:
         note("c4 ~ g4")          # C4, rest, G4
         note("[c4,e4,g4]")       # C major chord (simultaneous)
     """
-    return Flow(note_stream(pat_str))
+    return Flow(note_stream(input_val))
 
 
-def midinote(pat_str: str) -> Flow:
+def midinote(input_val: IntStreamLike) -> Flow:
     """Create a flow from numeric MIDI notes.
 
-    Alias for Flow.midinote() that creates a Flow from numeric MIDI note values.
-
     Args:
-        pat_str: Pattern string containing numeric MIDI note values (0-127)
+        input_val: Pattern string or stream containing
+                  numeric MIDI note values (0-127)
 
     Returns:
         A Flow containing MIDI note attributes
@@ -594,16 +614,15 @@ def midinote(pat_str: str) -> Flow:
         midinote("36 ~ 42")      # Kick, rest, snare pattern
         midinote("[60,64,67]")   # C major chord (simultaneous)
     """
-    return Flow(midinote_stream(pat_str))
+    return Flow(midinote_stream(input_val))
 
 
-def vel(pat_str: str) -> Flow:
+def vel(input_val: IntStreamLike) -> Flow:
     """Create a flow from velocity values.
 
-    Alias for Flow.vel() that creates a Flow from MIDI velocity values.
-
     Args:
-        pat_str: Pattern string containing MIDI velocity values (0-127)
+        input_val: Pattern string or stream containing
+                  MIDI velocity values (0-127)
 
     Returns:
         A Flow containing MIDI velocity attributes
@@ -613,16 +632,15 @@ def vel(pat_str: str) -> Flow:
         vel("127 0 64")          # Loud, silent, medium
         vel("100*8")             # Repeat loud velocity 8 times
     """
-    return Flow(velocity_stream(pat_str))
+    return Flow(velocity_stream(input_val))
 
 
-def program(pat_str: str) -> Flow:
+def program(input_val: IntStreamLike) -> Flow:
     """Create a flow from program values.
 
-    Alias for Flow.program() that creates a Flow from MIDI program values.
-
     Args:
-        pat_str: Pattern string containing MIDI program values (0-127)
+        input_val: Pattern string or stream containing
+                  MIDI program values (0-127)
 
     Returns:
         A Flow containing MIDI program attributes
@@ -632,16 +650,15 @@ def program(pat_str: str) -> Flow:
         program("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
         program("1*4")            # Repeat Bright Piano 4 times
     """
-    return Flow(program_stream(pat_str))
+    return Flow(program_stream(input_val))
 
 
-def control(pat_str: str) -> Flow:
+def control(input_val: IntStreamLike) -> Flow:
     """Create a flow from control number values.
 
-    Alias for Flow.control() that creates a Flow from MIDI control numbers.
-
     Args:
-        pat_str: Pattern string containing MIDI control numbers (0-127)
+        input_val: Pattern string or stream containing
+                  MIDI control numbers (0-127)
 
     Returns:
         A Flow containing MIDI control number attributes
@@ -651,16 +668,15 @@ def control(pat_str: str) -> Flow:
         control("64 ~ 1")         # Sustain, rest, Modulation
         control("7*8")            # Repeat Volume control 8 times
     """
-    return Flow(control_stream(pat_str))
+    return Flow(control_stream(input_val))
 
 
-def value(pat_str: str) -> Flow:
+def value(input_val: IntStreamLike) -> Flow:
     """Create a flow from control value values.
 
-    Alias for Flow.value() that creates a Flow from MIDI control values.
-
     Args:
-        pat_str: Pattern string containing MIDI control values (0-127)
+        input_val: Pattern string or stream containing
+                  MIDI control values (0-127)
 
     Returns:
         A Flow containing MIDI control value attributes
@@ -670,17 +686,18 @@ def value(pat_str: str) -> Flow:
         value("127 ~ 0")          # Max, rest, min
         value("64*8")             # Repeat center value 8 times
     """
-    return Flow(value_stream(pat_str))
+    return Flow(value_stream(input_val))
 
 
-def channel(pat_str: str) -> Flow:
+def channel(input_val: IntStreamLike) -> Flow:
     """Create a flow from channel values.
 
     Creates a Flow from MIDI channel values. If channel is not specified
     in patterns, the orbit number will be used as the default channel.
 
     Args:
-        pat_str: Pattern string containing MIDI channel values (0-15)
+        input_val: Pattern string or stream containing
+                  MIDI channel values (0-15)
 
     Returns:
         A Flow containing MIDI channel attributes
@@ -690,7 +707,7 @@ def channel(pat_str: str) -> Flow:
         channel("15 ~ 0")         # Channel 16, rest, Channel 1
         channel("9*4")            # Repeat Channel 10 (drums) 4 times
     """
-    return Flow(channel_stream(pat_str))
+    return Flow(channel_stream(input_val))
 
 
 @dataclass(eq=False)
@@ -901,12 +918,17 @@ class Nucleus:
 
     def once(
         self,
-        flow: Flow,
+        flow: FlowLike,
         length: Optional[CycleDeltaLike] = None,
         aligned: Optional[bool] = None,
     ) -> None:
         cycle_length = mk_cycle_delta(length) if length is not None else None
-        self.live.once(flow.stream, length=cycle_length, aligned=aligned, orbit=None)
+        self.live.once(
+            _convert_to_midi_stream(flow),
+            length=cycle_length,
+            aligned=aligned,
+            orbit=None,
+        )
 
     def orbital(self, num: int) -> Orbital:
         return Orbital(self, Orbit(num))
@@ -914,7 +936,7 @@ class Nucleus:
     def __getitem__(self, num: int) -> Orbital:
         return self.orbital(num)
 
-    def __setitem__(self, num: int, flow: Optional[Flow]) -> None:
+    def __setitem__(self, num: int, flow: Optional[FlowLike]) -> None:
         o = self.orbital(num)
         if flow is None:
             o.clear()
@@ -924,7 +946,7 @@ class Nucleus:
     def __delitem__(self, num: int) -> None:
         self.orbital(num).clear()
 
-    def __or__(self, flow: Flow) -> None:
+    def __or__(self, flow: FlowLike) -> None:
         self.once(flow)
 
     def add_hit(
@@ -954,14 +976,14 @@ class Nucleus:
         sound = add_hit(note, velocity, channel)
         self.kit = self.kit.put(identifier, sound)
 
-    def sound(self, pat_str: str) -> Flow:
+    def sound(self, input_val: StringStreamLike) -> Flow:
         """Create a flow from kit hit identifiers using this nucleus's kit.
 
         Creates a Flow from hit identifiers using this nucleus's kit mapping.
         Supports all standard drum notation like "bd" for bass drum, "sd" for snare, etc.
 
         Args:
-            pat_str: Pattern string containing hit identifiers
+            input_val: Pattern string (or Stream) containing hit identifiers
 
         Returns:
             A Flow containing MIDI note attributes for hits
@@ -973,7 +995,7 @@ class Nucleus:
             n.sound("hh*8")              # Hi-hat repeated 8 times
             n.sound("bd sd:2 hh:3")      # Different speeds for each element
         """
-        return Flow(sound_stream(self.kit, pat_str))
+        return Flow(sound_stream(self.kit, input_val))
 
     def preview(self, arc: CycleArcLike) -> None:
         """Render and play a preview of the current orbits over the given arc.
@@ -1032,7 +1054,7 @@ class Orbital:
 
     def once(
         self,
-        flow: Flow,
+        flow: FlowLike,
         length: Optional[CycleDeltaLike] = None,
         aligned: Optional[bool] = None,
     ) -> None:
@@ -1049,10 +1071,13 @@ class Orbital:
         """
         cycle_length = mk_cycle_delta(length) if length is not None else None
         self.nucleus.live.once(
-            flow.stream, length=cycle_length, aligned=aligned, orbit=self.num
+            _convert_to_midi_stream(flow),
+            length=cycle_length,
+            aligned=aligned,
+            orbit=self.num,
         )
 
-    def every(self, flow: Flow) -> None:
+    def every(self, flow: FlowLike) -> None:
         """Set the repeating pattern for this orbit.
 
         Args:
@@ -1062,7 +1087,7 @@ class Orbital:
             n[0].every(note("c4 d4 e4 f4"))  # Repeating melody
             n[0] = note("c4 d4 e4 f4")       # Shorthand using assignment
         """
-        self.nucleus.live.set_orbit(self.num, flow.stream)
+        self.nucleus.live.set_orbit(self.num, _convert_to_midi_stream(flow))
 
     def mute(self, value: bool = True) -> None:
         """Mute this orbit.
@@ -1115,8 +1140,8 @@ class Orbital:
         """
         self.nucleus.live.set_orbit(self.num, None)
 
-    def __matmul__(self, flow: Flow) -> None:
+    def __matmul__(self, flow: FlowLike) -> None:
         self.once(flow)
 
-    def __or__(self, flow: Flow) -> None:
+    def __or__(self, flow: FlowLike) -> None:
         self.once(flow)

@@ -28,11 +28,73 @@ from spiny.common import Singleton
 from spiny.dmap import DMap
 
 # =============================================================================
+# Type Aliases
+# =============================================================================
+
+
+type IntStreamLike = str | Pat[int] | Stream[int]
+"""Types accepted by functions for integer patterns.
+
+Accepts:
+- str: Pattern string containing integers (e.g., "0 5 7")
+- Pat[int]: Pattern of integers
+- Stream[int]: Pre-constructed integer stream
+"""
+
+type StringStreamLike = str | Pat[str] | Stream[str]
+"""Types accepted by functions for string patterns.
+
+Accepts:
+- str: Pattern string (e.g., "c4 d4 e4")
+- Pat[str]: Pattern of strings
+- Stream[str]: Pre-constructed string stream
+"""
+
+
+# =============================================================================
 # Pattern Parsing and Rendering
 # =============================================================================
 
 # Default octave for notes specified without octave number
 DEFAULT_OCTAVE = 4
+
+# Note name to semitone mapping (C is 0)
+NOTE_NAME_TO_SEMITONE: dict[str, int] = {
+    "c": 0,
+    "d": 2,
+    "e": 4,
+    "f": 5,
+    "g": 7,
+    "a": 9,
+    "b": 11,
+}
+
+# Semitone to note name mapping (using sharps)
+SEMITONE_TO_NOTE_NAME: list[str] = [
+    "c",
+    "c#",
+    "d",
+    "d#",
+    "e",
+    "f",
+    "f#",
+    "g",
+    "g#",
+    "a",
+    "a#",
+    "b",
+]
+
+
+class IntBinder(PatBinder[str, int]):
+    """Binder that converts string integers to integer values."""
+
+    def apply(self, value: str) -> Pat[int]:
+        try:
+            int_val = int(value)
+            return Pat.pure(int_val)
+        except ValueError:
+            raise ValueError(f"Invalid integer value: '{value}'. Expected integer.")
 
 
 class IntElemParser(Iso[str, int], Singleton):
@@ -154,19 +216,16 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
         # Also supports notes without octave like "c", "f#", "gb" using DEFAULT_OCTAVE
         note_str = s.lower()
 
-        # Note name to semitone mapping (C is 0)
-        note_map = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
-
         # Parse note name and octave
         if len(note_str) < 1:
             raise ValueError(f"Invalid note name: {s}")
 
         # Get base note
         base_note = note_str[0]
-        if base_note not in note_map:
+        if base_note not in NOTE_NAME_TO_SEMITONE:
             raise ValueError(f"Invalid note name: {s}")
 
-        semitone = note_map[base_note]
+        semitone = NOTE_NAME_TO_SEMITONE[base_note]
         pos = 1
 
         # Check for sharp or flat
@@ -202,9 +261,7 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
         octave = note_num // 12
         semitone = note_num % 12
 
-        # Semitone to note name mapping (using sharps)
-        note_names = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"]
-        note_name = note_names[semitone] + str(octave)
+        note_name = SEMITONE_TO_NOTE_NAME[semitone] + str(octave)
 
         return note_name
 
@@ -353,6 +410,36 @@ class ElemBinder(PatBinder[str, MidiAttrs]):
 
 
 # =============================================================================
+# Stream Conversion Helpers
+# =============================================================================
+
+
+def convert_to_int_stream(input_val: IntStreamLike) -> Stream[int]:
+    """Convert various input types to a Stream[int]."""
+    if isinstance(input_val, str):
+        string_pat = parse_pattern(input_val)
+        return Stream.pat_bind(string_pat, IntBinder())
+    elif isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for IntStreamLike: {type(input_val)}")
+
+
+def convert_to_string_stream(input_val: StringStreamLike) -> Stream[str]:
+    """Convert various input types to a Stream[str]."""
+    if isinstance(input_val, str):
+        return Stream.pat(parse_pattern(input_val))
+    elif isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for StringStreamLike: {type(input_val)}")
+
+
+# =============================================================================
 # Pattern Stream Functions
 # =============================================================================
 
@@ -366,44 +453,75 @@ _CONTROL_NUM_BINDER = ElemBinder(ControlNumElemParser(), ControlField())
 _CONTROL_VAL_BINDER = ElemBinder(ControlValElemParser(), ValueField())
 
 
-def midinote_stream(s: str) -> Stream[MidiAttrs]:
+def midinote_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
     """Create stream from numeric MIDI notes.
 
-    Parses a pattern string containing numeric MIDI note values (0-127)
+    Parses a pattern containing numeric MIDI note values (0-127)
     and creates a stream of MIDI attributes.
 
+    Args:
+        input_val: Pattern string or stream containing
+                  numeric MIDI note values (0-127)
+
     Examples:
-        midinote("60 62 64")     # C4, D4, E4 (C major triad)
-        midinote("36 ~ 42")      # Kick, rest, snare pattern
-        midinote("[60,64,67]")   # C major chord (simultaneous)
+        midinote_stream("60 62 64")     # C4, D4, E4 (C major triad)
+        midinote_stream("36 ~ 42")      # Kick, rest, snare pattern
+        midinote_stream("[60,64,67]")   # C major chord (simultaneous)
     """
-    return Stream.pat_bind(parse_pattern(s), _NOTE_NUM_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _NOTE_NUM_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to int stream and bind with note number binder
+        int_stream = convert_to_int_stream(input_val)
+
+        # Convert each int to a string for the binder
+        def convert_to_midi_attrs(note_num: int) -> Stream[MidiAttrs]:
+            return Stream.pat(_NOTE_NUM_BINDER.apply(str(note_num)))
+
+        return int_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for midinote_stream: {type(input_val)}")
 
 
-def note_stream(s: str) -> Stream[MidiAttrs]:
+def note_stream(input_val: StringStreamLike) -> Stream[MidiAttrs]:
     """Create stream from note names.
 
-    Parses a pattern string containing musical note names with octaves
+    Parses a pattern containing musical note names with octaves
     and creates a stream of MIDI attributes.
 
+    Args:
+        input_val: Pattern string or stream containing
+                  musical note names with octaves
+
     Examples:
-        note("c4 d4 e4")         # C major scale fragment
-        note("c4 ~ g4")          # C4, rest, G4
-        note("[c4,e4,g4]")       # C major chord (simultaneous)
-        note("c#4 db5 f4")       # Mixed sharps and flats
+        note_stream("c4 d4 e4")         # C major scale fragment
+        note_stream("c4 ~ g4")          # C4, rest, G4
+        note_stream("[c4,e4,g4]")       # C major chord (simultaneous)
     """
-    return Stream.pat_bind(parse_pattern(s), _NOTE_NAME_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _NOTE_NAME_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to string stream and bind with note name binder
+        string_stream = convert_to_string_stream(input_val)
+
+        # Use the same approach as note_stream: bind pattern with binder
+        def convert_to_midi_attrs(note_name: str) -> Stream[MidiAttrs]:
+            return Stream.pat(_NOTE_NAME_BINDER.apply(note_name))
+
+        return string_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for note_stream: {type(input_val)}")
 
 
-def sound_stream(kit: Kit, s: str) -> Stream[MidiAttrs]:
+def sound_stream(kit: Kit, input_val: StringStreamLike) -> Stream[MidiAttrs]:
     """Create stream from drum kit sound identifiers using a specific kit.
 
-    Parses a pattern string containing drum sound identifiers (like "bd", "sd", "hh")
+    Parses a pattern containing drum sound identifiers (like "bd", "sd", "hh")
     and creates a stream of MIDI attributes using the provided drum kit mapping.
 
     Args:
         kit: The DrumKit instance to use for sound mapping
-        s: Pattern string containing drum sound identifiers
+        input_val: Pattern string or stream containing drum sound identifiers
 
     Returns:
         A Stream containing MIDI attributes for drum sounds
@@ -415,81 +533,169 @@ def sound_stream(kit: Kit, s: str) -> Stream[MidiAttrs]:
         sound_stream(kit, "hh*8")              # Hi-hat repeated 8 times
         sound_stream(kit, "bd sd:2 hh:3")      # Different speeds for each element
     """
-    drum_binder = ElemBinder(DrumSoundElemParser(kit), NoteField())
-    return Stream.pat_bind(parse_pattern(s), drum_binder)
+    if isinstance(input_val, str):
+        drum_binder = ElemBinder(DrumSoundElemParser(kit), NoteField())
+        return Stream.pat_bind(parse_pattern(input_val), drum_binder)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to string stream and bind with drum binder
+        string_stream = convert_to_string_stream(input_val)
+        drum_binder = ElemBinder(DrumSoundElemParser(kit), NoteField())
+
+        # Convert each string to MIDI attributes
+        def convert_to_midi_attrs(sound_name: str) -> Stream[MidiAttrs]:
+            return Stream.pat(drum_binder.apply(sound_name))
+
+        return string_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for sound_stream: {type(input_val)}")
 
 
-def velocity_stream(s: str) -> Stream[MidiAttrs]:
+def velocity_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
     """Create stream from velocity values.
 
-    Parses a pattern string containing MIDI velocity values (0-127)
+    Parses a pattern containing MIDI velocity values (0-127)
     and creates a stream of MIDI attributes for controlling note dynamics.
 
+    Args:
+        input_val: Pattern string or stream containing
+                  MIDI velocity values (0-127)
+
     Examples:
-        vel_stream("64 80 100")         # Medium, loud, very loud
-        vel_stream("127 0 64")          # Loud, silent, medium
-        vel_stream("100*8")             # Repeat loud velocity 8 times
+        velocity_stream("64 80 100")         # Medium, loud, very loud
+        velocity_stream("127 0 64")          # Loud, silent, medium
     """
-    return Stream.pat_bind(parse_pattern(s), _VELOCITY_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _VELOCITY_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to int stream and bind with velocity binder
+        int_stream = convert_to_int_stream(input_val)
+
+        # Convert each int to a string for the binder
+        def convert_to_midi_attrs(velocity_val: int) -> Stream[MidiAttrs]:
+            return Stream.pat(_VELOCITY_BINDER.apply(str(velocity_val)))
+
+        return int_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for velocity_stream: {type(input_val)}")
 
 
-def channel_stream(s: str) -> Stream[MidiAttrs]:
+def channel_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
     """Create stream from channel values.
 
-    Parses a pattern string containing MIDI channel values (0-15)
+    Parses a pattern containing MIDI channel values (0-15)
     and creates a stream of MIDI attributes for specifying channels.
     If not specified, the orbit number will be used as the channel.
+
+    Args:
+        input_val: Pattern string or stream containing
+                  MIDI channel values (0-15)
 
     Examples:
         channel_stream("0 1 9")          # Channels 1, 2, 10 (drums)
         channel_stream("15 ~ 0")         # Channel 16, rest, Channel 1
-        channel_stream("9*4")            # Repeat Channel 10 (drums) 4 times
     """
-    return Stream.pat_bind(parse_pattern(s), _CHANNEL_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _CHANNEL_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to int stream and bind with channel binder
+        int_stream = convert_to_int_stream(input_val)
+
+        # Convert each int to a string for the binder
+        def convert_to_midi_attrs(channel_val: int) -> Stream[MidiAttrs]:
+            return Stream.pat(_CHANNEL_BINDER.apply(str(channel_val)))
+
+        return int_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for channel_stream: {type(input_val)}")
 
 
-def program_stream(s: str) -> Stream[MidiAttrs]:
+def program_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
     """Create stream from program values.
 
-    Parses a pattern string containing MIDI program values (0-127)
+    Parses a pattern containing MIDI program values (0-127)
     and creates a stream of MIDI attributes for program change messages.
+
+    Args:
+        input_val: Pattern string or stream containing
+                  MIDI program values (0-127)
 
     Examples:
         program_stream("0 1 40")         # Piano, Bright Piano, Violin
         program_stream("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
-        program_stream("1*4")            # Repeat Bright Piano 4 times
     """
-    return Stream.pat_bind(parse_pattern(s), _PROGRAM_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _PROGRAM_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to int stream and bind with program binder
+        int_stream = convert_to_int_stream(input_val)
+
+        # Convert each int to a string for the binder
+        def convert_to_midi_attrs(program_val: int) -> Stream[MidiAttrs]:
+            return Stream.pat(_PROGRAM_BINDER.apply(str(program_val)))
+
+        return int_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for program_stream: {type(input_val)}")
 
 
-def control_stream(s: str) -> Stream[MidiAttrs]:
+def control_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
     """Create stream from control number values.
 
-    Parses a pattern string containing MIDI control numbers (0-127)
+    Parses a pattern containing MIDI control numbers (0-127)
     and creates a stream of MIDI attributes for control change messages.
     Note: Control change messages also require a control value.
+
+    Args:
+        input_val: Pattern string or stream containing
+                  MIDI control numbers (0-127)
 
     Examples:
         control_stream("1 7 10")         # Modulation, Volume, Pan
         control_stream("64 ~ 1")         # Sustain, rest, Modulation
-        control_stream("7*8")            # Repeat Volume control 8 times
     """
-    return Stream.pat_bind(parse_pattern(s), _CONTROL_NUM_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _CONTROL_NUM_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to int stream and bind with control binder
+        int_stream = convert_to_int_stream(input_val)
+
+        # Convert each int to a string for the binder
+        def convert_to_midi_attrs(control_val: int) -> Stream[MidiAttrs]:
+            return Stream.pat(_CONTROL_NUM_BINDER.apply(str(control_val)))
+
+        return int_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for control_stream: {type(input_val)}")
 
 
-def value_stream(s: str) -> Stream[MidiAttrs]:
+def value_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
     """Create stream from control value values.
 
-    Parses a pattern string containing MIDI control values (0-127)
+    Parses a pattern containing MIDI control values (0-127)
     and creates a stream of MIDI attributes for control change messages.
     Note: Control change messages also require a control number.
+
+    Args:
+        input_val: Pattern string or stream containing
+                  MIDI control values (0-127)
 
     Examples:
         value_stream("0 64 127")         # Min, center, max values
         value_stream("127 ~ 0")          # Max, rest, min
-        value_stream("64*8")             # Repeat center value 8 times
     """
-    return Stream.pat_bind(parse_pattern(s), _CONTROL_VAL_BINDER)
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_pattern(input_val), _CONTROL_VAL_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to int stream and bind with value binder
+        int_stream = convert_to_int_stream(input_val)
+
+        # Convert each int to a string for the binder
+        def convert_to_midi_attrs(value_val: int) -> Stream[MidiAttrs]:
+            return Stream.pat(_CONTROL_VAL_BINDER.apply(str(value_val)))
+
+        return int_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for value_stream: {type(input_val)}")
 
 
 def _merge_attrs(x: MidiAttrs, y: MidiAttrs) -> MidiAttrs:
