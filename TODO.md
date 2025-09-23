@@ -36,10 +36,15 @@ Next available task ID: {#27}
 
 - {#24} Add `type FlowLike = str | Stream[MidiAttrs] | Flow` to dsl and expand accepted argument types
 - {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
-- {#23} Add `Flow.transpose(self, pat_str: str) -> Flow` to transpose notes
 
 ### Done
 
+- {#23} Add `Flow.transpose(self, pat_str: str) -> Flow` to transpose notes
+  - Implemented transpose method that takes a pattern string of semitone offset integers
+  - Uses custom parser to handle positive and negative integers (e.g., "5 -3 7")
+  - Applies transpose offsets using MergeStrat.Inner with the original note stream
+  - Silences notes that would go out of valid MIDI range (0-127) by removing the note attribute
+  - Added comprehensive tests covering basic transpose, patterns, negative values, mixed values, out-of-range handling, and preservation of other MIDI attributes
 - {#26} Fix event generation by making whole required and correcting constructor sites in streams
 - {#21} Configure "generations ahead" to give more generation time
   - Added _DEFAULT_GENERATIONS_AHEAD = 2 static configuration in live.py

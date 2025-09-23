@@ -495,25 +495,12 @@ class MidiMessage(metaclass=ABCMeta):
             messages.append(
                 ControlMessage(channel=channel, control=control_num, value=control_val)
             )
-        elif control_num is not None or control_val is not None:
-            # Incomplete control change attributes
-            missing = "control_val" if control_num is not None else "control_num"
-            raise ValueError(
-                f"Incomplete control change attributes: missing {missing}. "
-                "Both control_num and control_val are required for control messages."
-            )
 
         # Check for note message (creates both note_on and note_off)
         if note is not None:
             # Note on message
             messages.append(
                 NoteOnMessage(channel=channel, note=note, velocity=velocity)
-            )
-        elif velocity is not None:
-            # Velocity without note is an error
-            raise ValueError(
-                "Velocity attribute found without note. "
-                "Velocity can only be used with note attributes."
             )
 
         return messages

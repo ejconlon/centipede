@@ -21,9 +21,10 @@ from minipat.combinators import (
 )
 from minipat.kit import DEFAULT_KIT, Kit, add_hit
 from minipat.live import LiveSystem, Orbit
-from minipat.messages import MidiAttrs, TimedMessage
+from minipat.messages import MidiAttrs, NoteField, NoteKey, TimedMessage
 from minipat.midi import start_midi_live_system
-from minipat.pat import Pat, SpeedOp
+from minipat.parser import parse_pattern
+from minipat.pat import Pat, PatBinder, SpeedOp
 from minipat.stream import MergeStrat, Stream
 from minipat.time import (  # Arc types; Core types; Creation functions
     Bpc,
@@ -47,6 +48,43 @@ from minipat.time import (  # Arc types; Core types; Creation functions
     numeric_frac,
 )
 from spiny import PSeq
+
+
+class TransposeBinder(PatBinder[str, int]):
+    """Binder that converts string integers to transpose offsets."""
+
+    def apply(self, value: str) -> Pat[int]:
+        try:
+            transpose_val = int(value)
+            return Pat.pure(transpose_val)
+        except ValueError:
+            raise ValueError(f"Invalid transpose value: '{value}'. Expected integer.")
+
+
+def _apply_transpose(attrs: MidiAttrs, transpose_offset: int) -> MidiAttrs:
+    """Apply transposition to MIDI attributes.
+
+    Args:
+        attrs: Original MIDI attributes containing note
+        transpose_offset: Semitone offset to apply
+
+    Returns:
+        Transposed MIDI attributes, or attributes with note removed if out of range
+    """
+    current_note = attrs.lookup(NoteKey())
+
+    if current_note is None:
+        return attrs
+
+    # Apply transposition
+    new_note = int(current_note) + transpose_offset
+
+    # If result is outside valid MIDI range, remove the note entirely
+    if new_note < 0 or new_note > 127:
+        # Return attributes without the note (effectively silencing this event)
+        return attrs.remove(NoteKey())
+
+    return attrs.put(NoteKey(), NoteField.mk(new_note))
 
 
 @dataclass(frozen=True, eq=False)
@@ -423,6 +461,28 @@ class Flow:
             late_beat = note("c1").late(0.1)  # Play 0.1 beats late
         """
         return self.shift(delta)
+
+    def transpose(self, pat_str: str) -> Flow:
+        """Transpose notes by semitones specified in a pattern.
+
+        Args:
+            pat_str: Pattern string containing semitone transposition values (integers).
+
+        Returns:
+            A flow with transposed notes.
+
+        Example:
+            melody = note("c4 d4 e4 f4")
+            transposed = melody.transpose("12")     # Up one octave
+            varying = melody.transpose("0 5 7")     # Different transposition per note
+        """
+        # Parse pattern string directly as Pat[str], then bind str -> int
+        string_pat = parse_pattern(pat_str)
+        transpose_stream = Stream.pat_bind(string_pat, TransposeBinder())
+
+        return Flow(
+            self.stream.apply(MergeStrat.Inner, _apply_transpose, transpose_stream)
+        )
 
     def par(self, other: Flow) -> Flow:
         """Combine this flow with another in parallel."""

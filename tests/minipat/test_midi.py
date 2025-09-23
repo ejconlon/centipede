@@ -570,23 +570,25 @@ def test_parse_messages_conflicting_attributes() -> None:
     assert "control_change" in msg_types
 
 
-def test_parse_messages_velocity_only_conflicting() -> None:
-    """Test parse_messages rejects velocity-only attributes when combined with other types."""
-    # Velocity + Program should raise ValueError (velocity without note is invalid)
+def test_parse_messages_velocity_with_other_types() -> None:
+    """Test parse_messages handles velocity combined with other message types."""
+    # Velocity + Program should work fine now (velocity without note is allowed)
     attrs_velocity_and_program: MidiAttrs = (
         DMap.empty(MidiDom)
         .put(VelocityKey(), VelocityField.mk(100))
         .put(ProgramKey(), ProgramField.mk(42))
     )
 
-    try:
-        parse_messages(Orbit(0), attrs_velocity_and_program)
-        assert False, "Should have raised ValueError for velocity + program"
-    except ValueError as e:
-        # Velocity without note is still an error
-        assert "Velocity attribute found without note" in str(e)
+    # Should not raise an error - velocity without note is now allowed
+    messages = parse_messages(Orbit(0), attrs_velocity_and_program)
 
-    # Velocity + Control should raise ValueError
+    # Should create a program change message, velocity is ignored since there's no note
+    assert len(messages) == 1
+    msg = messages[0]
+    assert MsgTypeField.get(msg) == "program_change"
+    assert ProgramField.unmk(ProgramField.get(msg)) == 42
+
+    # Velocity + Control should also work fine
     attrs_velocity_and_control: MidiAttrs = (
         DMap.empty(MidiDom)
         .put(VelocityKey(), VelocityField.mk(100))
@@ -594,39 +596,40 @@ def test_parse_messages_velocity_only_conflicting() -> None:
         .put(ControlValKey(), ControlVal(80))
     )
 
-    try:
-        parse_messages(Orbit(0), attrs_velocity_and_control)
-        assert False, "Should have raised ValueError for velocity + control"
-    except ValueError as e:
-        # Velocity without note is still an error
-        assert "Velocity attribute found without note" in str(e)
+    # Should not raise an error
+    messages = parse_messages(Orbit(0), attrs_velocity_and_control)
+
+    # Should create a control change message, velocity is ignored since there's no note
+    assert len(messages) == 1
+    msg = messages[0]
+    assert MsgTypeField.get(msg) == "control_change"
+    assert ControlField.unmk(ControlField.get(msg)) == 7
+    assert ValueField.unmk(ValueField.get(msg)) == 80
 
 
 def test_parse_messages_control_incomplete() -> None:
-    """Test parse_messages handles incomplete control change attributes."""
-    # Only control number, no value - should raise ValueError
+    """Test parse_messages handles incomplete control change attributes gracefully."""
+    # Only control number, no value - should not create a control message
     attrs_control_num_only: MidiAttrs = DMap.empty(MidiDom).put(
         ControlNumKey(), ControlNum(7)
     )
 
-    try:
-        parse_messages(Orbit(0), attrs_control_num_only)
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "Incomplete control change attributes" in str(e)
-        assert "missing control_val" in str(e)
+    # Should not raise an error - incomplete control attributes are now allowed
+    messages = parse_messages(Orbit(0), attrs_control_num_only)
 
-    # Only control value, no number - should raise ValueError
+    # Should return empty list since control message requires both number and value
+    assert len(messages) == 0
+
+    # Only control value, no number - should not create a control message
     attrs_control_val_only: MidiAttrs = DMap.empty(MidiDom).put(
         ControlValKey(), ControlVal(80)
     )
 
-    try:
-        parse_messages(Orbit(0), attrs_control_val_only)
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "Incomplete control change attributes" in str(e)
-        assert "missing control_num" in str(e)
+    # Should not raise an error
+    messages = parse_messages(Orbit(0), attrs_control_val_only)
+
+    # Should return empty list since control message requires both number and value
+    assert len(messages) == 0
 
 
 def test_parse_messages_empty_attributes() -> None:
@@ -639,17 +642,16 @@ def test_parse_messages_empty_attributes() -> None:
 
 
 def test_parse_messages_velocity_only() -> None:
-    """Test parse_messages raises ValueError with only velocity (no note)."""
+    """Test parse_messages handles velocity-only attributes gracefully."""
     velocity_only_attrs: MidiAttrs = DMap.empty(MidiDom).put(
         VelocityKey(), VelocityField.mk(100)
     )
 
-    try:
-        parse_messages(Orbit(0), velocity_only_attrs)
-        assert False, "Should have raised ValueError"
-    except ValueError as e:
-        assert "Velocity attribute found without note" in str(e)
-        assert "Velocity can only be used with note attributes" in str(e)
+    # Should not raise an error - velocity without note is now allowed
+    messages = parse_messages(Orbit(0), velocity_only_attrs)
+
+    # Should return empty list since there's no note to create a message for
+    assert len(messages) == 0
 
 
 def test_midi_processor_with_parse_messages() -> None:
