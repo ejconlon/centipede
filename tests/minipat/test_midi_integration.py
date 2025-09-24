@@ -21,6 +21,7 @@ from minipat.live import (
 )
 from minipat.messages import (
     MidiAttrs,
+    MidiBundle,
     MsgTypeField,
     NoteField,
     TimedMessage,
@@ -446,7 +447,8 @@ class TestMidiLiveSystemIntegration:
 
         # Create a Pat with the bundle and then a flow
         from minipat.pat import Pat
-        bundle_pat = Pat.pure(bundle_messages)
+
+        bundle_pat: Pat[MidiBundle] = Pat.pure(bundle_messages)
         bundle_pattern = bundle(bundle_pat)
 
         # Set the bundle pattern on orbit 0

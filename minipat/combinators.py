@@ -14,7 +14,6 @@ from minipat.messages import (
     MessageField,
     MidiAttrs,
     MidiBundle,
-    MidiDom,
     Note,
     NoteField,
     Program,

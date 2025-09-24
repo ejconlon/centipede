@@ -28,6 +28,7 @@ from minipat.messages import (
     ControlVal,
     ControlValKey,
     MidiAttrs,
+    MidiBundle,
     MidiDom,
     MidiMessage,
     MsgHeap,
@@ -1363,7 +1364,8 @@ def test_bundle_stream_function() -> None:
 
     # Create a Pat with the bundle and then a stream
     from minipat.pat import Pat
-    bundle_pat = Pat.pure(note_msg)
+
+    bundle_pat: Pat[MidiBundle] = Pat.pure(note_msg)
     stream = bundle_stream(bundle_pat)
 
     # Query the stream
@@ -1399,7 +1401,8 @@ def test_bundle_dsl_function() -> None:
 
     # Create a Pat with the bundle and then a flow
     from minipat.pat import Pat
-    bundle_pat = Pat.pure(note_msg)
+
+    bundle_pat: Pat[MidiBundle] = Pat.pure(note_msg)
     flow = bundle(bundle_pat)
 
     # Get the underlying stream
@@ -1450,7 +1453,8 @@ def test_bundle_with_multiple_messages() -> None:
 
     # Create a Pat with the bundle and then a flow
     from minipat.pat import Pat
-    bundle_pat = Pat.pure(bundle_val)
+
+    bundle_pat: Pat[MidiBundle] = Pat.pure(bundle_val)
     flow = bundle(bundle_pat)
 
     # Get the underlying stream
