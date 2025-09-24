@@ -276,12 +276,9 @@ class TestMidiLiveSystemIntegration:
             # Now check timing between consecutive note_on messages
             # Each should be approximately 0.125 seconds apart (125ms)
             expected_interval = 0.125  # 0.5 seconds per cycle / 4 notes
-            tolerance = (
-                0.075  # 75ms tolerance for timing variations (increased from 50ms)
-            )
-            duration_tolerance = (
-                0.1  # 100ms tolerance for note durations (increased from 75ms)
-            )
+            # Tolerance in fractional seconds
+            tolerance = 0.07
+            duration_tolerance = tolerance
 
             for i in range(
                 1, min(8, len(note_on_messages))
