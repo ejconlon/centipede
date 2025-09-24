@@ -4,7 +4,7 @@ from fractions import Fraction
 
 import pytest
 
-from minipat.parser import parse_pattern
+from minipat.parser import parse_sym_pattern
 from minipat.pat import Pat
 from minipat.printer import print_pattern
 
@@ -19,7 +19,7 @@ def round_trip_test(pattern_str: str, expected_str: str | None = None) -> None:
     expected = expected_str if expected_str is not None else pattern_str
 
     # Parse the pattern
-    parsed = parse_pattern(pattern_str)
+    parsed = parse_sym_pattern(pattern_str)
 
     # Print it back
     printed = print_pattern(parsed)
@@ -30,7 +30,7 @@ def round_trip_test(pattern_str: str, expected_str: str | None = None) -> None:
     )
 
     # Parse the printed version to ensure it's equivalent
-    reparsed = parse_pattern(printed)
+    reparsed = parse_sym_pattern(printed)
 
     # The parsed structures should be equivalent (this is a basic check)
     # More sophisticated equality checking could be implemented later
@@ -178,7 +178,7 @@ def test_custom_probability_printable() -> None:
 def test_empty_pattern_fails() -> None:
     """Test that empty patterns fail to parse."""
     with pytest.raises(Exception):
-        parse_pattern("")
+        parse_sym_pattern("")
 
 
 def test_invalid_syntax_fails() -> None:
@@ -202,13 +202,13 @@ def test_invalid_syntax_fails() -> None:
 
     for pattern in invalid_patterns:
         with pytest.raises(Exception):
-            parse_pattern(pattern)
+            parse_sym_pattern(pattern)
 
 
 def test_single_element_sequences() -> None:
     """Test that single-element sequences are simplified."""
     # A sequence with one element should print as just that element
-    parsed = parse_pattern("bd")
+    parsed = parse_sym_pattern("bd")
     printed = print_pattern(parsed)
     assert printed == "bd"
 

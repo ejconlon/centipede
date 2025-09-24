@@ -5,7 +5,7 @@ from __future__ import annotations
 from fractions import Fraction
 
 from minipat.ev import Ev
-from minipat.parser import parse_pattern
+from minipat.parser import parse_sym_pattern
 from minipat.stream import Stream
 from minipat.time import CycleArc, CycleSpan, CycleTime
 
@@ -14,7 +14,7 @@ def _test_pattern_events(
     pattern_str: str, expected_events: list[tuple[Fraction, Fraction, str]]
 ) -> None:
     """Helper function to test pattern consistency across multiple query strategies."""
-    pattern = parse_pattern(pattern_str)
+    pattern = parse_sym_pattern(pattern_str)
     stream = Stream.pat(pattern)
 
     def _events_to_tuples(

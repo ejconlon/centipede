@@ -2,7 +2,7 @@ from fractions import Fraction
 
 import pytest
 
-from minipat.parser import parse_pattern
+from minipat.parser import parse_sym_pattern
 from minipat.pat import (
     PatAlt,
     PatEuc,
@@ -27,14 +27,14 @@ def assert_string_value(value: str, expected_value: str) -> None:
 
 def test_parse_basic_symbol() -> None:
     """Test parsing a single symbol."""
-    result = parse_pattern("bd")
+    result = parse_sym_pattern("bd")
     assert isinstance(result.unwrap, PatPure)
     assert_string_value(result.unwrap.value, "bd")
 
 
 def test_parse_simple_sequence() -> None:
     """Test parsing a simple sequence of symbols."""
-    result = parse_pattern("bd sd hh")
+    result = parse_sym_pattern("bd sd hh")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -47,7 +47,7 @@ def test_parse_simple_sequence() -> None:
 
 def test_parse_silence() -> None:
     """Test parsing silence (~)."""
-    result = parse_pattern("bd ~ sd")
+    result = parse_sym_pattern("bd ~ sd")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -61,7 +61,7 @@ def test_parse_silence() -> None:
 
 def test_parse_sample_selection() -> None:
     """Test parsing sample selection (symbol:number)."""
-    result = parse_pattern("bd:2 sd:0")
+    result = parse_sym_pattern("bd:2 sd:0")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -76,7 +76,7 @@ def test_parse_sample_selection() -> None:
 
 def test_parse_sample_selection_strings() -> None:
     """Test parsing sample selection with string selectors."""
-    result = parse_pattern("bd:kick sd:snare")
+    result = parse_sym_pattern("bd:kick sd:snare")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -91,7 +91,7 @@ def test_parse_sample_selection_strings() -> None:
 
 def test_parse_seq_brackets() -> None:
     """Test parsing seqed patterns with brackets."""
-    result = parse_pattern("[bd sd] cp")
+    result = parse_sym_pattern("[bd sd] cp")
     assert isinstance(result.unwrap, PatSeq)
     # TODO assert whatever
 
@@ -99,14 +99,14 @@ def test_parse_seq_brackets() -> None:
 # def test_parse_seq_dots():
 #     """Test parsing seqed patterns with dots."""
 #     # TODO: Dots are not currently supported in the grammar
-#     result = parse_pattern(".bd sd. cp")
+#     result = parse_sym_pattern(".bd sd. cp")
 #     assert isinstance(result.unwrap, PatSeq)
 #     # TODO assert whatever
 
 
 def test_parse_choice_pattern() -> None:
     """Test parsing choice patterns [a|b|c]."""
-    result = parse_pattern("[bd|sd|cp]")
+    result = parse_sym_pattern("[bd|sd|cp]")
     # Should return choice pattern
     assert isinstance(result.unwrap, PatRand)
     choices = list(result.unwrap.pats)
@@ -118,7 +118,7 @@ def test_parse_choice_pattern() -> None:
 
 def test_parse_parallel_pattern() -> None:
     """Test parsing parallel patterns [a,b,c]."""
-    result = parse_pattern("[bd,sd,cp]")
+    result = parse_sym_pattern("[bd,sd,cp]")
     # Should return parallel pattern
     assert isinstance(result.unwrap, PatPar)
     patterns = list(result.unwrap.pats)
@@ -130,7 +130,7 @@ def test_parse_parallel_pattern() -> None:
 
 def test_parse_alternating_pattern() -> None:
     """Test parsing alternating patterns <a b c>."""
-    result = parse_pattern("<bd sd cp>")
+    result = parse_sym_pattern("<bd sd cp>")
     # Should return alternating pattern
     assert isinstance(result.unwrap, PatAlt)
     patterns = list(result.unwrap.pats)
@@ -142,7 +142,7 @@ def test_parse_alternating_pattern() -> None:
 
 def test_parse_repetition_multiply() -> None:
     """Test parsing repetition with * operator."""
-    result = parse_pattern("bd*2")
+    result = parse_sym_pattern("bd*2")
     assert isinstance(result.unwrap, PatSpeed)
     assert result.unwrap.op == SpeedOp.Fast
     assert result.unwrap.factor == 2
@@ -151,7 +151,7 @@ def test_parse_repetition_multiply() -> None:
 
 def test_parse_repetition_divide() -> None:
     """Test parsing repetition with / operator (slowdown)."""
-    result = parse_pattern("bd/2")
+    result = parse_sym_pattern("bd/2")
     assert isinstance(result.unwrap, PatSpeed)
     assert result.unwrap.op == SpeedOp.Slow
     assert result.unwrap.factor == 2
@@ -160,7 +160,7 @@ def test_parse_repetition_divide() -> None:
 
 def test_parse_multiple_repetition() -> None:
     """Test parsing multiple repetition operators."""
-    result = parse_pattern("bd*2/4")
+    result = parse_sym_pattern("bd*2/4")
     # Should be a repetition with SLOW operator
     assert isinstance(result.unwrap, PatSpeed)
     assert result.unwrap.op == SpeedOp.Slow
@@ -175,12 +175,12 @@ def test_parse_multiple_repetition() -> None:
 
 def test_parse_elongation() -> None:
     """Test parsing stretch with _ or @."""
-    result = parse_pattern("bd_")
+    result = parse_sym_pattern("bd_")
     assert isinstance(result.unwrap, PatStretch)
     assert result.unwrap.count == 2  # bd_ = stretch by 2
     assert_string_value(result.unwrap.pat.unwrap.value, "bd")
 
-    result2 = parse_pattern("bd__")
+    result2 = parse_sym_pattern("bd__")
     assert isinstance(result2.unwrap, PatStretch)
     assert result2.unwrap.count == 3  # bd__ = stretch by 3
     assert_string_value(result2.unwrap.pat.unwrap.value, "bd")
@@ -192,7 +192,7 @@ def test_stretch_equivalence() -> None:
     patterns = ["x@3", "x__", "x _ _", "x_ _"]
 
     for pattern_str in patterns:
-        result = parse_pattern(pattern_str)
+        result = parse_sym_pattern(pattern_str)
         # Handle both direct stretch and sequence with single stretched element
         if isinstance(result.unwrap, PatStretch):
             assert result.unwrap.count == 3, (
@@ -212,12 +212,12 @@ def test_stretch_equivalence() -> None:
 
 def test_symbol_with_colon() -> None:
     """Test that a:b is a valid identifier."""
-    result = parse_pattern("a:b")
+    result = parse_sym_pattern("a:b")
     assert isinstance(result.unwrap, PatPure)
     assert result.unwrap.value == "a:b"
 
     # Test in sequences too
-    result2 = parse_pattern("a:b c:d")
+    result2 = parse_sym_pattern("a:b c:d")
     assert isinstance(result2.unwrap, PatSeq)
     children = list(result2.unwrap.pats)
     assert len(children) == 2
@@ -234,7 +234,7 @@ def test_rests_without_spacing() -> None:
     ]
 
     for pattern_str, expected_values in test_patterns:
-        result = parse_pattern(pattern_str)
+        result = parse_sym_pattern(pattern_str)
         assert isinstance(result.unwrap, PatSeq), (
             f"Pattern '{pattern_str}' should be a sequence"
         )
@@ -260,7 +260,7 @@ def test_rests_without_spacing() -> None:
 
 def test_parse_probability() -> None:
     """Test parsing probability with ?."""
-    result = parse_pattern("bd?")
+    result = parse_sym_pattern("bd?")
     assert isinstance(result.unwrap, PatProb)
     assert_string_value(result.unwrap.pat.unwrap.value, "bd")
     assert result.unwrap.chance == 0.5
@@ -268,7 +268,7 @@ def test_parse_probability() -> None:
 
 def test_parse_euclidean_rhythm() -> None:
     """Test parsing Euclidean rhythms."""
-    result = parse_pattern("bd(3,8)")
+    result = parse_sym_pattern("bd(3,8)")
     assert isinstance(result.unwrap, PatEuc)
     assert_string_value(result.unwrap.pat.unwrap.value, "bd")
     assert result.unwrap.hits == 3
@@ -278,7 +278,7 @@ def test_parse_euclidean_rhythm() -> None:
 
 def test_parse_euclidean_with_rotation() -> None:
     """Test parsing Euclidean rhythms with rotation."""
-    result = parse_pattern("bd(3,8,1)")
+    result = parse_sym_pattern("bd(3,8,1)")
     assert isinstance(result.unwrap, PatEuc)
     assert_string_value(result.unwrap.pat.unwrap.value, "bd")
     assert result.unwrap.hits == 3
@@ -288,7 +288,7 @@ def test_parse_euclidean_with_rotation() -> None:
 
 def test_parse_polymetric() -> None:
     """Test parsing polymetric sequences."""
-    result = parse_pattern("{bd, sd}")
+    result = parse_sym_pattern("{bd, sd}")
     assert isinstance(result.unwrap, PatPoly)
 
     patterns = list(result.unwrap.pats)
@@ -299,7 +299,7 @@ def test_parse_polymetric() -> None:
 
 def test_parse_complex_pattern() -> None:
     """Test parsing a complex pattern with multiple features."""
-    result = parse_pattern("bd*2 [sd cp] ~ {hh, oh}")
+    result = parse_sym_pattern("bd*2 [sd cp] ~ {hh, oh}")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -320,7 +320,7 @@ def test_parse_complex_pattern() -> None:
 
 def test_parse_nested_groups() -> None:
     """Test parsing nested grouping structures."""
-    result = parse_pattern("[[bd sd] cp] hh")
+    result = parse_sym_pattern("[[bd sd] cp] hh")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -337,14 +337,14 @@ def test_parse_nested_groups() -> None:
 def test_parse_empty_pattern() -> None:
     """Test parsing edge cases."""
     with pytest.raises(Exception):
-        parse_pattern("")
+        parse_sym_pattern("")
 
 
 def test_parse_whitespace_handling() -> None:
     """Test that whitespace is properly ignored."""
-    result1 = parse_pattern("bd sd")
-    result2 = parse_pattern("bd    sd")
-    result3 = parse_pattern("  bd   sd  ")
+    result1 = parse_sym_pattern("bd sd")
+    result2 = parse_sym_pattern("bd    sd")
+    result3 = parse_sym_pattern("  bd   sd  ")
 
     # All should produce equivalent patterns
     for result in [result1, result2, result3]:
@@ -357,7 +357,7 @@ def test_parse_whitespace_handling() -> None:
 
 def test_parse_numeric_symbols() -> None:
     """Test parsing symbols with numbers."""
-    result = parse_pattern("bd909 tr808")
+    result = parse_sym_pattern("bd909 tr808")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -368,7 +368,7 @@ def test_parse_numeric_symbols() -> None:
 
 def test_parse_symbols_with_underscores_and_dashes() -> None:
     """Test parsing symbols with underscores and dashes."""
-    result = parse_pattern("bd_kick snare-roll hi_hat_open bass-drum_1")
+    result = parse_sym_pattern("bd_kick snare-roll hi_hat_open bass-drum_1")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -381,7 +381,7 @@ def test_parse_symbols_with_underscores_and_dashes() -> None:
 
 def test_parse_complex_sample_selection() -> None:
     """Test complex sample selection patterns."""
-    result = parse_pattern("bd:0*2 sd:1/2")
+    result = parse_sym_pattern("bd:0*2 sd:1/2")
     assert isinstance(result.unwrap, PatSeq)
 
     children = list(result.unwrap.pats)
@@ -408,7 +408,7 @@ def test_parse_complex_sample_selection() -> None:
 
 def test_kick_snare_pattern() -> None:
     """Test basic kick-snare pattern."""
-    result = parse_pattern("bd sd bd sd")
+    result = parse_sym_pattern("bd sd bd sd")
     assert isinstance(result.unwrap, PatSeq)
     children = list(result.unwrap.pats)
     assert len(children) == 4
@@ -421,7 +421,7 @@ def test_kick_snare_pattern() -> None:
 
 def test_hihat_subdivision() -> None:
     """Test hihat subdivision pattern."""
-    result = parse_pattern("bd [hh hh] sd [hh hh]")
+    result = parse_sym_pattern("bd [hh hh] sd [hh hh]")
     assert isinstance(result.unwrap, PatSeq)
     children = list(result.unwrap.pats)
     assert len(children) == 4
@@ -433,7 +433,7 @@ def test_hihat_subdivision() -> None:
 
 def test_polyrhythmic_pattern() -> None:
     """Test polyrhythmic pattern."""
-    result = parse_pattern("{bd sd, hh*8}")
+    result = parse_sym_pattern("{bd sd, hh*8}")
     assert isinstance(result.unwrap, PatPoly)
 
     patterns = list(result.unwrap.pats)
@@ -448,7 +448,7 @@ def test_polyrhythmic_pattern() -> None:
 
 def test_parse_replicate() -> None:
     """Test parsing replicate patterns."""
-    result = parse_pattern("bd!3")
+    result = parse_sym_pattern("bd!3")
     assert isinstance(result.unwrap, PatRepeat)
     assert result.unwrap.count == 3
     assert isinstance(result.unwrap.pat.unwrap, PatPure)
@@ -457,7 +457,7 @@ def test_parse_replicate() -> None:
 
 def test_parse_ratio() -> None:
     """Test parsing fractional repetition patterns."""
-    result = parse_pattern("bd*3%2")
+    result = parse_sym_pattern("bd*3%2")
     assert isinstance(result.unwrap, PatSpeed)
     assert result.unwrap.op == SpeedOp.Fast
     assert result.unwrap.factor == Fraction(3, 2)
@@ -467,7 +467,7 @@ def test_parse_ratio() -> None:
 
 def test_parse_polymetric_subdivision() -> None:
     """Test parsing polymetric subdivision patterns."""
-    result = parse_pattern("{bd, sd}%4")
+    result = parse_sym_pattern("{bd, sd}%4")
     assert isinstance(result.unwrap, PatPoly)
     assert result.unwrap.subdiv == 4
     assert len(result.unwrap.pats) == 2
@@ -475,7 +475,7 @@ def test_parse_polymetric_subdivision() -> None:
 
 def test_parse_dot_grouping() -> None:
     """Test parsing dot grouping patterns."""
-    result = parse_pattern("bd sd . hh cp")
+    result = parse_sym_pattern("bd sd . hh cp")
     assert isinstance(result.unwrap, PatSeq)
     assert len(result.unwrap.pats) == 2
     # Both sides should be sequences
@@ -486,19 +486,19 @@ def test_parse_dot_grouping() -> None:
 def test_parse_complex_new_features() -> None:
     """Test parsing complex combinations of new features."""
     # Replicate with selection
-    result = parse_pattern("bd:0!2")
+    result = parse_sym_pattern("bd:0!2")
     assert isinstance(result.unwrap, PatRepeat)
     assert isinstance(result.unwrap.pat.unwrap, PatPure)
     selected = result.unwrap.pat.unwrap.value
     assert selected == "bd:0"
 
     # Fractional repetition with probability
-    result = parse_pattern("bd?*2%3")
+    result = parse_sym_pattern("bd?*2%3")
     assert isinstance(result.unwrap, PatSpeed)
     assert isinstance(result.unwrap.pat.unwrap, PatProb)
 
     # Polymetric subdivision with replicate inside
-    result = parse_pattern("{bd!2, sd}%4")
+    result = parse_sym_pattern("{bd!2, sd}%4")
     assert isinstance(result.unwrap, PatPoly)
     patterns = list(result.unwrap.pats)
     assert isinstance(patterns[0].unwrap, PatRepeat)
@@ -507,11 +507,11 @@ def test_parse_complex_new_features() -> None:
 def test_parse_nested_new_features() -> None:
     """Test parsing nested new features."""
     # Replicate of sequence
-    result = parse_pattern("[bd sd]!2")
+    result = parse_sym_pattern("[bd sd]!2")
     assert isinstance(result.unwrap, PatRepeat)
     assert isinstance(result.unwrap.pat.unwrap, PatSeq)
 
     # Fractional repetition of choice
-    result = parse_pattern("[bd | sd]*2%1")
+    result = parse_sym_pattern("[bd | sd]*2%1")
     assert isinstance(result.unwrap, PatSpeed)
     assert isinstance(result.unwrap.pat.unwrap, PatRand)

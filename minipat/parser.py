@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import Any, List, cast
+from typing import Any, List, Type, cast
 
 from lark import Lark, Transformer
 
 from minipat.pat import Pat, PatSeq, PatStretch, SpeedOp
+from spiny.common import Singleton
 
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
 # sequences, choices, parallel patterns, euclidean rhythms, and more.
-PATTERN_GRAMMAR = r"""
+# Templated to allow safety of Pat[T] - replace $$ATOM$$ with actual production.
+_GRAMMAR_TEMPLATE = r"""
 %import common.WS
 %ignore WS
 
@@ -46,7 +48,7 @@ element_sequence: element (UNDERSCORE+ | element)*
 element: elongation | repetition | replicate | probability | atom | seq | choice | parallel | alternating | euclidean | polymetric
 
 // Basic atoms
-atom: numeric | symbol | silence
+atom: $$ATOM$$ | silence
 symbol: symbol_with_selector | SYMBOL
 symbol_with_selector: SYMBOL COLON SYMBOL
 silence: "~"
@@ -61,11 +63,11 @@ parallel_list: pattern ("," pattern)+
 alternating: "<" pattern+ ">"
 
 // Euclidean rhythms: symbol(hits,steps) or symbol(hits,steps,rotation)
-euclidean: atom "(" numeric "," numeric ("," numeric)? ")"
+euclidean: atom "(" POS_INTEGER "," POS_INTEGER ("," POS_INTEGER)? ")"
 
 // Polymetric sequences
 pattern_list: pattern ("," pattern)+
-polymetric: "{" pattern_list "}" (PERCENT numeric)?
+polymetric: "{" pattern_list "}" (PERCENT POS_INTEGER)?
 
 // Repetition and speed modifiers
 repetition: element (MULTIPLY | DIVIDE) numeric
@@ -77,12 +79,21 @@ probability: atom "?" numeric?
 """
 
 
-class PatternTransformer(Transformer[Any, Pat[Any]]):
+def _mk_grammar(atom: str) -> str:
+    return _GRAMMAR_TEMPLATE.replace("$$ATOM$$", atom)
+
+
+_SYM_GRAMMAR = _mk_grammar("symbol")
+_NUM_GRAMMAR = _mk_grammar("numeric")
+_INT_GRAMMAR = _mk_grammar("INTEGER")
+
+
+class PatternTransformer[T](Transformer[Any, Pat[T]], Singleton):
     """Transform parsed pattern into Pat objects."""
 
-    def start(self, items: List[Any]) -> Pat[Any]:
+    def start(self, items: List[Any]) -> Pat[T]:
         """Transform the root pattern."""
-        return cast(Pat[Any], items[0])
+        return cast(Pat[T], items[0])
 
     def pattern(self, items: List[Any]) -> Pat[Any]:
         """Transform a pattern into a sequence of events."""
@@ -134,10 +145,12 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform an atom element."""
         value = items[0]
         # If it's a numeric value (Fraction), wrap it in Pat.pure
-        if isinstance(value, Fraction):
+        if isinstance(value, (Fraction, int)):
             return Pat.pure(value)
-        # Otherwise it's already a Pat (from symbol or silence)
-        return cast(Pat[Any], value)
+        else:
+            # Otherwise it's already a Pat (from symbol or silence)
+            assert isinstance(value, Pat)
+            return value
 
     def symbol(self, items: List[Any]) -> Pat[str]:
         """Transform a symbol."""
@@ -203,9 +216,12 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform Euclidean rhythm pattern like bd(3,8)."""
         atom = items[0]
         # Convert Fraction to int (should be whole numbers for euclidean)
-        hits = int(items[1])
-        steps = int(items[2])
-        rotation = int(items[3]) if len(items) > 3 else 0
+        hits = items[1]
+        assert isinstance(hits, int)
+        steps = items[2]
+        assert isinstance(steps, int)
+        rotation = items[3] if len(items) > 3 else 0
+        assert isinstance(rotation, int)
         return Pat.euc(atom, hits, steps, rotation)
 
     # Polymetric sequences
@@ -220,7 +236,8 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         if len(items) > 1:
             # Has subdivision: {a,b,c}%4
             # items[1] is PERCENT token, items[2] is subdivision value
-            factor = int(items[2])
+            factor = items[2]
+            assert isinstance(factor, int)
             return Pat.poly(patterns, factor)
         else:
             # No subdivision: {a,b,c}
@@ -324,20 +341,20 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform a symbol token into a pure pattern with string value."""
         return Pat.pure(str(token))
 
-    def POS_INTEGER(self, token: Any) -> Fraction:
+    def POS_INTEGER(self, token: Any) -> int:
         """Transform a positive integer token."""
-        return Fraction(str(token))
+        return int(str(token))
 
-    def INTEGER(self, token: Any) -> Fraction:
+    def INTEGER(self, token: Any) -> int:
         """Transform an integer token (can be negative)."""
-        return Fraction(str(token))
+        return int(str(token))
 
     def DECIMAL(self, token: Any) -> Fraction:
         """Transform a decimal token."""
         return Fraction(str(token))
 
 
-def parse_pattern(pattern_str: str) -> Pat[str]:
+def _parse_pattern[T](_ty: Type[T], grammar: str, pattern_str: str) -> Pat[T]:
     """Parse a pattern string into a Pat object.
 
     Args:
@@ -368,7 +385,55 @@ def parse_pattern(pattern_str: str) -> Pat[str]:
         >>> parse_pattern("[bd|sd|cp]")
         # Returns choice pattern
     """
-    parser = Lark(PATTERN_GRAMMAR)
-    transformer = PatternTransformer()
+    parser = Lark(grammar)
+    transformer = PatternTransformer[T]()
     tree = parser.parse(pattern_str)
     return transformer.transform(tree)
+
+
+def parse_sym_pattern(pattern_str: str) -> Pat[str]:
+    """Parse a pattern string into a Pat object.
+
+    Args:
+        pattern_str: A string representing a pattern
+
+    Returns:
+        A Pat object representing the parsed pattern
+
+    Examples:
+        >>> parse_pattern("bd sd sd")
+        # Returns a Pat.seq containing Pat.pure("bd"), Pat.pure("sd"), Pat.pure("sd")
+
+        >>> parse_pattern("bd ~ sd")
+        # Returns a Pat.seq with "bd", silence, "sd"
+
+        >>> parse_pattern("bd*2 sd")
+        # Returns a Pat.seq with repeated "bd", then "sd"
+
+        >>> parse_pattern("[bd sd] cp")
+        # Returns a Pat.seq with grouped "bd sd", then "cp"
+
+        >>> parse_pattern("bd(3,8)")
+        # Returns a euclidean rhythm pattern
+
+        >>> parse_pattern("{bd, sd}")
+        # Returns parallel patterns
+
+        >>> parse_pattern("[bd|sd|cp]")
+        # Returns choice pattern
+    """
+    return _parse_pattern(str, _SYM_GRAMMAR, pattern_str)
+
+
+def parse_num_pattern(pattern_str: str) -> Pat[Fraction]:
+    """Parse a pattern string into a Pat[Fraction] object.
+    See parse_sym_pattern for more information.
+    """
+    return _parse_pattern(Fraction, _NUM_GRAMMAR, pattern_str)
+
+
+def parse_int_pattern(pattern_str: str) -> Pat[int]:
+    """Parse a pattern string into a Pat[Fraction] object.
+    See parse_sym_pattern for more information.
+    """
+    return _parse_pattern(int, _INT_GRAMMAR, pattern_str)

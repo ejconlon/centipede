@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-from minipat.parser import parse_pattern
+from minipat.parser import parse_sym_pattern
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import Stream
 from minipat.time import CycleArc, CycleTime
@@ -458,7 +458,7 @@ def test_pure_pattern_partial_queries() -> None:
 def test_replicate_stream() -> None:
     """Test replicate patterns work with stream processing."""
 
-    pattern = parse_pattern("bd!3")
+    pattern = parse_sym_pattern("bd!3")
     stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -484,7 +484,7 @@ def test_replicate_stream() -> None:
 def test_ratio_stream() -> None:
     """Test ratio patterns work with stream processing."""
 
-    pattern = parse_pattern("bd*2%1")  # 2/1 ratio
+    pattern = parse_sym_pattern("bd*2%1")  # 2/1 ratio
     stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -502,7 +502,7 @@ def test_ratio_stream() -> None:
 def test_polymetric_subdivision_stream() -> None:
     """Test polymetric subdivision patterns work with stream processing."""
 
-    pattern = parse_pattern("{bd, sd}%2")
+    pattern = parse_sym_pattern("{bd, sd}%2")
     stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -521,7 +521,7 @@ def test_polymetric_subdivision_stream() -> None:
 def test_dot_grouping_stream() -> None:
     """Test dot grouping patterns work with stream processing."""
 
-    pattern = parse_pattern("bd sd . hh cp")
+    pattern = parse_sym_pattern("bd sd . hh cp")
     stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
@@ -568,7 +568,7 @@ def test_new_features_stream_integration() -> None:
     patterns = ["bd!3", "bd*2%1", "{bd, sd}%2", "bd sd . hh cp"]
 
     for pattern_str in patterns:
-        pat = parse_pattern(pattern_str)
+        pat = parse_sym_pattern(pattern_str)
         stream = Stream.pat(pat)
         arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
         # Should not crash
@@ -584,7 +584,7 @@ def test_complex_new_features_stream() -> None:
     """Test complex combinations of new features with streams."""
 
     # Complex pattern with multiple new features
-    pattern = parse_pattern("{bd!2, sd*3%2}%4")
+    pattern = parse_sym_pattern("{bd!2, sd*3%2}%4")
     stream = Stream.pat(pattern)
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 

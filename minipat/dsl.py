@@ -11,7 +11,7 @@ from bad_actor import System, new_system
 from minipat.combinators import (
     BundleStreamLike,
     IntStreamLike,
-    StringStreamLike,
+    SymStreamLike,
     bundle_stream,
     channel_stream,
     combine_all,
@@ -598,7 +598,7 @@ class Flow:
         return Flow(Stream.compose(cycle_sections))
 
 
-def note(input_val: StringStreamLike) -> Flow:
+def note(input_val: SymStreamLike) -> Flow:
     """Create a flow from note names.
 
     Args:
@@ -1061,7 +1061,7 @@ class Nucleus:
         sound = add_hit(note, velocity, channel)
         self.kit = self.kit.put(identifier, sound)
 
-    def sound(self, input_val: StringStreamLike) -> Flow:
+    def sound(self, input_val: SymStreamLike) -> Flow:
         """Create a flow from kit hit identifiers using this nucleus's kit.
 
         Creates a Flow from hit identifiers using this nucleus's kit mapping.

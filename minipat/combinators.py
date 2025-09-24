@@ -22,7 +22,7 @@ from minipat.messages import (
     Velocity,
     VelocityField,
 )
-from minipat.parser import parse_pattern
+from minipat.parser import parse_int_pattern, parse_num_pattern, parse_sym_pattern
 from minipat.pat import Pat, PatBinder
 from minipat.stream import MergeStrat, Stream
 from spiny.arrow import Iso
@@ -33,6 +33,23 @@ from spiny.dmap import DMap
 # Type Aliases
 # =============================================================================
 
+type SymStreamLike = str | Pat[str] | Stream[str]
+"""Types accepted by functions for string patterns.
+
+Accepts:
+- str: Pattern string (e.g., "c4 d4 e4")
+- Pat[str]: Pattern of strings
+- Stream[str]: Pre-constructed string stream
+"""
+
+type NumStreamLike = str | Pat[Fraction] | Stream[Fraction]
+"""Types accepted by functions for numeric patterns.
+
+Accepts:
+- str: Pattern string containing numeric values (e.g., "0 5.1 7%2")
+- Pat[Fraction]: Pattern of integers
+- Stream[Fraction]: Pre-constructed integer stream
+"""
 
 type IntStreamLike = str | Pat[int] | Stream[int]
 """Types accepted by functions for integer patterns.
@@ -41,15 +58,6 @@ Accepts:
 - str: Pattern string containing integers (e.g., "0 5 7")
 - Pat[int]: Pattern of integers
 - Stream[int]: Pre-constructed integer stream
-"""
-
-type StringStreamLike = str | Pat[str] | Stream[str]
-"""Types accepted by functions for string patterns.
-
-Accepts:
-- str: Pattern string (e.g., "c4 d4 e4")
-- Pat[str]: Pattern of strings
-- Stream[str]: Pre-constructed string stream
 """
 
 type BundleStreamLike = Pat[MidiBundle] | Stream[MidiBundle]
@@ -424,29 +432,40 @@ class ElemBinder(PatBinder[str, MidiAttrs]):
 # =============================================================================
 
 
+def convert_to_sym_stream(input_val: SymStreamLike) -> Stream[str]:
+    """Convert various input types to a Stream[str]."""
+    if isinstance(input_val, str):
+        return Stream.pat(parse_sym_pattern(input_val))
+    elif isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for SymStreamLike: {type(input_val)}")
+
+
+def convert_to_num_stream(input_val: NumStreamLike) -> Stream[Fraction]:
+    """Convert various input types to a Stream[int]."""
+    if isinstance(input_val, str):
+        return Stream.pat(parse_num_pattern(input_val))
+    elif isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for NumStreamLike: {type(input_val)}")
+
+
 def convert_to_int_stream(input_val: IntStreamLike) -> Stream[int]:
     """Convert various input types to a Stream[int]."""
     if isinstance(input_val, str):
-        string_pat = parse_pattern(input_val)
-        return Stream.pat_bind(string_pat, IntBinder())
+        return Stream.pat(parse_int_pattern(input_val))
     elif isinstance(input_val, Pat):
         return Stream.pat(input_val)
     elif isinstance(input_val, Stream):
         return input_val
     else:
         raise ValueError(f"Unsupported type for IntStreamLike: {type(input_val)}")
-
-
-def convert_to_string_stream(input_val: StringStreamLike) -> Stream[str]:
-    """Convert various input types to a Stream[str]."""
-    if isinstance(input_val, str):
-        return Stream.pat(parse_pattern(input_val))
-    elif isinstance(input_val, Pat):
-        return Stream.pat(input_val)
-    elif isinstance(input_val, Stream):
-        return input_val
-    else:
-        raise ValueError(f"Unsupported type for StringStreamLike: {type(input_val)}")
 
 
 def convert_to_bundle_stream(input_val: BundleStreamLike) -> Stream[MidiBundle]:
@@ -489,7 +508,7 @@ def midinote_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         midinote_stream("[60,64,67]")   # C major chord (simultaneous)
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _NOTE_NUM_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _NOTE_NUM_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to int stream and bind with note number binder
         int_stream = convert_to_int_stream(input_val)
@@ -503,7 +522,7 @@ def midinote_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         raise ValueError(f"Unsupported type for midinote_stream: {type(input_val)}")
 
 
-def note_stream(input_val: StringStreamLike) -> Stream[MidiAttrs]:
+def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
     """Create stream from note names.
 
     Parses a pattern containing musical note names with octaves
@@ -519,21 +538,21 @@ def note_stream(input_val: StringStreamLike) -> Stream[MidiAttrs]:
         note_stream("[c4,e4,g4]")       # C major chord (simultaneous)
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _NOTE_NAME_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _NOTE_NAME_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to string stream and bind with note name binder
-        string_stream = convert_to_string_stream(input_val)
+        sym_stream = convert_to_sym_stream(input_val)
 
         # Use the same approach as note_stream: bind pattern with binder
         def convert_to_midi_attrs(note_name: str) -> Stream[MidiAttrs]:
             return Stream.pat(_NOTE_NAME_BINDER.apply(note_name))
 
-        return string_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+        return sym_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
     else:
         raise ValueError(f"Unsupported type for note_stream: {type(input_val)}")
 
 
-def sound_stream(kit: Kit, input_val: StringStreamLike) -> Stream[MidiAttrs]:
+def sound_stream(kit: Kit, input_val: SymStreamLike) -> Stream[MidiAttrs]:
     """Create stream from drum kit sound identifiers using a specific kit.
 
     Parses a pattern containing drum sound identifiers (like "bd", "sd", "hh")
@@ -555,10 +574,10 @@ def sound_stream(kit: Kit, input_val: StringStreamLike) -> Stream[MidiAttrs]:
     """
     if isinstance(input_val, str):
         drum_binder = ElemBinder(DrumSoundElemParser(kit), NoteField())
-        return Stream.pat_bind(parse_pattern(input_val), drum_binder)
+        return Stream.pat_bind(parse_sym_pattern(input_val), drum_binder)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to string stream and bind with drum binder
-        string_stream = convert_to_string_stream(input_val)
+        string_stream = convert_to_sym_stream(input_val)
         drum_binder = ElemBinder(DrumSoundElemParser(kit), NoteField())
 
         # Convert each string to MIDI attributes
@@ -585,7 +604,7 @@ def velocity_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         velocity_stream("127 0 64")          # Loud, silent, medium
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _VELOCITY_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _VELOCITY_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to int stream and bind with velocity binder
         int_stream = convert_to_int_stream(input_val)
@@ -615,7 +634,7 @@ def channel_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         channel_stream("15 ~ 0")         # Channel 16, rest, Channel 1
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _CHANNEL_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _CHANNEL_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to int stream and bind with channel binder
         int_stream = convert_to_int_stream(input_val)
@@ -644,7 +663,7 @@ def program_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         program_stream("128 ~ 0")        # Invalid program, rest, Piano (will error on 128)
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _PROGRAM_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _PROGRAM_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to int stream and bind with program binder
         int_stream = convert_to_int_stream(input_val)
@@ -674,7 +693,7 @@ def control_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         control_stream("64 ~ 1")         # Sustain, rest, Modulation
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _CONTROL_NUM_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _CONTROL_NUM_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to int stream and bind with control binder
         int_stream = convert_to_int_stream(input_val)
@@ -704,7 +723,7 @@ def value_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         value_stream("127 ~ 0")          # Max, rest, min
     """
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_pattern(input_val), _CONTROL_VAL_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), _CONTROL_VAL_BINDER)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to int stream and bind with value binder
         int_stream = convert_to_int_stream(input_val)
