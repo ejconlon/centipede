@@ -115,3 +115,99 @@ def test_flow_transpose_preserves_other_attributes() -> None:
     vel2 = event2.val.lookup(VelocityKey())
     assert note2 is not None and int(note2) == 55
     assert vel2 is not None and int(vel2) == 100
+
+
+def test_note_with_sharps() -> None:
+    """Test parsing notes with sharps."""
+    # Create a melody with sharp notes
+    melody = note("c#4 d#4 f#4 g#4 a#4")  # C#4=49, D#4=51, F#4=54, G#4=56, A#4=58
+
+    # Query events from the flow
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = melody.stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have 5 events
+    assert len(event_list) == 5
+
+    # Extract note values
+    notes = []
+    for _, event in event_list:
+        note_val = event.val.lookup(NoteKey())
+        assert note_val is not None
+        notes.append(int(note_val))
+
+    # Should be the correct MIDI note numbers for sharp notes
+    assert notes == [49, 51, 54, 56, 58]
+
+
+def test_note_with_flats() -> None:
+    """Test parsing notes with flats."""
+    # Create a melody with flat notes
+    melody = note("db4 eb4 gb4 ab4 bb4")  # Db4=49, Eb4=51, Gb4=54, Ab4=56, Bb4=58
+
+    # Query events from the flow
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = melody.stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have 5 events
+    assert len(event_list) == 5
+
+    # Extract note values
+    notes = []
+    for _, event in event_list:
+        note_val = event.val.lookup(NoteKey())
+        assert note_val is not None
+        notes.append(int(note_val))
+
+    # Should be the correct MIDI note numbers for flat notes (same as sharps)
+    assert notes == [49, 51, 54, 56, 58]
+
+
+def test_note_mixed_sharps_and_naturals() -> None:
+    """Test parsing notes with mixed sharps and naturals."""
+    # Create a melody mixing natural and sharp notes
+    melody = note("c4 c#4 d4 d#4 e4")  # C4=48, C#4=49, D4=50, D#4=51, E4=52
+
+    # Query events from the flow
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = melody.stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have 5 events
+    assert len(event_list) == 5
+
+    # Extract note values
+    notes = []
+    for _, event in event_list:
+        note_val = event.val.lookup(NoteKey())
+        assert note_val is not None
+        notes.append(int(note_val))
+
+    # Should be the correct chromatic progression
+    assert notes == [48, 49, 50, 51, 52]
+
+
+def test_note_case_insensitive() -> None:
+    """Test that note names are case-insensitive."""
+    # Test uppercase, lowercase, and mixed case notes
+    melody = note("C4 c4 C#4 c#4 Db4 db4")  # All should be parsed correctly
+
+    # Query events from the flow
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = melody.stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have 6 events
+    assert len(event_list) == 6
+
+    # Extract note values
+    notes = []
+    for _, event in event_list:
+        note_val = event.val.lookup(NoteKey())
+        assert note_val is not None
+        notes.append(int(note_val))
+
+    # C4=48, c4=48, C#4=49, c#4=49, Db4=49, db4=49
+    assert notes == [48, 48, 49, 49, 49, 49]

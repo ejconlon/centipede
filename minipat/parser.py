@@ -29,7 +29,7 @@ DOT: "."
 COLON: ":"
 
 // Tokens
-SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
+SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_#-]*[a-zA-Z0-9#])?/
 POS_INTEGER: /\d+/
 INTEGER: /-?\d+/
 DECIMAL: /-?\d*\.\d+/
