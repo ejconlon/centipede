@@ -17,7 +17,7 @@ from minipat.messages import (
     Velocity,
     VelocityField,
 )
-from spiny.arrow import Iso
+from spiny.arrow import BiArrow
 from spiny.map import PMap
 
 Kit = PMap[str, "Sound"]
@@ -81,7 +81,7 @@ DEFAULT_KIT: Kit = PMap.mk(
 )
 
 
-class DrumSoundElemParser(Iso[str, Note]):
+class DrumSoundElemParser(BiArrow[str, Note]):
     """Parser for drum sound identifiers to MIDI notes.
 
     Converts drum sound string identifiers (like "bd", "sd", "hh") to
@@ -106,7 +106,7 @@ class DrumSoundElemParser(Iso[str, Note]):
         self._kit = kit
 
     @override
-    def forward(self, value: str) -> Note:
+    def apply(self, value: str) -> Note:
         """Parse a drum sound identifier to a MIDI note.
 
         Args:
@@ -127,7 +127,7 @@ class DrumSoundElemParser(Iso[str, Note]):
         return sound.note
 
     @override
-    def backward(self, value: Note) -> str:
+    def rev_apply(self, value: Note) -> str:
         """Convert a MIDI note back to a drum sound identifier.
 
         Args:

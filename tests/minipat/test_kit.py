@@ -174,15 +174,15 @@ class TestDrumSoundElemParser:
         parser = DrumSoundElemParser(kit)
 
         # Test bass drum
-        bd_note = parser.forward("bd")
+        bd_note = parser.apply("bd")
         assert bd_note == Note(36)
 
         # Test snare drum
-        sd_note = parser.forward("sd")
+        sd_note = parser.apply("sd")
         assert sd_note == Note(38)
 
         # Test hi-hat
-        hh_note = parser.forward("hh")
+        hh_note = parser.apply("hh")
         assert hh_note == Note(42)
 
     def test_parse_unknown_sound(self) -> None:
@@ -191,7 +191,7 @@ class TestDrumSoundElemParser:
         parser = DrumSoundElemParser(kit)
 
         with pytest.raises(ValueError, match="Unknown drum sound 'unknownsound'"):
-            parser.forward("unknownsound")
+            parser.apply("unknownsound")
 
     def test_backward_conversion(self) -> None:
         """Test converting notes back to drum sound identifiers."""
@@ -199,15 +199,15 @@ class TestDrumSoundElemParser:
         parser = DrumSoundElemParser(kit)
 
         # Test bass drum
-        identifier = parser.backward(Note(36))
+        identifier = parser.rev_apply(Note(36))
         assert identifier == "bd"
 
         # Test snare drum
-        identifier = parser.backward(Note(38))
+        identifier = parser.rev_apply(Note(38))
         assert identifier == "sd"
 
         # Test unknown note (should return note number)
-        identifier = parser.backward(Note(100))
+        identifier = parser.rev_apply(Note(100))
         assert identifier == "100"
 
 

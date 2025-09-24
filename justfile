@@ -26,11 +26,7 @@ format:
 
 # Typecheck with mypy
 typecheck:
-  {{python}} -m mypy --config-file=pyproject.toml {{mypy_packages}} -p tests
-
-# Typecheck with mypy - strict mode
-typecheck-strict:
-  {{python}} -m mypy --strict --cache-dir=.mypy_cache_strict --config-file=pyproject.toml {{mypy_packages}} -p tests
+  {{python}} -m mypy --strict --config-file=pyproject.toml {{mypy_packages}} -p tests
 
 # Lint with ruff
 lint:
@@ -51,11 +47,8 @@ unit-single-threaded:
 # Run all tests
 test: unit
 
-# Run all checks
-check: format lint-fix typecheck test
-
-# Run all checks - strict
-check-strict: format lint-fix typecheck-strict test
+# Final pre-commit checks
+precommit: format lint-fix typecheck test
 
 # Clean most generated files (+ venv)
 clean:
@@ -73,18 +66,6 @@ docs:
 # license check
 license-check:
   .venv/bin/python -m licensecheck --only-licenses MIT BSD
-
-# Start fluidsynth as midi target
-fluid:
-  fluidsynth -qsi
-
-# Start minipat repl
-boot:
-  {{python}} -i -m minipat.boot
-
-# Monitor minipat MIDI port
-mon:
-  {{python}} -m minipat.mon -p minipat
 
 # Start pushpluck
 pushpluck:

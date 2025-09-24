@@ -5,15 +5,16 @@ from typing import Callable
 from spiny import PSeq
 from spiny.arrow import (
     Arrow,
+    BiArrow,
+    BiArrowBackwardArrow,
+    BiArrowForwardArrow,
     ChainArrow,
     ChainArrowM,
-    ChainIso,
+    ChainBiArrow,
+    FlipBiArrow,
     FnArrow,
     IdArrow,
-    IdIso,
-    Iso,
-    IsoBackwardArrow,
-    IsoForwardArrow,
+    IdBiArrow,
     SeqArrowM,
 )
 
@@ -65,95 +66,139 @@ class TestArrow:
         composed = add_one.and_then(double).and_then(subtract_three)
         assert composed.apply(5) == 9
 
-    def test_iso_forward(self) -> None:
+    def test_bi_arr_forward(self) -> None:
         double: Arrow[float, float] = Arrow.function(lambda x: x * 2)
         halve: Arrow[float, float] = Arrow.function(lambda x: x / 2)
-        iso = double.iso_forward(halve)
+        bi = double.bi_arr_forward(halve)
 
-        assert iso.forward(4.0) == 8.0
-        assert iso.backward(8.0) == 4.0
+        assert bi.apply(4.0) == 8.0
+        assert bi.rev_apply(8.0) == 4.0
 
-    def test_iso_backward(self) -> None:
+    def test_bi_arr_backward(self) -> None:
         double: Arrow[float, float] = Arrow.function(lambda x: x * 2)
         halve: Arrow[float, float] = Arrow.function(lambda x: x / 2)
-        iso = double.iso_backward(halve)
+        bi = double.bi_arr_backward(halve)
 
-        assert iso.forward(8.0) == 4.0
-        assert iso.backward(4.0) == 8.0
+        assert bi.apply(8.0) == 4.0
+        assert bi.rev_apply(4.0) == 8.0
 
 
-class TestIso:
+class TestBiArrow:
     def test_identity(self) -> None:
-        iso: Iso[int, int] = Iso.identity()
-        assert iso.forward(42) == 42
-        assert iso.backward(42) == 42
-        assert isinstance(iso, IdIso)
+        bi: BiArrow[int, int] = BiArrow.identity()
+        assert bi.apply(42) == 42
+        assert bi.rev_apply(42) == 42
+        assert isinstance(bi, IdBiArrow)
 
     def test_functions(self) -> None:
-        celsius_fahrenheit = Iso.functions(
+        celsius_fahrenheit = BiArrow.functions(
             lambda c: c * 9 / 5 + 32,
             lambda f: (f - 32) * 5 / 9,
         )
 
-        assert celsius_fahrenheit.forward(0) == 32
-        assert celsius_fahrenheit.forward(100) == 212
-        assert celsius_fahrenheit.backward(32) == 0
-        assert celsius_fahrenheit.backward(212) == 100
+        assert celsius_fahrenheit.apply(0) == 32
+        assert celsius_fahrenheit.apply(100) == 212
+        assert celsius_fahrenheit.rev_apply(32) == 0
+        assert celsius_fahrenheit.rev_apply(212) == 100
 
-    def test_and_then(self) -> None:
-        double_halve: Iso[float, float] = Iso.functions(
+    def test_bi_and_then(self) -> None:
+        double_halve: BiArrow[float, float] = BiArrow.functions(
             lambda x: x * 2, lambda x: x / 2
         )
-        add_sub: Iso[float, float] = Iso.functions(lambda x: x + 10, lambda x: x - 10)
-        composed = double_halve.and_then(add_sub)
+        add_sub: BiArrow[float, float] = BiArrow.functions(
+            lambda x: x + 10, lambda x: x - 10
+        )
+        composed = double_halve.bi_and_then(add_sub)
 
-        assert composed.forward(5.0) == 20.0
-        assert composed.backward(20.0) == 5.0
+        assert composed.apply(5.0) == 20.0
+        assert composed.rev_apply(20.0) == 5.0
 
-    def test_and_then_identity_left(self) -> None:
-        identity: Iso[float, float] = Iso.identity()
-        double_halve: Iso[float, float] = Iso.functions(
+    def test_bi_and_then_identity_left(self) -> None:
+        identity: BiArrow[float, float] = BiArrow.identity()
+        double_halve: BiArrow[float, float] = BiArrow.functions(
             lambda x: x * 2, lambda x: x / 2
         )
-        composed = identity.and_then(double_halve)
+        composed = identity.bi_and_then(double_halve)
 
-        assert composed.forward(5.0) == 10.0
-        assert composed.backward(10.0) == 5.0
+        assert composed.apply(5.0) == 10.0
+        assert composed.rev_apply(10.0) == 5.0
         assert composed is double_halve
 
-    def test_and_then_identity_right(self) -> None:
-        double_halve: Iso[float, float] = Iso.functions(
+    def test_bi_and_then_identity_right(self) -> None:
+        double_halve: BiArrow[float, float] = BiArrow.functions(
             lambda x: x * 2, lambda x: x / 2
         )
-        identity: Iso[float, float] = Iso.identity()
-        composed = double_halve.and_then(identity)
+        identity: BiArrow[float, float] = BiArrow.identity()
+        composed = double_halve.bi_and_then(identity)
 
-        assert composed.forward(5.0) == 10.0
-        assert composed.backward(10.0) == 5.0
+        assert composed.apply(5.0) == 10.0
+        assert composed.rev_apply(10.0) == 5.0
         assert composed is double_halve
 
     def test_chain_multiple(self) -> None:
-        iso1: Iso[float, float] = Iso.functions(lambda x: x + 1, lambda x: x - 1)
-        iso2: Iso[float, float] = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-        iso3: Iso[float, float] = Iso.functions(lambda x: x - 3, lambda x: x + 3)
+        bi1: BiArrow[float, float] = BiArrow.functions(lambda x: x + 1, lambda x: x - 1)
+        bi2: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+        bi3: BiArrow[float, float] = BiArrow.functions(lambda x: x - 3, lambda x: x + 3)
 
-        composed = iso1.and_then(iso2).and_then(iso3)
-        assert composed.forward(5.0) == 9.0
-        assert composed.backward(9.0) == 5.0
+        composed = bi1.bi_and_then(bi2).bi_and_then(bi3)
+        assert composed.apply(5.0) == 9.0
+        assert composed.rev_apply(9.0) == 5.0
 
-    def test_arrow_forward(self) -> None:
-        iso: Iso[float, float] = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-        arrow = iso.arrow_forward()
+    def test_arr_forward(self) -> None:
+        bi: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+        arrow = bi.arr_forward()
 
         assert arrow.apply(5.0) == 10.0
-        assert isinstance(arrow, IsoForwardArrow)
+        assert isinstance(arrow, BiArrowForwardArrow)
 
-    def test_arrow_backward(self) -> None:
-        iso: Iso[float, float] = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-        arrow = iso.arrow_backward()
+    def test_arr_backward(self) -> None:
+        bi: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+        arrow = bi.arr_backward()
 
         assert arrow.apply(10.0) == 5.0
-        assert isinstance(arrow, IsoBackwardArrow)
+        assert isinstance(arrow, BiArrowBackwardArrow)
+
+    def test_flip(self) -> None:
+        """Test the flip method."""
+        # Create a BiArrow that doubles forward and halves backward
+        bi: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+
+        # Flip it
+        flipped = bi.flip()
+
+        # Now forward should halve and backward should double
+        assert flipped.apply(10.0) == 5.0  # Uses original rev_apply
+        assert flipped.rev_apply(5.0) == 10.0  # Uses original apply
+        assert isinstance(flipped, FlipBiArrow)
+
+    def test_flip_unwrap(self) -> None:
+        """Test that FlipBiArrow.mk unwraps nested flips."""
+        # Create a BiArrow
+        original: BiArrow[float, float] = BiArrow.functions(
+            lambda x: x * 2, lambda x: x / 2
+        )
+
+        # Flip it once
+        flipped_once = original.flip()
+        assert isinstance(flipped_once, FlipBiArrow)
+
+        # Flip it again - should unwrap back to original
+        flipped_twice = flipped_once.flip()
+        assert flipped_twice.apply(5.0) == 10.0  # Back to original behavior
+        assert flipped_twice.rev_apply(10.0) == 5.0
+
+        # Check it's actually the same behavior as original
+        assert flipped_twice.apply(7.0) == original.apply(7.0)
+        assert flipped_twice.rev_apply(14.0) == original.rev_apply(14.0)
+
+    def test_flip_with_identity(self) -> None:
+        """Test flipping an identity BiArrow."""
+        identity: BiArrow[int, int] = BiArrow.identity()
+        flipped = identity.flip()
+
+        # Identity flipped is still identity
+        assert flipped.apply(42) == 42
+        assert flipped.rev_apply(42) == 42
 
 
 class TestChainArrow:
@@ -189,40 +234,40 @@ class TestChainArrow:
         assert result.apply(5) == 9
 
 
-class TestChainIso:
+class TestChainBiArrow:
     def test_link_both_chains(self) -> None:
-        i1: Iso[float, float] = Iso.functions(lambda x: x + 1, lambda x: x - 1)
-        i2: Iso[float, float] = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-        chain1: Iso[float, float] = ChainIso.link(i1, i2)
+        i1: BiArrow[float, float] = BiArrow.functions(lambda x: x + 1, lambda x: x - 1)
+        i2: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+        chain1: BiArrow[float, float] = ChainBiArrow.link(i1, i2)
 
-        i3: Iso[float, float] = Iso.functions(lambda x: x - 3, lambda x: x + 3)
-        i4: Iso[float, float] = Iso.functions(lambda x: x / 2, lambda x: x * 2)
-        chain2: Iso[float, float] = ChainIso.link(i3, i4)
+        i3: BiArrow[float, float] = BiArrow.functions(lambda x: x - 3, lambda x: x + 3)
+        i4: BiArrow[float, float] = BiArrow.functions(lambda x: x / 2, lambda x: x * 2)
+        chain2: BiArrow[float, float] = ChainBiArrow.link(i3, i4)
 
-        result = ChainIso.link(chain1, chain2)
-        assert result.forward(5.0) == 4.5
-        assert result.backward(4.5) == 5.0
+        result = ChainBiArrow.link(chain1, chain2)
+        assert result.apply(5.0) == 4.5
+        assert result.rev_apply(4.5) == 5.0
 
     def test_link_first_chain(self) -> None:
-        i1: Iso[float, float] = Iso.functions(lambda x: x + 1, lambda x: x - 1)
-        i2: Iso[float, float] = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-        chain: Iso[float, float] = ChainIso.link(i1, i2)
+        i1: BiArrow[float, float] = BiArrow.functions(lambda x: x + 1, lambda x: x - 1)
+        i2: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+        chain: BiArrow[float, float] = ChainBiArrow.link(i1, i2)
 
-        i3: Iso[float, float] = Iso.functions(lambda x: x - 3, lambda x: x + 3)
-        result = ChainIso.link(chain, i3)
-        assert result.forward(5.0) == 9.0
-        assert result.backward(9.0) == 5.0
+        i3: BiArrow[float, float] = BiArrow.functions(lambda x: x - 3, lambda x: x + 3)
+        result = ChainBiArrow.link(chain, i3)
+        assert result.apply(5.0) == 9.0
+        assert result.rev_apply(9.0) == 5.0
 
     def test_link_second_chain(self) -> None:
-        i1: Iso[float, float] = Iso.functions(lambda x: x + 1, lambda x: x - 1)
+        i1: BiArrow[float, float] = BiArrow.functions(lambda x: x + 1, lambda x: x - 1)
 
-        i2: Iso[float, float] = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-        i3: Iso[float, float] = Iso.functions(lambda x: x - 3, lambda x: x + 3)
-        chain: Iso[float, float] = ChainIso.link(i2, i3)
+        i2: BiArrow[float, float] = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+        i3: BiArrow[float, float] = BiArrow.functions(lambda x: x - 3, lambda x: x + 3)
+        chain: BiArrow[float, float] = ChainBiArrow.link(i2, i3)
 
-        result = ChainIso.link(i1, chain)
-        assert result.forward(5.0) == 9.0
-        assert result.backward(9.0) == 5.0
+        result = ChainBiArrow.link(i1, chain)
+        assert result.apply(5.0) == 9.0
+        assert result.rev_apply(9.0) == 5.0
 
 
 class ConcreteSeqArrowM(SeqArrowM[int, int]):

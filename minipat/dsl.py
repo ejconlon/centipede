@@ -19,6 +19,7 @@ from minipat.combinators import (
     convert_to_int_stream,
     midinote_stream,
     note_stream,
+    notename_stream,
     program_stream,
     sound_stream,
     value_stream,
@@ -598,7 +599,7 @@ class Flow:
         return Flow(Stream.compose(cycle_sections))
 
 
-def note(input_val: SymStreamLike) -> Flow:
+def notename(input_val: SymStreamLike) -> Flow:
     """Create a flow from note names.
 
     Args:
@@ -612,6 +613,23 @@ def note(input_val: SymStreamLike) -> Flow:
         note("c4 d4 e4")         # C major scale fragment
         note("c4 ~ g4")          # C4, rest, G4
         note("[c4,e4,g4]")       # C major chord (simultaneous)
+    """
+    return Flow(notename_stream(input_val))
+
+
+def note(input_val: SymStreamLike) -> Flow:
+    """Create a flow from notes with optional chord symbols.
+
+    Args:
+        input_val: Pattern string or stream containing notes and chord symbols
+
+    Returns:
+        A Flow containing simultaneous MIDI note attributes for each chord
+
+    Examples:
+        note("c4'maj7 f4'min")      # C major 7th, F minor
+        note("c4'maj7 ~ f4'min")    # C major 7th, rest, F minor
+        note("[c4'maj7,f4'min]")    # Layered chords (simultaneous)
     """
     return Flow(note_stream(input_val))
 

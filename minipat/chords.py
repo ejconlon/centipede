@@ -1,0 +1,244 @@
+"""Chord definitions and utilities for minipat."""
+
+from __future__ import annotations
+
+from typing import NewType, Optional, cast
+
+from minipat.messages import Note
+from spiny import PSeq
+
+Chord = NewType("Chord", str)
+
+_CHORD_MAP = cast(
+    dict[str, Chord],
+    {
+        # Major variants
+        "major": "maj",
+        "maj": "maj",
+        "M": "maj",
+        # Augmented
+        "aug": "aug",
+        "plus": "aug",
+        "sharp5": "aug",
+        # Sixth chords
+        "six": "6",
+        "6": "6",
+        "69": "69",
+        "sixNine": "69",
+        "six9": "69",
+        "sixby9": "69",
+        "6by9": "69",
+        # Major seventh and extensions
+        "major7": "maj7",
+        "maj7": "maj7",
+        "M7": "maj7",
+        "major9": "maj9",
+        "maj9": "maj9",
+        "M9": "maj9",
+        "add9": "add9",
+        "major11": "maj11",
+        "maj11": "maj11",
+        "M11": "maj11",
+        "add11": "add11",
+        "major13": "maj13",
+        "maj13": "maj13",
+        "M13": "maj13",
+        "add13": "add13",
+        # Dominant chords
+        "dom7": "dom7",
+        "dom9": "dom9",
+        "dom11": "dom11",
+        "dom13": "dom13",
+        "sevenFlat5": "7f5",
+        "7f5": "7f5",
+        "sevenSharp5": "7s5",
+        "7s5": "7s5",
+        "sevenFlat9": "7f9",
+        "7f9": "7f9",
+        "nine": "9",
+        "9": "9",
+        "eleven": "11",
+        "11": "11",
+        "thirteen": "13",
+        "13": "13",
+        # Minor chords
+        "minor": "min",
+        "min": "min",
+        "m": "min",
+        "diminished": "dim",
+        "dim": "dim",
+        "minorSharp5": "mins5",
+        "msharp5": "mins5",
+        "mS5": "mins5",
+        "minor6": "min6",
+        "min6": "min6",
+        "m6": "min6",
+        "minorSixNine": "min69",
+        "minor69": "min69",
+        "min69": "min69",
+        "minSixNine": "min69",
+        "m69": "min69",
+        "mSixNine": "min69",
+        "m6by9": "min69",
+        "minor7flat5": "min7f5",
+        "minor7f5": "min7f5",
+        "min7flat5": "min7f5",
+        "min7f5": "min7f5",
+        "m7flat5": "min7f5",
+        "m7f5": "min7f5",
+        "minor7": "min7",
+        "min7": "min7",
+        "m7": "min7",
+        "minor7sharp5": "min7s5",
+        "minor7s5": "min7s5",
+        "min7sharp5": "min7s5",
+        "min7s5": "min7s5",
+        "m7sharp5": "min7s5",
+        "m7s5": "min7s5",
+        "minor7flat9": "min7f9",
+        "minor7f9": "min7f9",
+        "min7flat9": "min7f9",
+        "min7f9": "min7f9",
+        "m7flat9": "min7f9",
+        "m7f9": "min7f9",
+        "minor7sharp9": "min7s9",
+        "minor7s9": "min7s9",
+        "min7sharp9": "min7s9",
+        "min7s9": "min7s9",
+        "m7sharp9": "min7s9",
+        "m7s9": "min7s9",
+        "diminished7": "dim7",
+        "dim7": "dim7",
+        "minor9": "min9",
+        "min9": "min9",
+        "m9": "min9",
+        "minor11": "min11",
+        "min11": "min11",
+        "m11": "min11",
+        "minor13": "min13",
+        "min13": "min13",
+        "m13": "min13",
+        "minorMajor7": "mmaj7",
+        "minMaj7": "mmaj7",
+        "mmaj7": "mmaj7",
+        # Other chords
+        "one": "1",
+        "1": "1",
+        "five": "5",
+        "5": "5",
+        "sus2": "sus2",
+        "sus4": "sus4",
+        "sevenSus2": "7sus2",
+        "7sus2": "7sus2",
+        "sevenSus4": "7sus4",
+        "7sus4": "7sus4",
+        "nineSus4": "9sus4",
+        "ninesus4": "9sus4",
+        "9sus4": "9sus4",
+    },
+)
+
+
+# Chord note intervals (semitones from root)
+_CHORD_INTERVALS = cast(
+    dict[Chord, list[int]],
+    {
+        # Major chords
+        "maj": [0, 4, 7],
+        "aug": [0, 4, 8],
+        "6": [0, 4, 7, 9],
+        "69": [0, 4, 7, 9, 14],
+        "maj7": [0, 4, 7, 11],
+        "maj9": [0, 4, 7, 11, 14],
+        "add9": [0, 4, 7, 14],
+        "maj11": [0, 4, 7, 11, 14, 17],
+        "add11": [0, 4, 7, 17],
+        "maj13": [0, 4, 7, 11, 14, 21],
+        "add13": [0, 4, 7, 21],
+        # Dominant chords
+        "dom7": [0, 4, 7, 10],
+        "dom9": [0, 4, 7, 14],
+        "dom11": [0, 4, 7, 17],
+        "dom13": [0, 4, 7, 21],
+        "7f5": [0, 4, 6, 10],
+        "7s5": [0, 4, 8, 10],
+        "7f9": [0, 4, 7, 10, 13],
+        "9": [0, 4, 7, 10, 14],
+        "11": [0, 4, 7, 10, 14, 17],
+        "13": [0, 4, 7, 10, 14, 17, 21],
+        # Minor chords
+        "min": [0, 3, 7],
+        "dim": [0, 3, 6],
+        "mins5": [0, 3, 8],
+        "min6": [0, 3, 7, 9],
+        "min69": [0, 3, 7, 9, 14],
+        "min7f5": [0, 3, 6, 10],
+        "min7": [0, 3, 7, 10],
+        "min7s5": [0, 3, 8, 10],
+        "min7f9": [0, 3, 7, 10, 13],
+        "min7s9": [0, 3, 7, 10, 14],
+        "dim7": [0, 3, 6, 9],
+        "min9": [0, 3, 7, 10, 14],
+        "min11": [0, 3, 7, 10, 14, 17],
+        "min13": [0, 3, 7, 10, 14, 17, 21],
+        "mmaj7": [0, 3, 7, 11],
+        # Other chords
+        "1": [0],
+        "5": [0, 7],
+        "sus2": [0, 2, 7],
+        "sus4": [0, 5, 7],
+        "7sus2": [0, 2, 7, 10],
+        "7sus4": [0, 5, 7, 10],
+        "9sus4": [0, 5, 7, 10, 14],
+    },
+)
+
+
+def parse_chord_name(name: str) -> Optional[Chord]:
+    """Parse a chord name string into a canonical chord name.
+
+    Args:
+        name: The chord name string to parse (case-insensitive)
+
+    Returns:
+        Canonical chord name if found, None otherwise
+    """
+    # Try exact match first
+    if name in _CHORD_MAP:
+        return _CHORD_MAP[name]
+
+    # Then try lowercase match
+    return _CHORD_MAP.get(name.lower())
+
+
+def get_chord_intervals(chord: Chord) -> PSeq[int]:
+    """Get the semitone intervals for a chord.
+
+    Args:
+        chord: The chord name
+
+    Returns:
+        PSeq of semitone intervals from the root
+    """
+    return PSeq.mk(_CHORD_INTERVALS[chord])
+
+
+def chord_to_notes(root: Note, chord: Chord) -> PSeq[Note]:
+    """Convert a chord to Note objects.
+
+    Only includes notes within valid MIDI range (0-127).
+
+    Args:
+        root: Note object for the root
+        chord: The chord type
+
+    Returns:
+        PSeq of Note objects for the chord (filtered to valid MIDI range)
+    """
+    intervals = _CHORD_INTERVALS[chord]
+    notes = []
+    for interval in intervals:
+        midi_value = root + interval
+        if 0 <= midi_value <= 127:
+            notes.append(Note(midi_value))
+    return PSeq.mk(notes)

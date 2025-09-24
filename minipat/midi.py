@@ -13,7 +13,6 @@ from logging import Logger
 from threading import Event
 from typing import (
     Any,
-    List,
     Optional,
     cast,
     override,
@@ -137,7 +136,7 @@ def parse_messages(
     orbit: Optional[Orbit],
     attrs: MidiAttrs,
     default_velocity: Optional[Velocity] = None,
-) -> List[FrozenMessage]:
+) -> list[FrozenMessage]:
     """Parse MIDI attributes into multiple FrozenMessages
 
     Converts a set of MIDI attributes into multiple MIDI message types using

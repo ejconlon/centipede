@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#31}
+Next available task ID: {#35}
 
 ### Active
 
@@ -38,6 +38,10 @@ Next available task ID: {#31}
 
 ### Done
 
+- {#34} Change Iso -> BiArrow
+- {#33} Make strict checks default and rename check to precommit
+- {#32} Use new-style dict/list/tuple types
+- {#31} Support chord patterns
 - {#30} Add message bundle support to MidiAttrs
   - Updated MidiMessage.parse_attrs to handle BundleKey
   - Added bundle_stream function to combinators

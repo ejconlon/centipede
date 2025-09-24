@@ -1,4 +1,4 @@
-"""Arrow and Isomorphism abstractions for functional transformations.
+"""Arrow and BiArrowmorphism abstractions for functional transformations.
 
 This module provides generalized abstractions for transformations between types,
 inspired by concepts from category theory and functional programming:
@@ -7,9 +7,10 @@ inspired by concepts from category theory and functional programming:
   Arrows compose naturally and support identity operations, making them useful
   for building complex data pipelines and transformations.
 
-- **Iso[A, B]**: A bidirectional transformation (isomorphism) between types A and B.
-  Isomorphisms represent lossless conversions where you can transform back and forth
-  between two representations without losing information.
+- **BiArrow[A, B]**: A bidirectional transformation between types A and B.
+  BiArrows represent lossless conversions where you can transform back and forth
+  between two representations without losing information. It is allowed that
+  these transformations take you to some canonical form as a fixed point.
 
 - **ArrowM[A, B, FB]**: Monadic arrows (Kleisli arrows) that produce results in a
   monadic context. These enable composition of computations with effects like
@@ -20,7 +21,7 @@ inspired by concepts from category theory and functional programming:
 
 These abstractions generalize patterns found throughout the codebase:
 - PatBinder in minipat.pat follows the ArrowM pattern
-- Element parsers in minipat.combinators use the Iso pattern
+- Element parsers in minipat.combinators use the BiArrow pattern
 
 Examples:
     Basic arrow composition::
@@ -32,16 +33,16 @@ Examples:
         >>> pipeline.apply(5)  # (5 * 2) + 1 = 11
         11
 
-    Isomorphic transformations::
+    BiArrowmorphic transformations::
 
-        >>> from spiny.arrow import Iso
-        >>> binary_decimal = Iso.functions(
+        >>> from spiny.arrow import BiArrow
+        >>> binary_decimal = BiArrow.functions(
         ...     lambda n: bin(n)[2:],  # decimal to binary string
         ...     lambda s: int(s, 2)    # binary string to decimal
         ... )
-        >>> binary_decimal.forward(10)
+        >>> binary_decimal.apply(10)
         '1010'
-        >>> binary_decimal.backward('1010')
+        >>> binary_decimal.rev_apply('1010')
         10
 
     Monadic computations with SeqArrowM::
@@ -76,7 +77,7 @@ class Arrow[A, B](metaclass=ABCMeta):
     Arrows support:
     - Identity: A neutral element that returns input unchanged
     - Composition: Chaining arrows together to create new transformations
-    - Conversion to Iso: Combining with another arrow to form an isomorphism
+    - Conversion to BiArrow: Combining with another arrow to form an BiArrow
 
     Type Parameters:
         A: The input type
@@ -157,83 +158,71 @@ class Arrow[A, B](metaclass=ABCMeta):
         """
         return ChainArrow.link(self, other)
 
-    def iso_forward(self, other: Arrow[B, A]) -> Iso[A, B]:
-        """Create an isomorphism using this arrow as the forward direction.
+    def bi_arr_forward(self, other: Arrow[B, A]) -> BiArrow[A, B]:
+        """Create an BiArrow using this arrow as the forward direction.
 
         Args:
             other: An arrow for the backward direction (B -> A).
 
         Returns:
-            An isomorphism with this arrow as forward and other as backward.
+            A BiArrow with this arrow as forward and other as backward.
 
         Example:
             >>> encode = Arrow.function(lambda x: x * 2)
             >>> decode = Arrow.function(lambda x: x / 2)
-            >>> iso = encode.iso_forward(decode)
-            >>> iso.forward(5)
+            >>> bi = encode.bi_arr_forward(decode)
+            >>> bi.apply(5)
             10
-            >>> iso.backward(10)
+            >>> bi.rev_apply(10)
             5.0
         """
-        return FnIso(self.apply, other.apply)
+        return FnBiArrow(self.apply, other.apply)
 
-    def iso_backward(self, other: Arrow[B, A]) -> Iso[B, A]:
-        """Create an isomorphism using this arrow as the backward direction.
+    def bi_arr_backward(self, other: Arrow[B, A]) -> BiArrow[B, A]:
+        """Create an BiArrow using this arrow as the backward direction.
 
         Args:
             other: An arrow for the forward direction (B -> A).
 
         Returns:
-            An isomorphism with other as forward and this arrow as backward.
+            A BiArrow with other as forward and this arrow as backward.
         """
-        return FnIso(other.apply, self.apply)
+        return FnBiArrow(other.apply, self.apply)
 
 
-class Iso[A, B](metaclass=ABCMeta):
-    """Abstract base class for bidirectional transformations (isomorphisms).
+class BiArrow[A, B](Arrow[A, B]):
+    """Abstract base class for bidirectional transformations (BiArrows).
 
-    An Iso represents a bidirectional transformation between types A and B,
+    A BiArrow represents a bidirectional transformation between types A and B,
     where the transformation can be applied in both directions. This means
     there exists both a forward transformation (A -> B) and a backward
     transformation (B -> A) that are inverses of each other.
 
-    Isomorphisms are useful when you need to:
+    BiArrowmorphisms are useful when you need to:
     - Parse and render data (e.g., string <-> structured data)
     - Convert between equivalent representations
     - Implement reversible encodings
 
-    Isos support:
+    BiArrows support:
     - Identity: A neutral element that returns input unchanged
-    - Composition: Chaining isos together to create new transformations
+    - Composition: Chaining BiArrows together to create new transformations
     - Conversion to Arrow: Extracting either direction as a one-way transformation
 
     Type Parameters:
-        A: The first type in the isomorphism
-        B: The second type in the isomorphism
+        A: The input type (or output, reversed)
+        B: The output type (or inputt, reversed)
 
     Examples:
-        >>> celsius_fahrenheit = Iso.functions(
+        >>> celsius_fahrenheit = BiArrow.functions(
         ...     lambda c: c * 9/5 + 32,  # forward: Celsius to Fahrenheit
         ...     lambda f: (f - 32) * 5/9  # backward: Fahrenheit to Celsius
         ... )
-        >>> celsius_fahrenheit.forward(0)  # Returns 32
-        >>> celsius_fahrenheit.backward(32)  # Returns 0
+        >>> celsius_fahrenheit.apply(0)  # Returns 32
+        >>> celsius_fahrenheit.rev_apply(32)  # Returns 0
     """
 
     @abstractmethod
-    def forward(self, value: A) -> B:
-        """Apply the forward transformation.
-
-        Args:
-            value: The input value of type A.
-
-        Returns:
-            The transformed value of type B.
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    def backward(self, value: B) -> A:
+    def rev_apply(self, value: B) -> A:
         """Apply the backward transformation.
 
         Args:
@@ -245,107 +234,128 @@ class Iso[A, B](metaclass=ABCMeta):
         raise NotImplementedError()
 
     @staticmethod
-    def identity() -> Iso[A, A]:
-        """Create an identity isomorphism that returns its input unchanged.
+    def identity() -> BiArrow[A, A]:
+        """Create an identity BiArrow that returns its input unchanged.
 
-        The identity isomorphism is the neutral element for isomorphism composition.
+        identity is the neutral element BiArrow composition.
         Both forward and backward transformations return the input unchanged.
 
         Returns:
-            An identity isomorphism that maps any value to itself.
+            An identity BiArrow that maps any value to itself.
 
         Example:
-            >>> id_iso = Iso.identity()
-            >>> id_iso.forward(42)
+            >>> id_iso = BiArrow.identity()
+            >>> id_iso.apply(42)
             42
-            >>> id_iso.backward(42)
+            >>> id_iso.rev_apply(42)
             42
         """
-        return IdIso()
+        return IdBiArrow()
 
     @staticmethod
-    def functions(fwd: Callable[[A], B], bwd: Callable[[B], A]) -> Iso[A, B]:
-        """Create an isomorphism from a pair of functions.
+    def functions(fwd: Callable[[A], B], bwd: Callable[[B], A]) -> BiArrow[A, B]:
+        """Create an BiArrow from a pair of functions.
 
-        The functions should be inverses of each other for a true isomorphism,
-        meaning that `bwd(fwd(x)) == x` and `fwd(bwd(y)) == y`.
+        The functions should be inverses of each other for a true BiArrow,
+        meaning that `bwd(fwd(x)) == x` and `fwd(bwd(y)) == y`. However, it
+        is allowed that they project to a canonical form at a fixed point.
 
         Args:
             fwd: Function for the forward transformation (A -> B).
             bwd: Function for the backward transformation (B -> A).
 
         Returns:
-            An isomorphism using the provided functions.
+            A BiArrow using the provided functions.
 
         Example:
-            >>> km_miles = Iso.functions(
+            >>> km_miles = BiArrow.functions(
             ...     lambda km: km * 0.621371,  # km to miles
             ...     lambda mi: mi * 1.60934    # miles to km
             ... )
-            >>> km_miles.forward(100)  # 100 km to miles
+            >>> km_miles.apply(100)  # 100 km to miles
             62.1371
-            >>> km_miles.backward(62.1371)  # back to km
+            >>> km_miles.rev_apply(62.1371)  # back to km
             100.0
         """
-        return FnIso(fwd, bwd)
+        return FnBiArrow(fwd, bwd)
 
-    def and_then[C](self, other: Iso[B, C]) -> Iso[A, C]:
-        """Compose this isomorphism with another isomorphism.
+    def bi_and_then[C](self, other: BiArrow[B, C]) -> BiArrow[A, C]:
+        """Compose this BiArrow with another BiArrow.
 
-        Creates a new isomorphism that applies this transformation first,
+        Creates a new BiArrow that applies this transformation first,
         then the other transformation. The backward direction applies
         the transformations in reverse order.
 
         Args:
-            other: An isomorphism from type B to type C.
+            other: A BiArrow from type B to type C.
 
         Returns:
-            A composed isomorphism from type A to type C.
+            A composed BiArrow from type A to type C.
 
         Example:
-            >>> celsius_kelvin = Iso.functions(
+            >>> celsius_kelvin = BiArrow.functions(
             ...     lambda c: c + 273.15,
             ...     lambda k: k - 273.15
             ... )
-            >>> kelvin_fahrenheit = Iso.functions(
+            >>> kelvin_fahrenheit = BiArrow.functions(
             ...     lambda k: (k - 273.15) * 9/5 + 32,
             ...     lambda f: (f - 32) * 5/9 + 273.15
             ... )
             >>> celsius_fahrenheit = celsius_kelvin.and_then(kelvin_fahrenheit)
-            >>> celsius_fahrenheit.forward(0)  # 0°C to °F
+            >>> celsius_fahrenheit.apply(0)  # 0°C to °F
             32.0
-            >>> celsius_fahrenheit.backward(32)  # 32°F to °C
+            >>> celsius_fahrenheit.rev_apply(32)  # 32°F to °C
             0.0
         """
-        return ChainIso.link(self, other)
+        return ChainBiArrow.link(self, other)
 
-    def arrow_forward(self) -> Arrow[A, B]:
+    def arr_forward(self) -> Arrow[A, B]:
         """Extract the forward transformation as an arrow.
 
         Returns:
             An arrow that applies only the forward transformation.
 
         Example:
-            >>> iso = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-            >>> forward_arrow = iso.arrow_forward()
+            >>> bi = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+            >>> forward_arrow = bi.arr_forward()
             >>> forward_arrow.apply(5)
             10
         """
-        return IsoForwardArrow(self)
+        return BiArrowForwardArrow(self)
 
-    def arrow_backward(self) -> Arrow[B, A]:
+    def arr_backward(self) -> Arrow[B, A]:
         """Extract the backward transformation as an arrow.
 
         Returns:
             An arrow that applies only the backward transformation.
 
         Example:
-            >>> iso = Iso.functions(lambda x: x * 2, lambda x: x / 2)
-            >>> backward_arrow = iso.arrow_backward()
+            >>> bi = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+            >>> backward_arrow = bi.arr_backward()
             >>> backward_arrow.apply(10)
             5.0
         """
-        return IsoBackwardArrow(self)
+        return BiArrowBackwardArrow(self)
+
+    def flip(self) -> BiArrow[B, A]:
+        """Flip the direction of this BiArrow.
+
+        Creates a new BiArrow where the forward and backward directions
+        are swapped. If this BiArrow is already a FlipBiArrow, it unwraps
+        back to the original BiArrow for efficiency.
+
+        Returns:
+            A BiArrow with swapped forward and backward directions.
+
+        Example:
+            >>> bi = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+            >>> flipped = bi.flip()
+            >>> flipped.apply(10)  # Uses the original backward
+            5.0
+            >>> flipped.rev_apply(5)  # Uses the original forward
+            10
+        """
+        return FlipBiArrow.mk(self)
 
 
 class FnArrow[A, B](Arrow[A, B]):
@@ -428,8 +438,8 @@ class ChainArrow[A, C](Arrow[A, C]):
         return cast(C, result)
 
 
-class FnIso[A, B](Iso[A, B]):
-    """Isomorphism implementation using a pair of functions."""
+class FnBiArrow[A, B](BiArrow[A, B]):
+    """BiArrowmorphism implementation using a pair of functions."""
 
     def __init__(self, fwd: Callable[[A], B], bwd: Callable[[B], A]) -> None:
         """Initialize with forward and backward functions.
@@ -442,113 +452,163 @@ class FnIso[A, B](Iso[A, B]):
         self._bwd = bwd
 
     @override
-    def forward(self, value: A) -> B:
+    def apply(self, value: A) -> B:
         return self._fwd(value)
 
     @override
-    def backward(self, value: B) -> A:
+    def rev_apply(self, value: B) -> A:
         return self._bwd(value)
 
 
-class IdIso[A](Iso[A, A], Singleton):
-    """Identity isomorphism that returns its input unchanged.
+class IdBiArrow[A](BiArrow[A, A], Singleton):
+    """Identity BiArrow that returns its input unchanged.
 
-    This is the neutral element for isomorphism composition.
+    This is the neutral element for BiArrow composition.
     Both forward and backward transformations are the identity function.
     """
 
     @override
-    def forward(self, value: A) -> A:
+    def apply(self, value: A) -> A:
         """Return the input unchanged."""
         return value
 
     @override
-    def backward(self, value: A) -> A:
+    def rev_apply(self, value: A) -> A:
         """Return the input unchanged."""
         return value
 
 
-class ChainIso[A, C](Iso[A, C]):
-    """Composed isomorphism created by chaining multiple isomorphisms.
+class ChainBiArrow[A, C](BiArrow[A, C]):
+    """Composed BiArrow created by chaining multiple BiArrows.
 
-    Forward transformation applies isomorphisms left to right.
+    Forward transformation applies BiArrows left to right.
     Backward transformation applies them right to left.
     """
 
-    def __init__(self, chain: PSeq[Iso[Any, Any]]) -> None:
-        """Initialize with a sequence of isomorphisms to compose."""
+    def __init__(self, chain: PSeq[BiArrow[Any, Any]]) -> None:
+        """Initialize with a sequence of BiArrows to compose."""
         self._chain = chain
 
     @staticmethod
-    def link[B](i1: Iso[A, B], i2: Iso[B, C]) -> Iso[A, C]:
-        """Link two isomorphisms together with optimization.
+    def link[B](i1: BiArrow[A, B], i2: BiArrow[B, C]) -> BiArrow[A, C]:
+        """Link two BiArrows together with optimization.
 
         Handles special cases:
-        - Identity isomorphisms are eliminated
+        - Identity BiArrows are eliminated
         - Nested chains are flattened
 
         Args:
-            i1: First isomorphism (A <-> B).
-            i2: Second isomorphism (B <-> C).
+            i1: First BiArrow (A <-> B).
+            i2: Second BiArrow (B <-> C).
 
         Returns:
-            Optimized composed isomorphism (A <-> C).
+            Optimized composed BiArrow (A <-> C).
         """
-        chain: PSeq[Iso[Any, Any]]
-        if isinstance(i1, IdIso):
-            return cast(Iso[A, C], i2)
-        elif isinstance(i2, IdIso):
-            return cast(Iso[A, C], i1)
-        elif isinstance(i1, ChainIso):
-            if isinstance(i2, ChainIso):
+        chain: PSeq[BiArrow[Any, Any]]
+        if isinstance(i1, IdBiArrow):
+            return cast(BiArrow[A, C], i2)
+        elif isinstance(i2, IdBiArrow):
+            return cast(BiArrow[A, C], i1)
+        elif isinstance(i1, ChainBiArrow):
+            if isinstance(i2, ChainBiArrow):
                 chain = i1._chain.concat(i2._chain)
             else:
                 chain = i1._chain.snoc(i2)
-        elif isinstance(i2, ChainIso):
+        elif isinstance(i2, ChainBiArrow):
             chain = i2._chain.cons(i1)
         else:
             chain = PSeq.mk([i1, i2])
-        return ChainIso(chain)
+        return ChainBiArrow(chain)
 
     @override
-    def forward(self, value: A) -> C:
+    def apply(self, value: A) -> C:
         result: Any = value
         for iso in self._chain:
-            result = iso.forward(result)
+            result = iso.apply(result)
         return cast(C, result)
 
     @override
-    def backward(self, value: C) -> A:
+    def rev_apply(self, value: C) -> A:
         result: Any = value
         for iso in reversed(list(self._chain)):
-            result = iso.backward(result)
+            result = iso.rev_apply(result)
         return cast(A, result)
 
 
-class IsoForwardArrow[A, B](Arrow[A, B]):
-    """Arrow adapter that applies only the forward direction of an isomorphism."""
+class BiArrowForwardArrow[A, B](Arrow[A, B]):
+    """Arrow adapter that applies only the forward direction of an BiArrow."""
 
-    def __init__(self, iso: Iso[A, B]) -> None:
-        """Initialize with an isomorphism."""
-        self._iso = iso
+    def __init__(self, bi: BiArrow[A, B]) -> None:
+        """Initialize with an BiArrow."""
+        self._bi = bi
 
     @override
     def apply(self, value: A) -> B:
-        """Apply the forward transformation of the isomorphism."""
-        return self._iso.forward(value)
+        """Apply the forward transformation of the BiArrow."""
+        return self._bi.apply(value)
 
 
-class IsoBackwardArrow[A, B](Arrow[B, A]):
-    """Arrow adapter that applies only the backward direction of an isomorphism."""
+class BiArrowBackwardArrow[A, B](Arrow[B, A]):
+    """Arrow adapter that applies only the backward direction of an BiArrow."""
 
-    def __init__(self, iso: Iso[A, B]) -> None:
-        """Initialize with an isomorphism."""
-        self._iso = iso
+    def __init__(self, bi: BiArrow[A, B]) -> None:
+        """Initialize with an BiArrow."""
+        self._bi = bi
 
     @override
     def apply(self, value: B) -> A:
-        """Apply the backward transformation of the isomorphism."""
-        return self._iso.backward(value)
+        """Apply the backward transformation of the BiArrow."""
+        return self._bi.rev_apply(value)
+
+
+class FlipBiArrow[A, B](BiArrow[B, A]):
+    """BiArrow with flipped forward and backward directions.
+
+    This class wraps a BiArrow and swaps its forward and backward
+    transformations. It includes optimization to unwrap nested FlipBiArrows.
+    """
+
+    def __init__(self, bi: BiArrow[A, B]) -> None:
+        """Initialize with a BiArrow to flip.
+
+        Args:
+            bi: The BiArrow whose directions should be flipped.
+        """
+        self._bi = bi
+
+    @staticmethod
+    def mk(bi: BiArrow[A, B]) -> BiArrow[B, A]:
+        """Smart constructor that unwraps nested FlipBiArrows.
+
+        If the input is already a FlipBiArrow, returns the original
+        BiArrow instead of creating a double-wrapped FlipBiArrow.
+
+        Args:
+            bi: The BiArrow to potentially flip.
+
+        Returns:
+            Either the original BiArrow (if bi is FlipBiArrow) or a new FlipBiArrow.
+
+        Example:
+            >>> original = BiArrow.functions(lambda x: x * 2, lambda x: x / 2)
+            >>> flipped = FlipBiArrow.mk(original)  # Creates FlipBiArrow
+            >>> double_flipped = FlipBiArrow.mk(flipped)  # Returns original
+            >>> double_flipped is original
+            True
+        """
+        if isinstance(bi, FlipBiArrow):
+            return bi._bi
+        return FlipBiArrow(bi)
+
+    @override
+    def apply(self, value: B) -> A:
+        """Apply the flipped forward transformation (original backward)."""
+        return self._bi.rev_apply(value)
+
+    @override
+    def rev_apply(self, value: A) -> B:
+        """Apply the flipped backward transformation (original forward)."""
+        return self._bi.apply(value)
 
 
 class ArrowM[A, B, FB](metaclass=ABCMeta):

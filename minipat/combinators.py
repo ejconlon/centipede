@@ -16,6 +16,7 @@ from minipat.messages import (
     MidiBundle,
     Note,
     NoteField,
+    NoteKey,
     Program,
     ProgramField,
     ValueField,
@@ -25,7 +26,8 @@ from minipat.messages import (
 from minipat.parser import parse_int_pattern, parse_num_pattern, parse_sym_pattern
 from minipat.pat import Pat, PatBinder
 from minipat.stream import MergeStrat, Stream
-from spiny.arrow import Iso
+from spiny import PSeq
+from spiny.arrow import Arrow, BiArrow
 from spiny.common import Singleton
 from spiny.dmap import DMap
 
@@ -115,7 +117,7 @@ class IntBinder(PatBinder[str, int]):
             raise ValueError(f"Invalid integer value: '{value}'. Expected integer.")
 
 
-class IntElemParser(Iso[str, int], Singleton):
+class IntElemParser(BiArrow[str, int], Singleton):
     """Parser for integer values from string representations.
 
     Parses string representations of integers.
@@ -130,15 +132,15 @@ class IntElemParser(Iso[str, int], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> int:
+    def apply(self, value: str) -> int:
         return int(value)
 
     @override
-    def backward(self, value: int) -> str:
+    def rev_apply(self, value: int) -> str:
         return str(value)
 
 
-class FractionElemParser(Iso[str, Fraction], Singleton):
+class FractionElemParser(BiArrow[str, Fraction], Singleton):
     """Parser for Fraction values from string representations.
 
     Parses string representations of numbers and converts them to Fractions:
@@ -158,7 +160,7 @@ class FractionElemParser(Iso[str, Fraction], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> Fraction:
+    def apply(self, value: str) -> Fraction:
         # Fraction constructor handles all these cases:
         # - "3/4" -> Fraction(3, 4)
         # - "42" -> Fraction(42, 1)
@@ -166,7 +168,7 @@ class FractionElemParser(Iso[str, Fraction], Singleton):
         return Fraction(value)
 
     @override
-    def backward(self, value: Fraction) -> str:
+    def rev_apply(self, value: Fraction) -> str:
         # Render fraction in simplest form
         if value.denominator == 1:
             return str(value.numerator)
@@ -174,7 +176,7 @@ class FractionElemParser(Iso[str, Fraction], Singleton):
             return f"{value.numerator}/{value.denominator}"
 
 
-class NoteNumElemParser(Iso[str, Note], Singleton):
+class NoteNumElemParser(BiArrow[str, Note], Singleton):
     """Selector for parsing numeric MIDI note representations.
 
     Handles direct numeric MIDI note values in the range 0-127.
@@ -192,15 +194,15 @@ class NoteNumElemParser(Iso[str, Note], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> Note:
+    def apply(self, value: str) -> Note:
         return NoteField.mk(int(value))
 
     @override
-    def backward(self, value: Note) -> str:
+    def rev_apply(self, value: Note) -> str:
         return str(value)
 
 
-class NoteNameElemParser(Iso[str, Note], Singleton):
+class NoteNameElemParser(BiArrow[str, Note], Singleton):
     """Selector for parsing musical note names with optional octave numbers.
 
     Converts standard musical notation to MIDI note numbers. Supports
@@ -229,7 +231,7 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> Note:
+    def apply(self, value: str) -> Note:
         # Parse note names like "c4" (middle C = 60), "d#4", "eb3", etc.
         # Also supports notes without octave like "c", "f#", "gb" using DEFAULT_OCTAVE
         note_str = value.lower()
@@ -273,7 +275,7 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
         return NoteField.mk(midi_note)
 
     @override
-    def backward(self, value: Note) -> str:
+    def rev_apply(self, value: Note) -> str:
         # Convert MIDI note back to note name
         note_num = int(value)
         octave = note_num // 12
@@ -284,7 +286,7 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
         return note_name
 
 
-class VelocityElemParser(Iso[str, Velocity], Singleton):
+class VelocityElemParser(BiArrow[str, Velocity], Singleton):
     """Selector for parsing MIDI velocity values.
 
     Handles MIDI velocity values which control the volume/intensity of notes.
@@ -308,15 +310,15 @@ class VelocityElemParser(Iso[str, Velocity], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> Velocity:
+    def apply(self, value: str) -> Velocity:
         return VelocityField.mk(int(value))
 
     @override
-    def backward(self, value: Velocity) -> str:
+    def rev_apply(self, value: Velocity) -> str:
         return str(value)
 
 
-class ChannelElemParser(Iso[str, Channel], Singleton):
+class ChannelElemParser(BiArrow[str, Channel], Singleton):
     """Selector for parsing MIDI channel values.
 
     Handles MIDI channel values which specify which MIDI channel to use.
@@ -332,15 +334,15 @@ class ChannelElemParser(Iso[str, Channel], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> Channel:
+    def apply(self, value: str) -> Channel:
         return ChannelField.mk(int(value))
 
     @override
-    def backward(self, value: Channel) -> str:
+    def rev_apply(self, value: Channel) -> str:
         return str(value)
 
 
-class ProgramElemParser(Iso[str, Program], Singleton):
+class ProgramElemParser(BiArrow[str, Program], Singleton):
     """Selector for parsing MIDI program values.
 
     Handles MIDI program change values which select instrument patches.
@@ -356,15 +358,15 @@ class ProgramElemParser(Iso[str, Program], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> Program:
+    def apply(self, value: str) -> Program:
         return ProgramField.mk(int(value))
 
     @override
-    def backward(self, value: Program) -> str:
+    def rev_apply(self, value: Program) -> str:
         return str(value)
 
 
-class ControlNumElemParser(Iso[str, ControlNum], Singleton):
+class ControlNumElemParser(BiArrow[str, ControlNum], Singleton):
     """Selector for parsing MIDI control number values.
 
     Handles MIDI control change numbers which specify which parameter to control.
@@ -381,15 +383,15 @@ class ControlNumElemParser(Iso[str, ControlNum], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> ControlNum:
+    def apply(self, value: str) -> ControlNum:
         return ControlField.mk(int(value))
 
     @override
-    def backward(self, value: ControlNum) -> str:
+    def rev_apply(self, value: ControlNum) -> str:
         return str(value)
 
 
-class ControlValElemParser(Iso[str, ControlVal], Singleton):
+class ControlValElemParser(BiArrow[str, ControlVal], Singleton):
     """Selector for parsing MIDI control value values.
 
     Handles MIDI control change values which specify the parameter value.
@@ -405,22 +407,22 @@ class ControlValElemParser(Iso[str, ControlVal], Singleton):
     """
 
     @override
-    def forward(self, value: str) -> ControlVal:
+    def apply(self, value: str) -> ControlVal:
         return ValueField.mk(int(value))
 
     @override
-    def backward(self, value: ControlVal) -> str:
+    def rev_apply(self, value: ControlVal) -> str:
         return str(value)
 
 
 class ElemBinder(PatBinder[str, MidiAttrs]):
-    def __init__[V, X](self, iso: Iso[str, V], field: MessageField[V, X]) -> None:
-        self._iso = iso
+    def __init__[V, X](self, bi: BiArrow[str, V], field: MessageField[V, X]) -> None:
+        self._bi = bi
         self._field = field
 
     @override
     def apply(self, value: str) -> Pat[MidiAttrs]:
-        parsed = self._iso.forward(value)
+        parsed = self._bi.apply(value)
         key = self._field.key()
         assert key is not None
         attrs = DMap.singleton(key, parsed)
@@ -478,6 +480,103 @@ def convert_to_bundle_stream(input_val: BundleStreamLike) -> Stream[MidiBundle]:
         raise ValueError(f"Unsupported type for BundleStreamLike: {type(input_val)}")
 
 
+class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
+    """Parser for chord symbols that generates multiple notes.
+
+    Parses chord notation with the following formats:
+    1. Note with chord: "c4'maj7", "f#'min", "bb3'sus4"
+    2. Bare note: "c4", "f#", "bb3" (returns single note)
+
+    Format: [note][accidental][octave]['[chord_name]]
+    - note: c, d, e, f, g, a, b (case insensitive)
+    - accidental: # (sharp) or b (flat), optional
+    - octave: digit 0-9, optional (defaults to DEFAULT_OCTAVE)
+    - ': tick separator between note and chord (required for chords)
+    - chord_name: maj, min, maj7, dom7, etc. (see chords.py for full list)
+
+    Examples:
+        "c4'maj7"  -> [48, 52, 55, 59]  # C major 7th
+        "f#'min"   -> [54, 57, 61]      # F# minor (default octave)
+        "bb3'sus4" -> [46, 51, 53]      # Bb sus4
+        "c4"       -> [48]              # Just C4
+        "f#"       -> [54]              # F# (default octave)
+    """
+
+    @override
+    def apply(self, value: str) -> PSeq[Note]:
+        from minipat.chords import chord_to_notes, parse_chord_name
+
+        chord_str = value.lower()
+
+        # Parse note name
+        if len(chord_str) < 1:
+            raise ValueError(f"Invalid format: {value}")
+
+        # Get base note
+        base_note = chord_str[0]
+        if base_note not in NOTE_NAME_TO_SEMITONE:
+            raise ValueError(f"Invalid note name: {value}")
+
+        semitone = NOTE_NAME_TO_SEMITONE[base_note]
+        pos = 1
+
+        # Check for sharp or flat
+        if pos < len(chord_str):
+            if chord_str[pos] == "#":
+                semitone += 1
+                pos += 1
+            elif chord_str[pos] == "b":
+                semitone -= 1
+                pos += 1
+
+        # Extract octave if present (can be multiple digits)
+        octave = DEFAULT_OCTAVE
+        if pos < len(chord_str) and chord_str[pos].isdigit():
+            octave_start = pos
+            while pos < len(chord_str) and chord_str[pos].isdigit():
+                pos += 1
+            octave = int(chord_str[octave_start:pos])
+
+        # Calculate root MIDI note number and create Note object
+        root_midi = octave * 12 + semitone
+        root_note = Note(root_midi)
+
+        # Check for tick separator
+        if pos < len(chord_str) and chord_str[pos] == "'":
+            # Has a tick, must have a chord name after it
+            pos += 1
+            if pos >= len(chord_str):
+                raise ValueError(f"Tick without chord name: {value}")
+
+            chord_name_str = chord_str[pos:]
+            chord_name = parse_chord_name(chord_name_str)
+            if chord_name is None:
+                raise ValueError(f"Unknown chord type: {chord_name_str}")
+
+            # Generate chord notes (already filtered to valid MIDI range)
+            chord_notes = chord_to_notes(root_note, chord_name)
+
+            if len(chord_notes) == 0:
+                raise ValueError(f"Chord {value} produces no valid MIDI notes")
+
+            return chord_notes
+        else:
+            # No tick - this is a bare note
+            if pos < len(chord_str):
+                # There's extra content after the note without a tick
+                # This could be an old-style chord notation - let's be helpful
+                raise ValueError(
+                    f"Invalid format: {value}. Use a tick (') between note and chord, "
+                    f"e.g., {chord_str[:pos]}'{chord_str[pos:]}"
+                )
+
+            # Return single note
+            if 0 <= root_midi <= 127:
+                return PSeq.mk([root_note])
+            else:
+                raise ValueError(f"Note {value} is out of MIDI range")
+
+
 # =============================================================================
 # Pattern Stream Functions
 # =============================================================================
@@ -490,6 +589,36 @@ _CHANNEL_BINDER = ElemBinder(ChannelElemParser(), ChannelField())
 _PROGRAM_BINDER = ElemBinder(ProgramElemParser(), ProgramField())
 _CONTROL_NUM_BINDER = ElemBinder(ControlNumElemParser(), ControlField())
 _CONTROL_VAL_BINDER = ElemBinder(ControlValElemParser(), ValueField())
+
+
+class ChordBinder(PatBinder[str, MidiAttrs], Singleton):
+    """Binder for chord patterns that generates simultaneous notes."""
+
+    @override
+    def apply(self, value: str) -> Pat[MidiAttrs]:
+        """Parse chord and create simultaneous MIDI note events."""
+        try:
+            chord_parser = ChordElemParser()
+            notes = chord_parser.apply(value)
+
+            # Create a parallel pattern of all the chord notes
+            note_pats = []
+            for note in notes:
+                attrs = DMap.singleton(NoteKey(), note)
+                note_pats.append(Pat.pure(attrs))
+
+            # Return parallel pattern if multiple notes, single pattern if one note
+            if len(note_pats) == 1:
+                return note_pats[0]
+            else:
+                return Pat.par(note_pats)
+
+        except ValueError:
+            # If chord parsing fails, return silence
+            return Pat.silent()
+
+
+_CHORD_BINDER = ChordBinder()
 
 
 def midinote_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
@@ -522,7 +651,7 @@ def midinote_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         raise ValueError(f"Unsupported type for midinote_stream: {type(input_val)}")
 
 
-def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
+def notename_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
     """Create stream from note names.
 
     Parses a pattern containing musical note names with octaves
@@ -533,9 +662,9 @@ def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
                   musical note names with octaves
 
     Examples:
-        note_stream("c4 d4 e4")         # C major scale fragment
-        note_stream("c4 ~ g4")          # C4, rest, G4
-        note_stream("[c4,e4,g4]")       # C major chord (simultaneous)
+        notename_stream("c4 d4 e4")         # C major scale fragment
+        notename_stream("c4 ~ g4")          # C4, rest, G4
+        notename_stream("[c4,e4,g4]")       # C major chord (simultaneous)
     """
     if isinstance(input_val, str):
         return Stream.pat_bind(parse_sym_pattern(input_val), _NOTE_NAME_BINDER)
@@ -550,6 +679,34 @@ def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
         return sym_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
     else:
         raise ValueError(f"Unsupported type for note_stream: {type(input_val)}")
+
+
+def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
+    """Create stream from notes and chord symbols.
+
+    Parses a pattern containing note names and optinoal chord symbols like "c2", "c4'maj7", "f#'min"
+    and creates a stream of simultaneous MIDI note events.
+
+    Args:
+        input_val: Pattern string or stream containing chord symbols
+
+    Examples:
+        note_stream("c4'maj7 f4'min")         # C major 7th, F minor
+        note_stream("g4 ~ c4'maj7")          # G note, rest, C major 7th
+        note_stream("[c4'maj7,f4'min]")       # Layered chords
+    """
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_sym_pattern(input_val), _CHORD_BINDER)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to string stream and bind with chord binder
+        sym_stream = convert_to_sym_stream(input_val)
+
+        def convert_to_midi_attrs(chord_name: str) -> Stream[MidiAttrs]:
+            return Stream.pat(_CHORD_BINDER.apply(chord_name))
+
+        return sym_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for chord_stream: {type(input_val)}")
 
 
 def sound_stream(kit: Kit, input_val: SymStreamLike) -> Stream[MidiAttrs]:

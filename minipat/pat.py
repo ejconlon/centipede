@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from functools import partial
-from typing import Any, Callable, Iterable, Optional, Tuple, cast, override
+from typing import Any, Callable, Iterable, Optional, cast, override
 
 from minipat.common import PartialMatchException, ignore_arg
 from spiny.arrow import ArrowM
@@ -254,7 +254,7 @@ class Pat[T]:
 
     def cata_state[S, Z](
         self, start: S, fn: Callable[[Box[S], PatF[T, Z]], Z]
-    ) -> Tuple[S, Z]:
+    ) -> tuple[S, Z]:
         """Apply a stateful catamorphism to the pattern.
 
         Args:
@@ -499,7 +499,7 @@ def pat_cata_env[V, T, Z](fn: Callable[[V, PatF[T, Z]], Z]) -> Callable[[V, Pat[
 
 def pat_cata_state[S, T, Z](
     fn: Callable[[Box[S], PatF[T, Z]], Z],
-) -> Callable[[S, Pat[T]], Tuple[S, Z]]:
+) -> Callable[[S, Pat[T]], tuple[S, Z]]:
     """Create a stateful catamorphism.
 
     Args:
@@ -510,7 +510,7 @@ def pat_cata_state[S, T, Z](
     """
     k: Callable[[Box[S], Pat[T]], Z] = pat_cata_env(fn)
 
-    def unwrap(start: S, pat: Pat[T]) -> Tuple[S, Z]:
+    def unwrap(start: S, pat: Pat[T]) -> tuple[S, Z]:
         box = Box(start)
         out = k(box, pat)
         return (box.value, out)

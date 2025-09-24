@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Generator, List, NewType, Optional, cast, override
+from typing import Generator, NewType, Optional, cast, override
 
 from mido import Message
 from mido.frozen import FrozenMessage
@@ -449,7 +449,7 @@ class MidiMessage(metaclass=ABCMeta):
             return None
 
     @staticmethod
-    def parse_attrs(attrs: MidiAttrs) -> List[MidiMessage]:
+    def parse_attrs(attrs: MidiAttrs) -> list[MidiMessage]:
         """Extract MIDI messages from attributes.
 
         Parses MidiAttrs into multiple typed messages.
@@ -457,7 +457,7 @@ class MidiMessage(metaclass=ABCMeta):
 
         Raises ValueError if incomplete message attributes are present.
         """
-        messages: List[MidiMessage] = []
+        messages: list[MidiMessage] = []
 
         # Extract attributes
         note = attrs.lookup(NoteKey())
@@ -718,7 +718,7 @@ class MsgHeap:
             self.unwrap = unwrap2
             return v
 
-    def pop_all_before(self, time: PosixTime) -> List[TimedMessage]:
+    def pop_all_before(self, time: PosixTime) -> list[TimedMessage]:
         """Pop all messages <= given time"""
         msgs = []
         while True:

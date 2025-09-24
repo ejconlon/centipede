@@ -18,7 +18,6 @@ from typing import (
     NewType,
     Optional,
     Self,
-    Tuple,
     Union,
 )
 
@@ -397,8 +396,8 @@ class CycleArc(Arc[CycleTime, CycleDelta]):
         return CycleArc(self._start, new_end)
 
     def split_cycles(
-        self, bounds: Optional[Union[Tuple[int, int], CycleArc]] = None
-    ) -> Iterator[Tuple[int, CycleArc]]:
+        self, bounds: Optional[Union[tuple[int, int], CycleArc]] = None
+    ) -> Iterator[tuple[int, CycleArc]]:
         """Split the arc into individual cycles.
 
         Args:
@@ -579,7 +578,7 @@ class CycleSpan:
 
 
 # Type aliases for arc conversion
-type CycleArcLike = Union[CycleArc, Tuple[Numeric, Numeric]]
+type CycleArcLike = Union[CycleArc, tuple[Numeric, Numeric]]
 """Type alias for values that can be converted to CycleArc."""
 
 

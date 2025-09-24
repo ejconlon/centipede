@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
 from math import ceil, floor
-from typing import Callable, List, Optional, Tuple, override
+from typing import Callable, Optional, override
 
 from minipat.common import PartialMatchException
 from minipat.ev import Ev, ev_heap_empty, ev_heap_push
@@ -226,7 +226,7 @@ class Stream[T](metaclass=ABCMeta):
         return RepeatStream(stream, count)
 
     @staticmethod
-    def compose[U](sections: List[Tuple[CycleArc, Stream[U]]]) -> Stream[U]:
+    def compose[U](sections: list[tuple[CycleArc, Stream[U]]]) -> Stream[U]:
         """Create a stream that composes multiple sections with infinite looping.
 
         The composition loops infinitely - if contained in Arc (0, 4),
@@ -340,7 +340,7 @@ class Stream[T](metaclass=ABCMeta):
         return ShiftStream(self, delta)
 
 
-type Section[T] = Tuple[CycleArc, Stream[T]]
+type Section[T] = tuple[CycleArc, Stream[T]]
 
 
 @dataclass(frozen=True)
@@ -353,12 +353,12 @@ class ComposeStream[T](Stream[T]):
     """
 
     containing_arc: CycleArc
-    sections: List[Section[T]]
+    sections: list[Section[T]]
 
     @staticmethod
-    def mk(sections: List[Section[T]]) -> ComposeStream[T]:
+    def mk(sections: list[Section[T]]) -> ComposeStream[T]:
         containing_arc = CycleArc.empty()
-        sorted_sections: List[Section[T]] = []
+        sorted_sections: list[Section[T]] = []
         if sections:
             # Sort sections by their arc start time to ensure chronological ordering
             sorted_sections = sorted(sections, key=lambda section: section[0].start)
@@ -493,7 +493,7 @@ class PureStream[T](Stream[T]):
 class WeightedSeqStream[T](Stream[T]):
     """Specialized stream for sequential patterns with weighted timing."""
 
-    weighted_children: List[Tuple[Stream[T], Fraction]]
+    weighted_children: list[tuple[Stream[T], Fraction]]
 
     @override
     def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[T]]:
@@ -508,7 +508,7 @@ class WeightedSeqStream[T](Stream[T]):
         seq_result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
 
         # Calculate canonical positions for each child within a cycle
-        canonical_positions: List[Tuple[Stream[T], Fraction, Fraction]] = []
+        canonical_positions: list[tuple[Stream[T], Fraction, Fraction]] = []
         current_offset = Fraction(0)
 
         for child_stream, weight in self.weighted_children:
@@ -585,7 +585,7 @@ class SeqStream[T](Stream[T]):
 
         # Calculate canonical positions for each child within a cycle
         child_duration = Fraction(1) / len(self.children)
-        canonical_positions: List[Tuple[Stream[T], Fraction, Fraction]] = []
+        canonical_positions: list[tuple[Stream[T], Fraction, Fraction]] = []
 
         for i, child in enumerate(self.children):
             child_offset = i * child_duration
@@ -692,7 +692,7 @@ class EucStream[T](Stream[T]):
     hits: int
     steps: int
     rotation: int
-    pattern: List[bool]  # Pre-computed Euclidean pattern
+    pattern: list[bool]  # Pre-computed Euclidean pattern
 
     @classmethod
     def create(
@@ -1288,7 +1288,7 @@ def pat_stream[T, U](pat: Pat[T], binder: PatBinder[T, U]) -> Stream[U]:
             raise PartialMatchException(pat.unwrap)
 
 
-def _generate_euclidean(hits: int, steps: int, rotation: int) -> List[bool]:
+def _generate_euclidean(hits: int, steps: int, rotation: int) -> list[bool]:
     """Generata a Euclidean rhythm pattern using Bresenham's line algorithm.
 
     Args:
@@ -1324,7 +1324,7 @@ def _generate_euclidean(hits: int, steps: int, rotation: int) -> List[bool]:
     return pattern
 
 
-def compose_once[T](sections: List[Section[T]]) -> PHeapMap[CycleSpan, Ev[T]]:
+def compose_once[T](sections: list[Section[T]]) -> PHeapMap[CycleSpan, Ev[T]]:
     """Compose sections and render them once.
 
     This function takes a list of (CycleArc, Stream) pairs and renders them
