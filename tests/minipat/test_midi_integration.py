@@ -443,7 +443,11 @@ class TestMidiLiveSystemIntegration:
 
         # Create a bundle with all three messages
         bundle_messages = PSeq.mk([note_msg, program_msg, control_msg])
-        bundle_pattern = bundle(bundle_messages)
+
+        # Create a Pat with the bundle and then a flow
+        from minipat.pat import Pat
+        bundle_pat = Pat.pure(bundle_messages)
+        bundle_pattern = bundle(bundle_pat)
 
         # Set the bundle pattern on orbit 0
         live.set_orbit(Orbit(0), bundle_pattern.stream)

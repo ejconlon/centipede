@@ -53,6 +53,14 @@ Accepts:
 - Stream[str]: Pre-constructed string stream
 """
 
+type BundleStreamLike = Pat[MidiBundle] | Stream[MidiBundle]
+"""Types accepted by functions for MIDI message bundle patterns.
+
+Accepts:
+- Pat[str]: Pattern of bundles
+- Stream[str]: Pre-constructed bundle stream
+"""
+
 
 # =============================================================================
 # Pattern Parsing and Rendering
@@ -214,19 +222,19 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
     """
 
     @override
-    def forward(self, s: str) -> Note:
+    def forward(self, value: str) -> Note:
         # Parse note names like "c4" (middle C = 60), "d#4", "eb3", etc.
         # Also supports notes without octave like "c", "f#", "gb" using DEFAULT_OCTAVE
-        note_str = s.lower()
+        note_str = value.lower()
 
         # Parse note name and octave
         if len(note_str) < 1:
-            raise ValueError(f"Invalid note name: {s}")
+            raise ValueError(f"Invalid note name: {value}")
 
         # Get base note
         base_note = note_str[0]
         if base_note not in NOTE_NAME_TO_SEMITONE:
-            raise ValueError(f"Invalid note name: {s}")
+            raise ValueError(f"Invalid note name: {value}")
 
         semitone = NOTE_NAME_TO_SEMITONE[base_note]
         pos = 1
@@ -247,7 +255,7 @@ class NoteNameElemParser(Iso[str, Note], Singleton):
             if octave_str.lstrip("-").isdigit():
                 octave = int(octave_str)
             else:
-                raise ValueError(f"Invalid octave in note: {s}")
+                raise ValueError(f"Invalid octave in note: {value}")
         else:
             octave = DEFAULT_OCTAVE
 
@@ -440,6 +448,16 @@ def convert_to_string_stream(input_val: StringStreamLike) -> Stream[str]:
         return input_val
     else:
         raise ValueError(f"Unsupported type for StringStreamLike: {type(input_val)}")
+
+
+def convert_to_bundle_stream(input_val: BundleStreamLike) -> Stream[MidiBundle]:
+    """Convert various input types to a Stream[MidiBundle]."""
+    if isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for BundleStreamLike: {type(input_val)}")
 
 
 # =============================================================================
@@ -701,6 +719,48 @@ def value_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
         raise ValueError(f"Unsupported type for value_stream: {type(input_val)}")
 
 
+def bundle_stream(input_val: BundleStreamLike) -> Stream[MidiAttrs]:
+    """Create stream with a bundle attribute.
+
+    Takes a Pat or Stream of MidiBundle values and creates a stream
+    that adds each bundle to MidiAttrs under the BundleKey.
+
+    Args:
+        input_val: A Pat[MidiBundle] or Stream[MidiBundle] containing
+                   one or more MidiMessage objects per bundle
+
+    Returns:
+        A Stream[MidiAttrs] where each event contains a bundle attribute
+
+    Examples:
+        from minipat.messages import NoteOnMessage, ProgramMessage
+        from minipat.pat import Pat
+        from spiny.seq import PSeq
+
+        # Single message bundle in a pattern
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+        bundle_pat = Pat.pure(note_msg)
+        stream = bundle_stream(bundle_pat)
+
+        # Multiple message bundle in a pattern
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+        program_msg = ProgramMessage(Channel(0), Program(42))
+        multi_bundle = PSeq.mk([note_msg, program_msg])
+        bundle_pat = Pat.pure(multi_bundle)
+        stream = bundle_stream(bundle_pat)
+    """
+    if isinstance(input_val, (Pat, Stream)):
+        bundle_stream = convert_to_bundle_stream(input_val)
+
+        # Map over the bundle stream to create MidiAttrs with the bundle
+        def bundle_to_attrs(bundle: MidiBundle) -> MidiAttrs:
+            return DMap.singleton(BundleKey(), bundle)
+
+        return bundle_stream.map(bundle_to_attrs)
+    else:
+        raise ValueError(f"Unsupported type for bundle_stream: {type(input_val)}")
+
+
 def _merge_attrs(x: MidiAttrs, y: MidiAttrs) -> MidiAttrs:
     """Merge two MIDI attribute maps."""
     return x.merge(y)
@@ -764,36 +824,3 @@ def combine_all(ss: Sequence[Stream[MidiAttrs]]) -> Stream[MidiAttrs]:
         for el in ss[1:]:
             acc = combine(acc, el)
         return acc
-
-
-def bundle_stream(bundle: MidiBundle) -> Stream[MidiAttrs]:
-    """Create stream with a bundle attribute.
-
-    Takes a MidiBundle (single MidiMessage or sequence of MidiMessages)
-    and creates a stream that adds the bundle to MidiAttrs.
-
-    Args:
-        bundle: A MidiBundle containing one or more MidiMessage objects
-
-    Returns:
-        A Stream[MidiAttrs] containing the bundle attribute
-
-    Examples:
-        from minipat.messages import NoteOnMessage, ProgramMessage
-        from spiny.seq import PSeq
-
-        # Single message bundle
-        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
-        stream = bundle_stream(note_msg)
-
-        # Multiple message bundle
-        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
-        program_msg = ProgramMessage(Channel(0), Program(42))
-        multi_bundle = PSeq.mk([note_msg, program_msg])
-        stream = bundle_stream(multi_bundle)
-    """
-    # Create attributes with the bundle
-    attrs = DMap.empty(MidiDom).put(BundleKey(), bundle)
-
-    # Return a stream with just this single value
-    return Stream.pat(Pat.pure(attrs))

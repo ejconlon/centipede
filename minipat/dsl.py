@@ -9,6 +9,7 @@ from typing import Callable, NoReturn, Optional
 
 from bad_actor import System, new_system
 from minipat.combinators import (
+    BundleStreamLike,
     IntStreamLike,
     StringStreamLike,
     bundle_stream,
@@ -268,8 +269,11 @@ class Flow:
     def combines(*flows: FlowLike) -> Flow:
         """Combine flows by merging their MIDI attributes.
 
+        This includes support for bundle flows, which can contain complete
+        MIDI messages or sequences of messages.
+
         Args:
-            *flows: Flows to combine.
+            *flows: Flows to combine (including bundle flows).
 
         Returns:
             A flow with merged MIDI attributes from all inputs.
@@ -278,6 +282,10 @@ class Flow:
             combined = Flow.combines(note("c4 d4"), vel("80 100"))
             # Combines note patterns with velocity patterns
             # Equivalent to: note("c4 d4") >> vel("80 100")
+
+            # Can also combine with bundle flows
+            program_msg = ProgramMessage(Channel(0), Program(42))
+            with_program = Flow.combines(note("c4"), bundle(program_msg))
         """
         streams = [_convert_to_midi_stream(x) for x in flows]
         return Flow(combine_all(streams))
@@ -528,7 +536,15 @@ class Flow:
         return self.seq(other)
 
     def __rshift__(self, other: FlowLike) -> Flow:
-        """Operator overload for combining flows."""
+        """Operator overload for combining flows.
+
+        The >> operator combines flows by merging their MIDI attributes.
+        This works with all flow types including bundle flows.
+
+        Examples:
+            note("c4 d4") >> vel("80 100")  # Combine notes with velocities
+            note("c4") >> bundle(program_msg)  # Combine note with program change
+        """
         return Flow.combines(self, other)
 
     def __lshift__(self, other: FlowLike) -> Flow:
@@ -711,30 +727,42 @@ def channel(input_val: IntStreamLike) -> Flow:
     return Flow(channel_stream(input_val))
 
 
-def bundle(bundle: MidiBundle) -> Flow:
-    """Create a flow from a MIDI message bundle.
+def bundle(input_val: BundleStreamLike) -> Flow:
+    """Create a flow from a MIDI message bundle pattern or stream.
+
+    Takes a Pat or Stream of MidiBundle values and creates a flow
+    that adds each bundle to the MIDI attributes. Bundles allow you
+    to group multiple MIDI messages together to be sent as a unit.
 
     Args:
-        bundle: A MidiBundle containing one or more MidiMessage objects
+        input_val: A Pat[MidiBundle] or Stream[MidiBundle] containing
+                   one or more MidiMessage objects per bundle
 
     Returns:
-        A Flow containing the bundle attribute
+        A Flow containing the bundle attribute that can be combined
+        with other flows or played on an orbit
 
     Examples:
         from minipat.messages import NoteOnMessage, ProgramMessage, Channel, Note, Velocity, Program
+        from minipat.pat import Pat
         from spiny.seq import PSeq
 
-        # Single message bundle
+        # Single message bundle in a pattern
         note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
-        flow = bundle(note_msg)
+        bundle_pat = Pat.pure(note_msg)
+        flow = bundle(bundle_pat)
 
-        # Multiple message bundle
+        # Multiple message bundle in a pattern
         note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
         program_msg = ProgramMessage(Channel(0), Program(42))
         multi_bundle = PSeq.mk([note_msg, program_msg])
-        flow = bundle(multi_bundle)
+        bundle_pat = Pat.pure(multi_bundle)
+        flow = bundle(bundle_pat)
+
+        # Combine with other flows
+        combined = note("c4 d4") >> bundle(bundle_pat)
     """
-    return Flow(bundle_stream(bundle))
+    return Flow(bundle_stream(input_val))
 
 
 @dataclass(eq=False)
@@ -956,6 +984,36 @@ class Nucleus:
             aligned=aligned,
             orbit=None,
         )
+
+    def bundle(
+        self,
+        b: MidiBundle,
+        aligned: Optional[bool] = None,
+    ) -> None:
+        """Send a MIDI bundle immediately using once.
+
+        Takes a MidiBundle (single MidiMessage or sequence of MidiMessages)
+        and sends it immediately using the once method.
+
+        Args:
+            b: A MidiBundle containing one or more MidiMessage objects
+            aligned: Whether to align to cycle boundaries (default: True)
+
+        Examples:
+            from minipat.messages import NoteOnMessage, ProgramMessage, Channel, Note, Velocity, Program
+            from spiny.seq import PSeq
+
+            # Send a single message
+            note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+            n.bundle(note_msg)
+
+            # Send multiple messages as a bundle
+            note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+            program_msg = ProgramMessage(Channel(0), Program(42))
+            multi_bundle = PSeq.mk([note_msg, program_msg])
+            n.bundle(multi_bundle)
+        """
+        self.once(bundle_stream(Stream.pure(b)), aligned=aligned)
 
     def orbital(self, num: int) -> Orbital:
         return Orbital(self, Orbit(num))

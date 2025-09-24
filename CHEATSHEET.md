@@ -13,7 +13,7 @@ n.tempo = 120  # Set tempo in BPM
 
 # Play patterns on orbits
 n[0] = note("c4 d4 e4 f4")  # Orbit 0
-n[1] = kit("bd ~ sd ~")     # Orbit 1 with drums
+n[1] = n.sound("bd ~ sd ~")  # Orbit 1 with drums
 ```
 
 ## Flow Creation Functions
@@ -33,7 +33,7 @@ midinote("36 ~ 42")      # Kick, rest, snare pattern
 midinote("[60,64,67]")   # C major chord (simultaneous)
 ```
 
-### `kit(pattern)` - Drum Sounds
+### `sound(pattern)` - Drum Sounds
 ```python
 # Use nucleus method for better control
 n.sound("bd sd bd sd")     # Bass drum, snare, bass drum, snare
@@ -59,6 +59,27 @@ program("1*4")           # Repeat Bright Piano 4 times
 ```python
 control("1 7 10")        # Modulation, Volume, Pan
 value("0 64 127")        # Min, center, max values
+```
+
+### `bundle(pattern)` - MIDI Message Bundles
+```python
+# Send grouped MIDI messages together
+from minipat.pat import Pat
+from minipat.messages import NoteOnMessage, ProgramMessage
+from spiny.seq import PSeq
+
+# Create a bundle pattern
+note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+program_msg = ProgramMessage(Channel(0), Program(42))
+multi_bundle = PSeq.mk([note_msg, program_msg])
+bundle_pat = Pat.pure(multi_bundle)
+
+# Use in a flow
+flow = bundle(bundle_pat)
+n[0] = flow  # Play the bundle pattern
+
+# Combine with other patterns
+combined = note("c4 d4") >> bundle(bundle_pat)
 ```
 
 ### `channel(pattern)` - MIDI Channel
@@ -144,6 +165,8 @@ flow.prob(0.5)           # 50% probability for each event
 flow.shift(0.25)         # Shift by quarter beat
 flow.early(0.1)          # Play 0.1 beats early
 flow.late(0.1)           # Play 0.1 beats late
+flow.transpose("12")     # Transpose up one octave
+flow.transpose("0 5 7")  # Different transposition per note
 ```
 
 ### Euclidean Method
@@ -193,6 +216,23 @@ n.stop()                # Stop system
 n.exit()                # Stop and exit
 ```
 
+### Sending MIDI Messages
+```python
+# Send immediate MIDI messages
+from minipat.messages import NoteOnMessage, ProgramMessage, Channel, Note, Velocity, Program
+from spiny.seq import PSeq
+
+# Send a single message
+note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+n.bundle(note_msg)
+
+# Send multiple messages as a bundle
+note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+program_msg = ProgramMessage(Channel(0), Program(42))
+multi_bundle = PSeq.mk([note_msg, program_msg])
+n.bundle(multi_bundle, aligned=False)  # Send immediately without alignment
+```
+
 ### Orbit Management
 ```python
 n[0] = flow             # Set repeating pattern on orbit 0
@@ -203,6 +243,13 @@ n[0].mute()             # Mute orbit
 n[0].solo()             # Solo orbit (mute others)
 n[0].clear()            # Clear orbit pattern
 del n[0]                # Clear orbit (shorthand)
+```
+
+### One-shot Playback
+```python
+n.once(flow)            # Play flow once (not on a specific orbit)
+n | flow                # Shorthand for n.once(flow)
+n.once(flow, aligned=False)  # Play immediately without cycle alignment
 ```
 
 ### Kit Management

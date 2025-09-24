@@ -1361,8 +1361,10 @@ def test_bundle_stream_function() -> None:
     # Create a message
     note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
 
-    # Create a stream with the bundle
-    stream = bundle_stream(note_msg)
+    # Create a Pat with the bundle and then a stream
+    from minipat.pat import Pat
+    bundle_pat = Pat.pure(note_msg)
+    stream = bundle_stream(bundle_pat)
 
     # Query the stream
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -1395,8 +1397,10 @@ def test_bundle_dsl_function() -> None:
     # Create a message
     note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
 
-    # Create a flow with the bundle
-    flow = bundle(note_msg)
+    # Create a Pat with the bundle and then a flow
+    from minipat.pat import Pat
+    bundle_pat = Pat.pure(note_msg)
+    flow = bundle(bundle_pat)
 
     # Get the underlying stream
     stream = flow.stream
@@ -1444,8 +1448,10 @@ def test_bundle_with_multiple_messages() -> None:
     # Create a bundle with all messages
     bundle_val = PSeq.mk([note_msg, program_msg, control_msg])
 
-    # Create a flow with the bundle
-    flow = bundle(bundle_val)
+    # Create a Pat with the bundle and then a flow
+    from minipat.pat import Pat
+    bundle_pat = Pat.pure(bundle_val)
+    flow = bundle(bundle_pat)
 
     # Get the underlying stream
     stream = flow.stream
