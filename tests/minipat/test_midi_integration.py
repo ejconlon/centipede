@@ -407,3 +407,113 @@ class TestMidiLiveSystemIntegration:
                     f"Expected alternating C4(48), F4(53) at position {i}, got {pair}. "
                     f"Full sequence: {note_on_sequence}"
                 )
+
+    def test_bundle_messages_in_live_system(self, live_system: MidiLiveFixture) -> None:
+        """Test that bundle messages work correctly in the live MIDI system.
+
+        This test verifies that bundled MIDI messages (multiple messages per event)
+        are properly processed and sent by the live system.
+        """
+        live, mock_port = live_system
+
+        # Clear any existing messages
+        mock_port.clear()
+
+        # Create a bundle with multiple message types
+        from minipat.dsl import bundle
+        from minipat.messages import (
+            Channel,
+            ControlMessage,
+            ControlNum,
+            ControlVal,
+            Note,
+            NoteOnMessage,
+            Program,
+            ProgramMessage,
+            Velocity,
+        )
+        from spiny.seq import PSeq
+
+        # Create multiple messages to bundle together
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))  # C4
+        program_msg = ProgramMessage(Channel(0), Program(42))  # Program change
+        control_msg = ControlMessage(
+            Channel(0), ControlNum(7), ControlVal(127)
+        )  # Volume
+
+        # Create a bundle with all three messages
+        bundle_messages = PSeq.mk([note_msg, program_msg, control_msg])
+        bundle_pattern = bundle(bundle_messages)
+
+        # Set the bundle pattern on orbit 0
+        live.set_orbit(Orbit(0), bundle_pattern.stream)
+
+        # Start playing
+        live.play()
+
+        # Wait for at least one cycle to complete
+        current_cps = live.get_cps()
+        current_gpc = live.get_gpc()
+        cycles_to_wait = 1
+        expected_duration = cycles_to_wait / current_cps
+        max_wait_time = expected_duration * 2  # Extra buffer
+
+        generation_duration = 1.0 / (float(current_cps) * current_gpc)
+
+        start_time = time.time()
+        sleep_increment = 0.05
+
+        while time.time() - start_time < max_wait_time:
+            current_cycle = live.get_cycle()
+            if current_cycle > cycles_to_wait:
+                time.sleep(generation_duration)
+                break
+            time.sleep(sleep_increment)
+
+        # Stop playing
+        live.pause()
+
+        # Collect all messages
+        messages = mock_port.get_all_messages()
+
+        # Should have received multiple message types
+        assert len(messages) > 0, "Expected to receive bundled messages"
+
+        # Extract message types
+        message_types = []
+        note_numbers = []
+
+        for msg in messages:
+            bundle_msgs = list(mido_bundle_iterator(msg.bundle))
+            for bundle_msg in bundle_msgs:
+                msg_type = MsgTypeField.get(bundle_msg)
+                message_types.append(msg_type)
+
+                # If it's a note message, record the note number
+                if msg_type in ["note_on", "note_off"]:
+                    note_num = NoteField.unmk(NoteField.get(bundle_msg))
+                    note_numbers.append(note_num)
+
+        # Should have received all three message types from the bundle
+        # Note: Bundled note_on messages don't automatically generate note_off messages
+        # (unlike regular note attributes which do generate note_off automatically)
+        expected_types = {"note_on", "program_change", "control_change"}
+        actual_types = set(message_types)
+
+        assert expected_types.issubset(actual_types), (
+            f"Expected message types {expected_types} to be subset of {actual_types}"
+        )
+
+        # Should have received C4 (note 60) in the note_on
+        assert 60 in note_numbers, f"Expected note 60 (C4) in notes: {note_numbers}"
+
+        # Verify we have the expected message counts
+        note_on_count = message_types.count("note_on")
+        assert note_on_count > 0, "Expected at least one note_on message"
+
+        # Bundled note_on messages don't automatically generate note_off messages
+        # This is by design - bundles send exactly what you specify
+
+        # Should have at least one program change and one control change
+        assert "program_change" in message_types, "Expected program_change message"
+        assert "control_change" in message_types, "Expected control_change message"

@@ -12,7 +12,14 @@ from spiny.dmap import DKey, DMap
 from spiny.heap import PHeap
 from spiny.seq import PSeq
 
+# =============================================================================
+# Bundle Types
+# =============================================================================
+
+
 type MidoMessage = Message | FrozenMessage
+type MidoBundle = FrozenMessage | PSeq[FrozenMessage]
+type MidiBundle = MidiMessage | PSeq[MidiMessage]
 
 
 # =============================================================================
@@ -378,6 +385,12 @@ class ControlValKey(MidiKey[ControlVal]):
     pass
 
 
+class BundleKey(MidiKey[MidiBundle]):
+    """Key for control value in MIDI attributes."""
+
+    pass
+
+
 # =============================================================================
 # Typed messages
 # =============================================================================
@@ -453,30 +466,35 @@ class MidiMessage(metaclass=ABCMeta):
         program = attrs.lookup(ProgramKey())
         control_num = attrs.lookup(ControlNumKey())
         control_val = attrs.lookup(ControlValKey())
+        bundle = attrs.lookup(BundleKey())
 
-        # Channel is required for all messages
-        if channel is None:
-            # If no attributes generate messages, that's fine - return empty list
-            if (
-                note is None
-                and program is None
-                and (control_num is None and control_val is None)
-            ):
-                return messages
+        # Add bundled messages first
+        if bundle is not None:
+            for bundled_msg in midi_bundle_iterator(bundle):
+                messages.append(bundled_msg)
+
+        # Channel is required for non-bundle messages
+        has_non_bundle_messages = (
+            note is not None
+            or program is not None
+            or (control_num is not None and control_val is not None)
+        )
+
+        if channel is None and has_non_bundle_messages:
             raise ValueError("Channel attribute is required for MIDI messages")
 
         # Check for program change message
-        if program is not None:
+        if program is not None and channel is not None:
             messages.append(ProgramMessage(channel=channel, program=program))
 
         # Check for control change message
-        if control_num is not None and control_val is not None:
+        if control_num is not None and control_val is not None and channel is not None:
             messages.append(
                 ControlMessage(channel=channel, control=control_num, value=control_val)
             )
 
         # Check for note message (creates both note_on and note_off)
-        if note is not None:
+        if note is not None and channel is not None:
             # Note on message
             messages.append(
                 NoteOnMessage(channel=channel, note=note, velocity=velocity)
@@ -564,9 +582,6 @@ class ControlMessage(MidiMessage):
         return attrs
 
 
-type MidiBundle = MidiMessage | PSeq[MidiMessage]
-
-
 def midi_bundle_concat(left: MidiBundle, right: MidiBundle) -> MidiBundle:
     if isinstance(left, MidiMessage):
         if isinstance(right, MidiMessage):
@@ -590,9 +605,6 @@ def midi_bundle_iterator(bundle: MidiBundle) -> Generator[MidiMessage]:
 # =============================================================================
 # Timed Messages
 # =============================================================================
-
-
-type MidoBundle = FrozenMessage | PSeq[FrozenMessage]
 
 
 def mido_bundle_concat(left: MidoBundle, right: MidoBundle) -> MidoBundle:

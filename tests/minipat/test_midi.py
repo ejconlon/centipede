@@ -1255,3 +1255,216 @@ def test_timed_message_comparison_edge_cases() -> None:
 
     assert tm1 < tm_close  # Earlier time should sort first
     assert tm_close > tm1
+
+
+def test_bundle_key_in_midi_attrs() -> None:
+    """Test that MidiMessage.parse_attrs handles BundleKey correctly."""
+    from minipat.messages import (
+        BundleKey,
+        Channel,
+        MidiDom,
+        Note,
+        NoteOnMessage,
+        Program,
+        ProgramMessage,
+        Velocity,
+    )
+    from spiny.dmap import DMap
+    from spiny.seq import PSeq
+
+    # Create some messages for the bundle
+    note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+    program_msg = ProgramMessage(Channel(0), Program(42))
+
+    # Create a bundle
+    bundle = PSeq.mk([note_msg, program_msg])
+
+    # Create MidiAttrs with the bundle
+    attrs = DMap.empty(MidiDom).put(BundleKey(), bundle)
+
+    # Parse the attributes
+    parsed_messages = MidiMessage.parse_attrs(attrs)
+
+    # Should have our two bundled messages
+    assert len(parsed_messages) == 2
+    assert note_msg in parsed_messages
+    assert program_msg in parsed_messages
+
+
+def test_bundle_key_with_other_attributes() -> None:
+    """Test that BundleKey works alongside other MIDI attributes."""
+    from minipat.messages import (
+        BundleKey,
+        Channel,
+        ChannelKey,
+        MidiDom,
+        Note,
+        NoteKey,
+        NoteOnMessage,
+        Velocity,
+        VelocityKey,
+    )
+    from spiny.dmap import DMap
+
+    # Create a bundle with one message
+    bundle_msg = NoteOnMessage(Channel(1), Note(72), Velocity(80))
+
+    # Create attrs with both bundle and regular note attributes
+    attrs = (
+        DMap.empty(MidiDom)
+        .put(BundleKey(), bundle_msg)
+        .put(ChannelKey(), Channel(0))
+        .put(NoteKey(), Note(60))
+        .put(VelocityKey(), Velocity(100))
+    )
+
+    # Parse the attributes
+    parsed_messages = MidiMessage.parse_attrs(attrs)
+
+    # Should have both the bundled message and the regular note message
+    assert len(parsed_messages) == 2
+
+    # Find each message type
+    bundled_note = None
+    regular_note = None
+
+    for msg in parsed_messages:
+        if isinstance(msg, NoteOnMessage):
+            if msg.note == Note(72):  # From bundle
+                bundled_note = msg
+            elif msg.note == Note(60):  # From regular attributes
+                regular_note = msg
+
+    assert bundled_note is not None
+    assert bundled_note.channel == Channel(1)
+    assert bundled_note.velocity == Velocity(80)
+
+    assert regular_note is not None
+    assert regular_note.channel == Channel(0)
+    assert regular_note.velocity == Velocity(100)
+
+
+def test_bundle_stream_function() -> None:
+    """Test the bundle_stream function from combinators."""
+    from fractions import Fraction
+
+    from minipat.combinators import bundle_stream
+    from minipat.messages import (
+        BundleKey,
+        Channel,
+        Note,
+        NoteOnMessage,
+        Velocity,
+    )
+    from minipat.time import CycleArc, CycleTime
+
+    # Create a message
+    note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+
+    # Create a stream with the bundle
+    stream = bundle_stream(note_msg)
+
+    # Query the stream
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = list(stream.unstream(arc))
+
+    # Should have one event
+    assert len(events) == 1
+    span, ev = events[0]
+
+    # Should contain the bundle
+    bundle_val = ev.val.lookup(BundleKey())
+    assert bundle_val is not None
+    assert bundle_val == note_msg
+
+
+def test_bundle_dsl_function() -> None:
+    """Test the bundle function from DSL."""
+    from fractions import Fraction
+
+    from minipat.dsl import bundle
+    from minipat.messages import (
+        BundleKey,
+        Channel,
+        Note,
+        NoteOnMessage,
+        Velocity,
+    )
+    from minipat.time import CycleArc, CycleTime
+
+    # Create a message
+    note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+
+    # Create a flow with the bundle
+    flow = bundle(note_msg)
+
+    # Get the underlying stream
+    stream = flow.stream
+
+    # Query the stream
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = list(stream.unstream(arc))
+
+    # Should have one event
+    assert len(events) == 1
+    span, ev = events[0]
+
+    # Should contain the bundle
+    bundle_val = ev.val.lookup(BundleKey())
+    assert bundle_val is not None
+    assert bundle_val == note_msg
+
+
+def test_bundle_with_multiple_messages() -> None:
+    """Test bundle functionality with multiple messages."""
+    from fractions import Fraction
+
+    from minipat.dsl import bundle
+    from minipat.messages import (
+        BundleKey,
+        Channel,
+        ControlMessage,
+        ControlNum,
+        ControlVal,
+        Note,
+        NoteOnMessage,
+        Program,
+        ProgramMessage,
+        Velocity,
+        midi_bundle_iterator,
+    )
+    from minipat.time import CycleArc, CycleTime
+    from spiny.seq import PSeq
+
+    # Create multiple messages
+    note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+    program_msg = ProgramMessage(Channel(0), Program(42))
+    control_msg = ControlMessage(Channel(0), ControlNum(7), ControlVal(127))
+
+    # Create a bundle with all messages
+    bundle_val = PSeq.mk([note_msg, program_msg, control_msg])
+
+    # Create a flow with the bundle
+    flow = bundle(bundle_val)
+
+    # Get the underlying stream
+    stream = flow.stream
+
+    # Query the stream
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = list(stream.unstream(arc))
+
+    # Should have one event
+    assert len(events) == 1
+    span, ev = events[0]
+
+    # Should contain the bundle
+    retrieved_bundle = ev.val.lookup(BundleKey())
+    assert retrieved_bundle is not None
+
+    # Should be able to iterate through the bundle messages
+    bundle_messages = list(midi_bundle_iterator(retrieved_bundle))
+    assert len(bundle_messages) == 3
+    assert note_msg in bundle_messages
+    assert program_msg in bundle_messages
+    assert control_msg in bundle_messages

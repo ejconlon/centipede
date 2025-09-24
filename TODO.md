@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#30}
+Next available task ID: {#31}
 
 ### Active
 
@@ -38,6 +38,10 @@ Next available task ID: {#30}
 
 ### Done
 
+- {#30} Add message bundle support to MidiAttrs
+  - Updated MidiMessage.parse_attrs to handle BundleKey
+  - Added bundle_stream function to combinators
+  - Added bundle function to DSL
 - {#29} Midi message bundles
 - {#28} Create patch list of ~/.local/share/minipat/sf/default.sf2 using sf2dump output and add to minipat.hw.fluid
   - Created minipat/hw/fluid.py module with FluidR3_GM preset list

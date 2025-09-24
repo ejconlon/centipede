@@ -11,6 +11,7 @@ from bad_actor import System, new_system
 from minipat.combinators import (
     IntStreamLike,
     StringStreamLike,
+    bundle_stream,
     channel_stream,
     combine_all,
     control_stream,
@@ -24,7 +25,7 @@ from minipat.combinators import (
 )
 from minipat.kit import DEFAULT_KIT, Kit, add_hit
 from minipat.live import LiveSystem, Orbit
-from minipat.messages import MidiAttrs, NoteField, NoteKey, TimedMessage
+from minipat.messages import MidiAttrs, MidiBundle, NoteField, NoteKey, TimedMessage
 from minipat.midi import start_midi_live_system
 from minipat.pat import Pat, SpeedOp
 from minipat.stream import MergeStrat, Stream
@@ -708,6 +709,32 @@ def channel(input_val: IntStreamLike) -> Flow:
         channel("9*4")            # Repeat Channel 10 (drums) 4 times
     """
     return Flow(channel_stream(input_val))
+
+
+def bundle(bundle: MidiBundle) -> Flow:
+    """Create a flow from a MIDI message bundle.
+
+    Args:
+        bundle: A MidiBundle containing one or more MidiMessage objects
+
+    Returns:
+        A Flow containing the bundle attribute
+
+    Examples:
+        from minipat.messages import NoteOnMessage, ProgramMessage, Channel, Note, Velocity, Program
+        from spiny.seq import PSeq
+
+        # Single message bundle
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+        flow = bundle(note_msg)
+
+        # Multiple message bundle
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+        program_msg = ProgramMessage(Channel(0), Program(42))
+        multi_bundle = PSeq.mk([note_msg, program_msg])
+        flow = bundle(multi_bundle)
+    """
+    return Flow(bundle_stream(bundle))
 
 
 @dataclass(eq=False)

@@ -5,6 +5,7 @@ from typing import Sequence, override
 
 from minipat.kit import DrumSoundElemParser, Kit
 from minipat.messages import (
+    BundleKey,
     Channel,
     ChannelField,
     ControlField,
@@ -12,6 +13,8 @@ from minipat.messages import (
     ControlVal,
     MessageField,
     MidiAttrs,
+    MidiBundle,
+    MidiDom,
     Note,
     NoteField,
     Program,
@@ -761,3 +764,36 @@ def combine_all(ss: Sequence[Stream[MidiAttrs]]) -> Stream[MidiAttrs]:
         for el in ss[1:]:
             acc = combine(acc, el)
         return acc
+
+
+def bundle_stream(bundle: MidiBundle) -> Stream[MidiAttrs]:
+    """Create stream with a bundle attribute.
+
+    Takes a MidiBundle (single MidiMessage or sequence of MidiMessages)
+    and creates a stream that adds the bundle to MidiAttrs.
+
+    Args:
+        bundle: A MidiBundle containing one or more MidiMessage objects
+
+    Returns:
+        A Stream[MidiAttrs] containing the bundle attribute
+
+    Examples:
+        from minipat.messages import NoteOnMessage, ProgramMessage
+        from spiny.seq import PSeq
+
+        # Single message bundle
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+        stream = bundle_stream(note_msg)
+
+        # Multiple message bundle
+        note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
+        program_msg = ProgramMessage(Channel(0), Program(42))
+        multi_bundle = PSeq.mk([note_msg, program_msg])
+        stream = bundle_stream(multi_bundle)
+    """
+    # Create attributes with the bundle
+    attrs = DMap.empty(MidiDom).put(BundleKey(), bundle)
+
+    # Return a stream with just this single value
+    return Stream.pat(Pat.pure(attrs))
