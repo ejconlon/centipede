@@ -12,14 +12,9 @@ from minipat.pat import Pat, PatSeq, PatStretch, SpeedOp
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
 # sequences, choices, parallel patterns, euclidean rhythms, and more.
-PATTERN_GRAMMAR = """
+PATTERN_GRAMMAR = r"""
 %import common.WS
 %ignore WS
-
-// Tokens
-SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
-NUMBER: /\\d+/
-DECIMAL: /\\d*\\.\\d+/
 
 // Operator tokens
 MULTIPLY: "*"
@@ -31,9 +26,15 @@ PERCENT: "%"
 DOT: "."
 COLON: ":"
 
+// Tokens
+SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?/
+POS_INTEGER: /\d+/
+INTEGER: /-?\d+/
+DECIMAL: /-?\d*\.\d+/
+
 // Numeric values - supports integers, decimals, and fractions
-numeric_value: NUMBER | DECIMAL | fraction
-fraction: NUMBER "%" NUMBER
+fraction: INTEGER "%" POS_INTEGER
+numeric: INTEGER | DECIMAL | fraction
 
 start: pattern
 
@@ -45,7 +46,7 @@ element_sequence: element (UNDERSCORE+ | element)*
 element: elongation | repetition | replicate | probability | atom | seq | choice | parallel | alternating | euclidean | polymetric
 
 // Basic atoms
-atom: symbol | silence
+atom: numeric | symbol | silence
 symbol: symbol_with_selector | SYMBOL
 symbol_with_selector: SYMBOL COLON SYMBOL
 silence: "~"
@@ -60,20 +61,19 @@ parallel_list: pattern ("," pattern)+
 alternating: "<" pattern+ ">"
 
 // Euclidean rhythms: symbol(hits,steps) or symbol(hits,steps,rotation)
-euclidean: atom "(" numeric_value "," numeric_value ("," numeric_value)? ")"
+euclidean: atom "(" numeric "," numeric ("," numeric)? ")"
 
 // Polymetric sequences
 pattern_list: pattern ("," pattern)+
-polymetric: "{" pattern_list "}" (PERCENT numeric_value)?
+polymetric: "{" pattern_list "}" (PERCENT numeric)?
 
 // Repetition and speed modifiers
-repetition: element (MULTIPLY | DIVIDE) numeric_value
-replicate: element EXCLAMATION numeric_value
-elongation: element (UNDERSCORE+ | AT numeric_value)
+repetition: element (MULTIPLY | DIVIDE) numeric
+replicate: element EXCLAMATION numeric
+elongation: element (UNDERSCORE+ | AT numeric)
 
 // Probability
-probability: atom "?" probability_value?
-probability_value: numeric_value
+probability: atom "?" numeric?
 """
 
 
@@ -132,7 +132,12 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
     # Basic atoms
     def atom(self, items: List[Any]) -> Pat[Any]:
         """Transform an atom element."""
-        return cast(Pat[Any], items[0])
+        value = items[0]
+        # If it's a numeric value (Fraction), wrap it in Pat.pure
+        if isinstance(value, Fraction):
+            return Pat.pure(value)
+        # Otherwise it's already a Pat (from symbol or silence)
+        return cast(Pat[Any], value)
 
     def symbol(self, items: List[Any]) -> Pat[str]:
         """Transform a symbol."""
@@ -275,7 +280,7 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform replicate patterns like bd!3."""
         element = items[0]
         # items[1] is the EXCLAMATION token, items[2] is the count
-        count = items[2]  # Keep as Fraction (already converted by numeric_value)
+        count = items[2]  # Keep as Fraction (already converted by numeric)
         return Pat.repeat(element, count)
 
     def dot_group(self, items: List[Any]) -> Pat[Any]:
@@ -305,13 +310,9 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         else:
             raise ValueError(f"Invalid probability pattern with {len(items)} items")
 
-    def probability_value(self, items: List[Any]) -> Any:
-        """Transform probability value - numeric value."""
-        return cast(Pat[Any], items[0])
-
-    def numeric_value(self, items: List[Any]) -> Any:
+    def numeric(self, items: List[Any]) -> Any:
         """Transform numeric value - integer, decimal, or fraction."""
-        return cast(Pat[Any], items[0])
+        return items[0]
 
     def fraction(self, items: List[Any]) -> Fraction:
         """Transform fraction like 1%2 into Fraction."""
@@ -323,9 +324,13 @@ class PatternTransformer(Transformer[Any, Pat[Any]]):
         """Transform a symbol token into a pure pattern with string value."""
         return Pat.pure(str(token))
 
-    def NUMBER(self, token: Any) -> Fraction:
-        """Transform a number token."""
-        return Fraction(int(str(token)))
+    def POS_INTEGER(self, token: Any) -> Fraction:
+        """Transform a positive integer token."""
+        return Fraction(str(token))
+
+    def INTEGER(self, token: Any) -> Fraction:
+        """Transform an integer token (can be negative)."""
+        return Fraction(str(token))
 
     def DECIMAL(self, token: Any) -> Fraction:
         """Transform a decimal token."""
