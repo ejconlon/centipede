@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#36}
+Next available task ID: {#37}
 
 ### Active
 
@@ -38,6 +38,10 @@ Next available task ID: {#36}
 
 ### Done
 
+- {#36} Add midi file playing with fluidsynth to minipat/offline.py
+  - Implemented play_midi function that saves MIDI file to temp directory
+  - Added FluidSynth command execution with platform-specific audio driver selection
+  - Included error handling for missing FluidSynth installation and soundfont
 - {#35} Add Stream/Flow.opt_apply and clear invalid transposed notes
 - {#34} Change Iso -> BiArrow
 - {#33} Make strict checks default and rename check to precommit

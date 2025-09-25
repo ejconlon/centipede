@@ -74,7 +74,7 @@ Accepts:
 # =============================================================================
 
 
-def _convert_to_midi_stream(input_val: FlowLike) -> Stream[MidiAttrs]:
+def convert_to_midi_stream(input_val: FlowLike) -> Stream[MidiAttrs]:
     """Convert various input types to a Stream[MidiAttrs]."""
     if isinstance(input_val, Pat):
         return Stream.pat(input_val)
@@ -181,7 +181,7 @@ class Flow:
             sequence = Flow.seqs(note("c4"), note("d4"), note("e4"))
             # Equivalent to: note("c4") & note("d4") & note("e4")
         """
-        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
+        streams = PSeq.mk(convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.seq(streams))
 
     @staticmethod
@@ -198,7 +198,7 @@ class Flow:
             chord = Flow.pars(note("c4"), note("e4"), note("g4"))
             # Equivalent to: note("c4") | note("e4") | note("g4")
         """
-        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
+        streams = PSeq.mk(convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.par(streams))
 
     @staticmethod
@@ -215,7 +215,7 @@ class Flow:
             random_notes = Flow.rands(note("c4"), note("d4"), note("e4"))
             # Randomly plays c4, d4, or e4 each cycle
         """
-        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
+        streams = PSeq.mk(convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.rand(streams))
 
     @staticmethod
@@ -233,7 +233,7 @@ class Flow:
             # Plays c4 on cycle 1, d4 on cycle 2, c4 on cycle 3, etc.
             # Equivalent to: note("c4") ^ note("d4")
         """
-        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
+        streams = PSeq.mk(convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.alt(streams))
 
     @staticmethod
@@ -250,7 +250,7 @@ class Flow:
             poly = Flow.polys(note("c4 d4"), note("e4 f4 g4"))
             # First flow cycles every 2 beats, second every 3 beats
         """
-        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
+        streams = PSeq.mk(convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.poly(streams, None))
 
     @staticmethod
@@ -268,7 +268,7 @@ class Flow:
             poly_sub = Flow.polysubs(4, note("c4 d4"), note("e4 f4 g4"))
             # Subdivides each cycle into 4 parts
         """
-        streams = PSeq.mk(_convert_to_midi_stream(x) for x in flows)
+        streams = PSeq.mk(convert_to_midi_stream(x) for x in flows)
         return Flow(Stream.poly(streams, subdiv))
 
     @staticmethod
@@ -293,7 +293,7 @@ class Flow:
             program_msg = ProgramMessage(Channel(0), Program(42))
             with_program = Flow.combines(note("c4"), bundle(program_msg))
         """
-        streams = [_convert_to_midi_stream(x) for x in flows]
+        streams = [convert_to_midi_stream(x) for x in flows]
         return Flow(combine_all(streams))
 
     @staticmethod
@@ -548,7 +548,7 @@ class Flow:
 
             filtered = flow.opt_apply(min_velocity, velocity_flow)
         """
-        other_stream = _convert_to_midi_stream(other)
+        other_stream = convert_to_midi_stream(other)
         return Flow(self.stream.opt_apply(MergeStrat.Inner, func, other_stream))
 
     def par(self, other: FlowLike) -> Flow:
@@ -629,7 +629,7 @@ class Flow:
         cycle_sections = []
         for arc_like, flow_like in sections:
             cycle_arc = mk_cycle_arc(arc_like)
-            cycle_sections.append((cycle_arc, _convert_to_midi_stream(flow_like)))
+            cycle_sections.append((cycle_arc, convert_to_midi_stream(flow_like)))
 
         return Flow(Stream.compose(cycle_sections))
 
@@ -1032,7 +1032,7 @@ class Nucleus:
     ) -> None:
         cycle_length = mk_cycle_delta(length) if length is not None else None
         self.live.once(
-            _convert_to_midi_stream(flow),
+            convert_to_midi_stream(flow),
             length=cycle_length,
             aligned=aligned,
             orbit=None,
@@ -1209,7 +1209,7 @@ class Orbital:
         """
         cycle_length = mk_cycle_delta(length) if length is not None else None
         self.nucleus.live.once(
-            _convert_to_midi_stream(flow),
+            convert_to_midi_stream(flow),
             length=cycle_length,
             aligned=aligned,
             orbit=self.num,
@@ -1225,7 +1225,7 @@ class Orbital:
             n[0].every(note("c4 d4 e4 f4"))  # Repeating melody
             n[0] = note("c4 d4 e4 f4")       # Shorthand using assignment
         """
-        self.nucleus.live.set_orbit(self.num, _convert_to_midi_stream(flow))
+        self.nucleus.live.set_orbit(self.num, convert_to_midi_stream(flow))
 
     def mute(self, value: bool = True) -> None:
         """Mute this orbit.

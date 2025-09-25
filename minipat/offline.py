@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import subprocess
+import tempfile
 from fractions import Fraction
-from typing import Optional
+from pathlib import Path
+from typing import Iterable, Optional
 
 import mido
 
-from minipat.ev import EvHeap
+from minipat.dsl import FlowLike, convert_to_midi_stream
+from minipat.ev import EvHeap, ev_heap_empty
 from minipat.live import Orbit
 from minipat.messages import (
     DEFAULT_VELOCITY,
@@ -26,17 +30,62 @@ from minipat.messages import (
     msg_note_off,
 )
 from minipat.midi import parse_messages
-from minipat.time import Bpc, Cps, CycleTime, PosixTime
+from minipat.time import (
+    Bpc,
+    Cps,
+    CycleArc,
+    CycleDeltaLike,
+    CycleTime,
+    PosixTime,
+    mk_cycle_delta,
+)
 
 
-def render_midi_file(
+def render_midi(
+    flows: Iterable[tuple[CycleDeltaLike, FlowLike]],
+    cps: Optional[Cps] = None,
+    bpc: Optional[Bpc] = None,
+    default_velocity: Optional[Velocity] = None,
+) -> mido.MidiFile:
+    events: EvHeap[MidiAttrs] = ev_heap_empty()
+    start_time = CycleTime(Fraction(0))
+    current_time = start_time
+
+    for duration_like, flow_like in flows:
+        # Convert duration to CycleDelta
+        duration = mk_cycle_delta(duration_like)
+        stream = convert_to_midi_stream(flow_like)
+
+        # Create arc for this section
+        end_time = CycleTime(current_time + duration)
+        arc = CycleArc(current_time, end_time)
+
+        # Unstream events in this arc
+        section_events = stream.unstream(arc)
+
+        # Add all events to the heap
+        for span, ev in section_events:
+            events = events.insert(span, ev)
+
+        # Move to next time position
+        current_time = end_time
+
+    return render_midi_events(
+        start=start_time,
+        events=events,
+        cps=cps,
+        bpc=bpc,
+        default_velocity=default_velocity,
+    )
+
+
+def render_midi_events(
     start: CycleTime,
     events: EvHeap[MidiAttrs],
-    filepath: str,
-    cps: Cps = Cps(Fraction(1, 2)),
-    bpc: Bpc = Bpc(4),
+    cps: Optional[Cps] = None,
+    bpc: Optional[Bpc] = None,
     default_velocity: Optional[Velocity] = None,
-) -> None:
+) -> mido.MidiFile:
     """Render an EvHeap to a MIDI file.
 
     Args:
@@ -53,18 +102,22 @@ def render_midi_file(
             (CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1))), note_stream("c4")),
             (CycleArc(CycleTime(Fraction(1)), CycleTime(Fraction(2))), note_stream("d4")),
         ])
-        render_midi_file(CycleTime(Fraction(0)), events, "output.mid", cps=Cps(2.0), bpc=Bpc(4))
+        render_midi(CycleTime(Fraction(0)), events, "output.mid", cps=Cps(2.0), bpc=Bpc(4))
     """
-    default_vel = default_velocity if default_velocity is not None else DEFAULT_VELOCITY
+    cps = cps if cps is not None else Cps(Fraction(1, 2))
+    bpc = bpc if bpc is not None else Bpc(4)
+    default_velocity = (
+        default_velocity if default_velocity is not None else DEFAULT_VELOCITY
+    )
 
     # Calculate ticks_per_beat (ticks per quarter note)
     # Standard MIDI files typically use 480 ticks per quarter note
     ticks_per_beat = 480
 
     # Create a new MIDI file with one track (type=0 for single track file)
-    midi_file = mido.MidiFile(type=0, ticks_per_beat=ticks_per_beat)
+    mid = mido.MidiFile(type=0, ticks_per_beat=ticks_per_beat)
     track = mido.MidiTrack()
-    midi_file.tracks.append(track)
+    mid.tracks.append(track)
 
     # Set tempo (microseconds per quarter note)
     # With cps cycles per second, and bpc beats per cycle:
@@ -80,7 +133,7 @@ def render_midi_file(
     for span, ev in events:
         # Parse the MIDI attributes into messages
         # Use orbit 0 as default channel if no channel is specified
-        msgs = parse_messages(Orbit(0), ev.val, default_vel)
+        msgs = parse_messages(Orbit(0), ev.val, default_velocity)
 
         # Calculate timing for this event relative to start
         event_time_cycles = float(span.active.start - start)
@@ -201,5 +254,56 @@ def render_midi_file(
                 track.append(cc_msg)
                 last_time = abs_time
 
-    # Save the MIDI file
-    midi_file.save(filepath)
+    return mid
+
+
+def play_midi(mid: mido.MidiFile, name: Optional[str] = None) -> None:
+    """Play a MIDI file using FluidSynth.
+
+    Args:
+        mid: The MIDI file to play
+        name: Optional name for the temporary file (defaults to "minipat.mid")
+    """
+    # Save MIDI file to temp directory
+    temp_dir = Path(tempfile.gettempdir())
+    filename = name or "minipat.mid"
+    if not filename.endswith(".mid"):
+        filename += ".mid"
+    filepath = temp_dir / filename
+    mid.save(filepath)
+
+    # Get default soundfont path
+    soundfont_path = Path.home() / ".local" / "share" / "minipat" / "sf" / "default.sf2"
+
+    # Check if fluidsynth is available
+    try:
+        subprocess.run(
+            ["which", "fluidsynth"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        raise RuntimeError(
+            "FluidSynth is not installed. Please install it to play MIDI files."
+        )
+
+    # Check if soundfont exists
+    if not soundfont_path.exists():
+        raise FileNotFoundError(f"Soundfont not found at {soundfont_path}")
+
+    # Play the MIDI file using fluidsynth
+    # -a alsa: use ALSA audio driver (Linux) or auto-detect on other platforms
+    # -i: don't read commands from stdin (non-interactive)
+    # -q: quiet mode (suppress most output)
+    cmd = [
+        "fluidsynth",
+        "-qi",
+        str(soundfont_path),
+        str(filepath),
+    ]
+
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to play MIDI file: {e.stderr}")
