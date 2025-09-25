@@ -44,6 +44,10 @@ unit:
 unit-single-threaded:
   {{python}} -m pytest tests
 
+# Run tests matching a pattern verbosely
+test-match pattern:
+  {{python}} -m pytest -v -k "{{pattern}}" tests
+
 # Run all tests
 test: unit
 

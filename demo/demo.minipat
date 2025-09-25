@@ -1,0 +1,7 @@
+from typing import cast
+from minipat.dsl import *
+
+n = cast(Nucleus, getattr(globals(), 'n'))
+
+n[0] = note("d'min7 g'7 c'maj7 _")
+
