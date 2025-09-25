@@ -62,24 +62,21 @@ def test_flow_transpose_pattern() -> None:
 
 
 def test_flow_transpose_out_of_range() -> None:
-    """Test that transpose silences notes that go out of valid MIDI range."""
+    """Test that transpose removes events that only contain notes when out of range."""
     # Create notes near the high boundary
     high_note = note("g10")  # MIDI note 127
 
-    # Transpose up (should be silenced)
+    # Transpose up (should be removed entirely since only has NoteKey)
     transposed_high = high_note.transpose("5")
 
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
 
-    # Test high out-of-range silencing
+    # Test high out-of-range removal
     events_high = transposed_high.stream.unstream(arc)
     event_list_high = list(events_high)
 
-    # Should have an event, but without a note (silenced)
-    assert len(event_list_high) == 1
-    _, event_high = event_list_high[0]
-    note_val_high = event_high.val.lookup(NoteKey())
-    assert note_val_high is None  # Note removed (silenced)
+    # Should have no events since the event only contained NoteKey
+    assert len(event_list_high) == 0
 
 
 def test_flow_transpose_preserves_other_attributes() -> None:
@@ -115,6 +112,50 @@ def test_flow_transpose_preserves_other_attributes() -> None:
     vel2 = event2.val.lookup(VelocityKey())
     assert note2 is not None and int(note2) == 55
     assert vel2 is not None and int(vel2) == 100
+
+
+def test_flow_transpose_removes_note_only_events() -> None:
+    """Test that transpose removes events that only contain NoteKey when out of range."""
+    # Create a note-only event (no velocity or other attributes)
+    bare_note = note("g10")  # MIDI note 127 (highest valid note)
+
+    # Transpose up to go out of range (127 + 1 = 128, which is invalid)
+    transposed = bare_note.transpose("1")
+
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = transposed.stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have no events since the only attribute was NoteKey
+    assert len(event_list) == 0
+
+
+def test_flow_transpose_preserves_event_with_other_attrs() -> None:
+    """Test that transpose preserves events with other attributes when note is out of range."""
+    from minipat.dsl import vel
+
+    # Create a note with velocity
+    note_with_vel = note("g10") >> vel("80")  # MIDI note 127 with velocity
+
+    # Transpose up to go out of range (127 + 1 = 128, which is invalid)
+    transposed = note_with_vel.transpose("1")
+
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = transposed.stream.unstream(arc)
+    event_list = list(events)
+
+    # Should have one event (preserved because it has velocity)
+    assert len(event_list) == 1
+    _, event = event_list[0]
+
+    # Note should be removed
+    note_val = event.val.lookup(NoteKey())
+    assert note_val is None
+
+    # But velocity should be preserved
+    vel_val = event.val.lookup(VelocityKey())
+    assert vel_val is not None
+    assert int(vel_val) == 80
 
 
 def test_note_with_sharps() -> None:

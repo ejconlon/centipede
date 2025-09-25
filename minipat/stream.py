@@ -328,6 +328,25 @@ class Stream[T](metaclass=ABCMeta):
         """
         return ApplyStream(self, merge_strat, func, other)
 
+    def opt_apply[B, C](
+        self,
+        merge_strat: MergeStrat,
+        func: Callable[[T, B], Optional[C]],
+        other: Stream[B],
+    ) -> Stream[C]:
+        """Apply a nullable function across two streams.
+        Where the function returns None the event is omitted.
+
+        Args:
+            merge_strat: Strategy for merging overlapping events
+            func: Function to combine values from both streams
+            other: The other stream to combine with
+
+        Returns:
+            A new stream with combined events
+        """
+        return OptApplyStream(self, merge_strat, func, other)
+
     def shift(self, delta: CycleDelta) -> Stream[T]:
         """Shift stream events in time by a delta.
 
@@ -1145,6 +1164,46 @@ class ApplyStream[A, B, C](Stream[C]):
                 intersection = left_arc.intersect(right_arc)
                 if not intersection.null():
                     combined_val = self.func(left_ev.val, right_ev.val)
+                    combined_span = CycleSpan.mk(
+                        whole=intersection, active=intersection
+                    )
+                    combined_ev = Ev(combined_span, combined_val)
+                    result = ev_heap_push(combined_ev, result)
+
+        return result
+
+
+@dataclass(frozen=True)
+class OptApplyStream[A, B, C](Stream[C]):
+    """Stream that applies a nullable function across two streams."""
+
+    left: Stream[A]
+    merge_strat: MergeStrat
+    func: Callable[[A, B], Optional[C]]
+    right: Stream[B]
+
+    @override
+    def unstream(self, arc: CycleArc) -> PHeapMap[CycleSpan, Ev[C]]:
+        left_events = self.left.unstream(arc)
+        right_events = self.right.unstream(arc)
+        result: PHeapMap[CycleSpan, Ev[C]] = ev_heap_empty()
+
+        # Simple inner join strategy - only combine events that overlap
+        for _, left_ev in left_events:
+            for _, right_ev in right_events:
+                left_arc = (
+                    left_ev.span.whole if left_ev.span.whole else left_ev.span.active
+                )
+                right_arc = (
+                    right_ev.span.whole if right_ev.span.whole else right_ev.span.active
+                )
+
+                intersection = left_arc.intersect(right_arc)
+                if not intersection.null():
+                    combined_val = self.func(left_ev.val, right_ev.val)
+                    # This is the only difference from ApplyStream:
+                    if combined_val is None:
+                        continue
                     combined_span = CycleSpan.mk(
                         whole=intersection, active=intersection
                     )

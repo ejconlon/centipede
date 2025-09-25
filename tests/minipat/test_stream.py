@@ -1,4 +1,5 @@
 from fractions import Fraction
+from typing import Optional
 
 from minipat.parser import parse_sym_pattern
 from minipat.pat import Pat, SpeedOp
@@ -857,3 +858,66 @@ def test_parallel_sub_cycle_splitting() -> None:
     # Should contain both x and y events
     assert "x" in values
     assert "y" in values
+
+
+def test_opt_apply() -> None:
+    """Test opt_apply method that filters out None results."""
+    from minipat.stream import MergeStrat
+
+    # Create two simple streams
+    pattern1 = Pat.seq([Pat.pure(1), Pat.pure(2), Pat.pure(3)])
+    pattern2 = Pat.seq([Pat.pure(10), Pat.pure(20), Pat.pure(30)])
+
+    stream1 = Stream.pat(pattern1)
+    stream2 = Stream.pat(pattern2)
+
+    # Function that returns None for some combinations
+    def combine_with_filter(a: int, b: int) -> int | None:
+        # Only combine if the sum is even
+        result = a + b
+        if result % 2 == 0:
+            return result
+        return None
+
+    # Apply the function
+    combined = stream1.opt_apply(MergeStrat.Inner, combine_with_filter, stream2)
+
+    # Query a cycle
+    arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+    events = combined.unstream(arc)
+    event_list = list(events)
+
+    # Should have some events (where sums are even)
+    assert len(event_list) > 0
+
+    # All event values should be even
+    for _, event in event_list:
+        assert event.val % 2 == 0
+
+    # Test with a function that always returns None
+    def always_none(_a: int, _b: int) -> Optional[int]:
+        return None
+
+    empty_stream = stream1.opt_apply(MergeStrat.Inner, always_none, stream2)
+    empty_events = empty_stream.unstream(arc)
+    empty_list = list(empty_events)
+
+    # Should have no events
+    assert len(empty_list) == 0
+
+    # Test with a function that never returns None
+    def always_sum(a: int, b: int) -> int:
+        return a + b
+
+    full_stream = stream1.opt_apply(MergeStrat.Inner, always_sum, stream2)
+    full_events = full_stream.unstream(arc)
+    full_list = list(full_events)
+
+    # Should have all possible combinations
+    assert len(full_list) > 0
+
+    # Check all values are sums
+    for _, event in full_list:
+        assert isinstance(event.val, int)
+        # Values should be sums like 1+10, 1+20, 2+10, etc.
+        assert event.val >= 11  # minimum is 1+10

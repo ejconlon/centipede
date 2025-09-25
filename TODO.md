@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#35}
+Next available task ID: {#36}
 
 ### Active
 
@@ -38,6 +38,7 @@ Next available task ID: {#35}
 
 ### Done
 
+- {#35} Add Stream/Flow.opt_apply and clear invalid transposed notes
 - {#34} Change Iso -> BiArrow
 - {#33} Make strict checks default and rename check to precommit
 - {#32} Use new-style dict/list/tuple types

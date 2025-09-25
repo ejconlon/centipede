@@ -86,7 +86,7 @@ def _convert_to_midi_stream(input_val: FlowLike) -> Stream[MidiAttrs]:
         raise ValueError(f"Unsupported type for FlowLike: {type(input_val)}")
 
 
-def _apply_transpose(attrs: MidiAttrs, transpose_offset: int) -> MidiAttrs:
+def _apply_transpose(attrs: MidiAttrs, transpose_offset: int) -> Optional[MidiAttrs]:
     """Apply transposition to MIDI attributes.
 
     Args:
@@ -94,7 +94,7 @@ def _apply_transpose(attrs: MidiAttrs, transpose_offset: int) -> MidiAttrs:
         transpose_offset: Semitone offset to apply
 
     Returns:
-        Transposed MIDI attributes, or attributes with note removed if out of range
+        Transposed MIDI attributes, or None if event should be removed
     """
     current_note = attrs.lookup(NoteKey())
 
@@ -104,10 +104,15 @@ def _apply_transpose(attrs: MidiAttrs, transpose_offset: int) -> MidiAttrs:
     # Apply transposition
     new_note = int(current_note) + transpose_offset
 
-    # If result is outside valid MIDI range, remove the note entirely
+    # If result is outside valid MIDI range
     if new_note < 0 or new_note > 127:
-        # Return attributes without the note (effectively silencing this event)
-        return attrs.remove(NoteKey())
+        # Remove the note from attributes
+        without_note = attrs.remove(NoteKey())
+        # If removing the note leaves an empty DMap, remove the entire event
+        if without_note.null():
+            return None
+        # Otherwise return attributes without the note
+        return without_note
 
     return attrs.put(NoteKey(), NoteField.mk(new_note))
 
@@ -511,10 +516,40 @@ class Flow:
             # Various patterns possible
         """
         transpose_stream = convert_to_int_stream(transpose_input)
-
         return Flow(
-            self.stream.apply(MergeStrat.Inner, _apply_transpose, transpose_stream)
+            self.stream.opt_apply(MergeStrat.Inner, _apply_transpose, transpose_stream)
         )
+
+    def opt_apply(
+        self,
+        func: Callable[[MidiAttrs, MidiAttrs], Optional[MidiAttrs]],
+        other: FlowLike,
+    ) -> Flow:
+        """Apply a function to pairs of MIDI attributes, filtering out None results.
+
+        Takes a function that operates on pairs of MidiAttrs and returns Optional[MidiAttrs].
+        When the function returns None, the event is filtered out entirely.
+        Otherwise the event continues with those attributes.
+
+        Args:
+            func: Function that takes two MidiAttrs and returns Optional[MidiAttrs]
+            other: The other flow to apply with
+
+        Returns:
+            A flow with function applied and None results filtered out
+
+        Example:
+            # Filter out events where velocity is too low
+            def min_velocity(a1: MidiAttrs, a2: MidiAttrs) -> Optional[MidiAttrs]:
+                vel = a2.lookup(VelocityKey())
+                if vel and int(vel) < 40:
+                    return None
+                return a1.merge(a2)
+
+            filtered = flow.opt_apply(min_velocity, velocity_flow)
+        """
+        other_stream = _convert_to_midi_stream(other)
+        return Flow(self.stream.opt_apply(MergeStrat.Inner, func, other_stream))
 
     def par(self, other: FlowLike) -> Flow:
         """Combine this flow with another in parallel."""

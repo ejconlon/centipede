@@ -26,7 +26,7 @@ format:
 
 # Typecheck with mypy
 typecheck:
-  {{python}} -m mypy --strict --config-file=pyproject.toml {{mypy_packages}} -p tests
+  {{python}} -m mypy --strict --cache-dir=.mypy_cache_strict --config-file=pyproject.toml {{mypy_packages}} -p tests
 
 # Lint with ruff
 lint:
