@@ -662,9 +662,9 @@ def note(input_val: SymStreamLike) -> Flow:
         A Flow containing simultaneous MIDI note attributes for each chord
 
     Examples:
-        note("c4'maj7 f4'min")      # C major 7th, F minor
-        note("c4'maj7 ~ f4'min")    # C major 7th, rest, F minor
-        note("[c4'maj7,f4'min]")    # Layered chords (simultaneous)
+        note("c4`maj7 f4`min")      # C major 7th, F minor
+        note("c4`maj7 ~ f4`min")    # C major 7th, rest, F minor
+        note("[c4`maj7,f4`min]")    # Layered chords (simultaneous)
     """
     return Flow(note_stream(input_val))
 

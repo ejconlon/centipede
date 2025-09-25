@@ -24,7 +24,7 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#37}
+Next available task ID: {#38}
 
 ### Active
 
@@ -38,6 +38,7 @@ Next available task ID: {#37}
 
 ### Done
 
+- {#37} Change chord separator from single quote to backtick
 - {#36} Add midi file playing with fluidsynth to minipat/offline.py
   - Implemented play_midi function that saves MIDI file to temp directory
   - Added FluidSynth command execution with platform-specific audio driver selection

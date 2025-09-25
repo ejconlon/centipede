@@ -484,20 +484,20 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
     """Parser for chord symbols that generates multiple notes.
 
     Parses chord notation with the following formats:
-    1. Note with chord: "c4'maj7", "f#'min", "bb3'sus4"
+    1. Note with chord: "c4`maj7", "f#`min", "bb3`sus4"
     2. Bare note: "c4", "f#", "bb3" (returns single note)
 
-    Format: [note][accidental][octave]['[chord_name]]
+    Format: [note][accidental][octave][`[chord_name]]
     - note: c, d, e, f, g, a, b (case insensitive)
     - accidental: # (sharp) or b (flat), optional
     - octave: digit 0-9, optional (defaults to DEFAULT_OCTAVE)
-    - ': tick separator between note and chord (required for chords)
+    - `: backtick separator between note and chord (required for chords)
     - chord_name: maj, min, maj7, dom7, etc. (see chords.py for full list)
 
     Examples:
-        "c4'maj7"  -> [48, 52, 55, 59]  # C major 7th
-        "f#'min"   -> [54, 57, 61]      # F# minor (default octave)
-        "bb3'sus4" -> [46, 51, 53]      # Bb sus4
+        "c4`maj7"  -> [48, 52, 55, 59]  # C major 7th
+        "f#`min"   -> [54, 57, 61]      # F# minor (default octave)
+        "bb3`sus4" -> [46, 51, 53]      # Bb sus4
         "c4"       -> [48]              # Just C4
         "f#"       -> [54]              # F# (default octave)
     """
@@ -541,12 +541,12 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
         root_midi = octave * 12 + semitone
         root_note = Note(root_midi)
 
-        # Check for tick separator
-        if pos < len(chord_str) and chord_str[pos] == "'":
-            # Has a tick, must have a chord name after it
+        # Check for backtick separator
+        if pos < len(chord_str) and chord_str[pos] == "`":
+            # Has a backtick, must have a chord name after it
             pos += 1
             if pos >= len(chord_str):
-                raise ValueError(f"Tick without chord name: {value}")
+                raise ValueError(f"Backtick without chord name: {value}")
 
             chord_name_str = chord_str[pos:]
             chord_name = parse_chord_name(chord_name_str)
@@ -561,13 +561,13 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
 
             return chord_notes
         else:
-            # No tick - this is a bare note
+            # No backtick - this is a bare note
             if pos < len(chord_str):
-                # There's extra content after the note without a tick
+                # There's extra content after the note without a backtick
                 # This could be an old-style chord notation - let's be helpful
                 raise ValueError(
-                    f"Invalid format: {value}. Use a tick (') between note and chord, "
-                    f"e.g., {chord_str[:pos]}'{chord_str[pos:]}"
+                    f"Invalid format: {value}. Use a backtick (`) between note and chord, "
+                    f"e.g., {chord_str[:pos]}`{chord_str[pos:]}"
                 )
 
             # Return single note
@@ -684,16 +684,16 @@ def notename_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
 def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
     """Create stream from notes and chord symbols.
 
-    Parses a pattern containing note names and optinoal chord symbols like "c2", "c4'maj7", "f#'min"
+    Parses a pattern containing note names and optinoal chord symbols like "c2", "c4`maj7", "f#`min"
     and creates a stream of simultaneous MIDI note events.
 
     Args:
         input_val: Pattern string or stream containing chord symbols
 
     Examples:
-        note_stream("c4'maj7 f4'min")         # C major 7th, F minor
-        note_stream("g4 ~ c4'maj7")          # G note, rest, C major 7th
-        note_stream("[c4'maj7,f4'min]")       # Layered chords
+        note_stream("c4`maj7 f4`min")         # C major 7th, F minor
+        note_stream("g4 ~ c4`maj7")          # G note, rest, C major 7th
+        note_stream("[c4`maj7,f4`min]")       # Layered chords
     """
     if isinstance(input_val, str):
         return Stream.pat_bind(parse_sym_pattern(input_val), _CHORD_BINDER)

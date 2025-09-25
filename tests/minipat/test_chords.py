@@ -91,42 +91,42 @@ def test_chord_elem_parser() -> None:
     parser = ChordElemParser()
 
     # Test basic major chord
-    c_maj = parser.apply("c4'maj")
+    c_maj = parser.apply("c4`maj")
     assert len(c_maj) == 3
     note_values = [int(note) for note in c_maj]
     assert note_values == [48, 52, 55]  # C4, E4, G4
 
     # Test minor chord with sharp
-    fs_min = parser.apply("f#4'min")
+    fs_min = parser.apply("f#4`min")
     assert len(fs_min) == 3
     note_values = [int(note) for note in fs_min]
     assert note_values == [54, 57, 61]  # F#4, A4, C#5
 
     # Test seventh chord with flat
-    bb_dom7 = parser.apply("bb4'dom7")
+    bb_dom7 = parser.apply("bb4`dom7")
     assert len(bb_dom7) == 4
     note_values = [int(note) for note in bb_dom7]
     assert note_values == [58, 62, 65, 68]  # Bb4, D5, F5, Ab5
 
     # Test chord without explicit octave (uses default octave 4)
-    c_maj_default = parser.apply("c'maj")
+    c_maj_default = parser.apply("c`maj")
     assert len(c_maj_default) == 3
     note_values = [int(note) for note in c_maj_default]
     assert note_values == [48, 52, 55]  # C4, E4, G4
 
     # Test suspended chord
-    g_sus4 = parser.apply("g4'sus4")
+    g_sus4 = parser.apply("g4`sus4")
     assert len(g_sus4) == 3
     note_values = [int(note) for note in g_sus4]
     assert note_values == [55, 60, 62]  # G4, C5, D5
 
     # Test case-insensitive chord names
-    c_maj_upper = parser.apply("C4'MAJ")
+    c_maj_upper = parser.apply("C4`MAJ")
     assert len(c_maj_upper) == 3
     note_values = [int(note) for note in c_maj_upper]
     assert note_values == [48, 52, 55]  # C4, E4, G4
 
-    f_min_mixed = parser.apply("F#4'Min")
+    f_min_mixed = parser.apply("F#4`Min")
     assert len(f_min_mixed) == 3
     note_values = [int(note) for note in f_min_mixed]
     assert note_values == [54, 57, 61]  # F#4, A4, C#5
@@ -149,23 +149,23 @@ def test_chord_elem_parser_errors() -> None:
     """Test ChordElemParser error handling."""
     parser = ChordElemParser()
 
-    # Test tick without chord name
+    # Test backtick without chord name
     try:
-        parser.apply("c4'")
+        parser.apply("c4`")
         assert False, "Should have raised ValueError"
     except ValueError as e:
-        assert "Tick without chord name" in str(e)
+        assert "Backtick without chord name" in str(e)
 
     # Test invalid note name
     try:
-        parser.apply("x4'maj")
+        parser.apply("x4`maj")
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "Invalid note name" in str(e)
 
     # Test unknown chord type
     try:
-        parser.apply("c4'unknown")
+        parser.apply("c4`unknown")
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "Unknown chord type" in str(e)
@@ -175,14 +175,14 @@ def test_chord_elem_parser_errors() -> None:
         parser.apply("c4maj")
         assert False, "Should have raised ValueError"
     except ValueError as e:
-        assert "Use a tick" in str(e)
-        assert "c4'maj" in str(e)  # Should suggest the correct format
+        assert "Use a backtick" in str(e)
+        assert "c4`maj" in str(e)  # Should suggest the correct format
 
 
 def test_chord_dsl_function() -> None:
     """Test the chord DSL function."""
     # Test basic chord progression
-    progression = note("c4'maj f4'min g4'maj")
+    progression = note("c4`maj f4`min g4`maj")
 
     # Query events from the flow
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
@@ -221,7 +221,7 @@ def test_chord_dsl_function() -> None:
 
 def test_chord_with_rests() -> None:
     """Test chord patterns with rests."""
-    progression = note("c4'maj ~ f4'min")
+    progression = note("c4`maj ~ f4`min")
 
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = progression.stream.unstream(arc)
@@ -253,7 +253,7 @@ def test_chord_with_rests() -> None:
 def test_chord_with_bare_notes() -> None:
     """Test chord patterns that include bare notes."""
     # Mix of chords and single notes
-    progression = note("c4 e4 g4'maj")
+    progression = note("c4 e4 g4`maj")
 
     arc = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
     events = progression.stream.unstream(arc)
@@ -288,21 +288,21 @@ def test_complex_chord_names() -> None:
     parser = ChordElemParser()
 
     # Test major 7th
-    cmaj7 = parser.apply("c4'maj7")
+    cmaj7 = parser.apply("c4`maj7")
     note_values = [int(note) for note in cmaj7]
     assert note_values == [48, 52, 55, 59]  # C, E, G, B
 
     # Test minor major 7th
-    cminmaj7 = parser.apply("c4'mmaj7")
+    cminmaj7 = parser.apply("c4`mmaj7")
     note_values = [int(note) for note in cminmaj7]
     assert note_values == [48, 51, 55, 59]  # C, Eb, G, B
 
     # Test dominant 9th
-    c9 = parser.apply("c4'9")
+    c9 = parser.apply("c4`9")
     note_values = [int(note) for note in c9]
     assert note_values == [48, 52, 55, 58, 62]  # C, E, G, Bb, D
 
     # Test diminished 7th
-    cdim7 = parser.apply("c4'dim7")
+    cdim7 = parser.apply("c4`dim7")
     note_values = [int(note) for note in cdim7]
     assert note_values == [48, 51, 54, 57]  # C, Eb, Gb, A

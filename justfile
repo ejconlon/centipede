@@ -78,3 +78,7 @@ pushpluck:
 # Watch pushpluck for changes:
 pushpluck-watch:
    fzf -f "pushpluck/ .py$" | entr -nr just pushpluck
+
+# Run a minipat example by name
+example NAME:
+  {{python}} -m minipat.examples.{{NAME}}
