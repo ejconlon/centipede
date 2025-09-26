@@ -40,22 +40,22 @@ Orbit = NewType("Orbit", int)
 _DEFAULT_CPS = Fraction(1, 2)
 """Default cycles per second (tempo)."""
 
-_DEFAULT_GENERATIONS_PER_CYCLE = 4
-"""Default number of event generations to calculate per cycle."""
+_DEFAULT_GENERATIONS_PER_CYCLE = 32
+"""Default number of event generations to calculate per cycle (increase for better MIDI timing)."""
 
-_DEFAULT_GENERATIONS_AHEAD = 1
+_DEFAULT_GENERATIONS_AHEAD = 2
 """Default number of generation cycles to calculate ahead (for more generation time)."""
 
 _DEFAULT_WAIT_FACTOR = Fraction(1, 4)
 """Default factor for calculating sleep intervals - use 1/4 of generation interval for responsive polling."""
 
 
-def _calculate_sleep_interval(
+def _calculate_timing_intervals(
     cps: Cps,
     generations_per_cycle: int,
     wait_factor: Fraction,
-) -> PosixDelta:
-    """Calculate appropriate sleep interval based on timing configuration.
+) -> tuple[PosixDelta, PosixDelta]:
+    """Calculate timing intervals based on timing configuration.
 
     Uses the specified wait_factor of the generation interval to ensure responsive timing
     while avoiding excessive CPU usage.
@@ -66,7 +66,7 @@ def _calculate_sleep_interval(
         wait_factor: Factor for calculating sleep intervals - fraction of generation interval to use.
 
     Returns:
-        Sleep interval in seconds, clamped to reasonable bounds.
+        Tuple of (sleep_interval, generation_interval) in seconds.
     """
     # Calculate time per generation
     generation_interval = 1.0 / (float(cps) * generations_per_cycle)
@@ -74,8 +74,10 @@ def _calculate_sleep_interval(
     # Use wait_factor of generation interval for responsive polling
     sleep_interval = generation_interval * float(wait_factor)
 
-    # Clamp to reasonable bounds (0.5ms to 50ms)
-    return PosixDelta(max(0.0005, min(0.05, sleep_interval)))
+    # Clamp sleep interval to reasonable bounds (0.5ms to 50ms)
+    sleep_interval_clamped = max(0.0005, min(0.05, sleep_interval))
+
+    return PosixDelta(sleep_interval_clamped), PosixDelta(generation_interval)
 
 
 @dataclass(frozen=True)
@@ -97,6 +99,9 @@ class Timing:
     sleep_interval: PosixDelta
     """Amount of wall time it's appropriate to sleep when polling."""
 
+    generation_interval: PosixDelta
+    """Time interval between event generations (1 / (cps * generations_per_cycle))."""
+
     @staticmethod
     def initial(cps: Optional[Cps], beats_per_cycle: Optional[Bpc] = None) -> Timing:
         """Create a Timing instance with default values."""
@@ -104,7 +109,7 @@ class Timing:
         beats_per_cycle = beats_per_cycle if beats_per_cycle is not None else Bpc(4)
         generations_per_cycle = _DEFAULT_GENERATIONS_PER_CYCLE
         wait_factor = _DEFAULT_WAIT_FACTOR
-        sleep_interval = _calculate_sleep_interval(
+        sleep_interval, generation_interval = _calculate_timing_intervals(
             cps=cps,
             generations_per_cycle=generations_per_cycle,
             wait_factor=wait_factor,
@@ -115,10 +120,11 @@ class Timing:
             generations_per_cycle=generations_per_cycle,
             wait_factor=wait_factor,
             sleep_interval=sleep_interval,
+            generation_interval=generation_interval,
         )
 
     def set_cps(self, cps: Cps) -> Timing:
-        sleep_interval = _calculate_sleep_interval(
+        sleep_interval, generation_interval = _calculate_timing_intervals(
             cps=cps,
             generations_per_cycle=self.generations_per_cycle,
             wait_factor=self.wait_factor,
@@ -129,11 +135,12 @@ class Timing:
             generations_per_cycle=self.generations_per_cycle,
             wait_factor=self.wait_factor,
             sleep_interval=sleep_interval,
+            generation_interval=generation_interval,
         )
 
     def set_beats_per_cycle(self, beats_per_cycle: Bpc) -> Timing:
         """Create a new Timing with updated beats per cycle."""
-        sleep_interval = _calculate_sleep_interval(
+        sleep_interval, generation_interval = _calculate_timing_intervals(
             cps=self.cps,
             generations_per_cycle=self.generations_per_cycle,
             wait_factor=self.wait_factor,
@@ -144,6 +151,7 @@ class Timing:
             generations_per_cycle=self.generations_per_cycle,
             wait_factor=self.wait_factor,
             sleep_interval=sleep_interval,
+            generation_interval=generation_interval,
         )
 
 

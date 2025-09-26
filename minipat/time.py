@@ -831,3 +831,38 @@ def now() -> PosixTime:
         Current wall clock time as PosixTime
     """
     return PosixTime(time.time())
+
+
+# =============================================================================
+# Tempo Conversion Functions
+# =============================================================================
+
+
+def convert_to_tempo(cps: CpsLike, bpc: BpcLike) -> Tempo:
+    """Convert cycles per second and beats per cycle to tempo (BPM).
+
+    Args:
+        cps: Cycles per second
+        bpc: Beats per cycle
+
+    Returns:
+        Tempo in beats per minute (BPM = CPS × BPC × 60)
+    """
+    cps_val = mk_cps(cps)
+    bpc_val = mk_bpc(bpc)
+    return mk_tempo(cps_val * bpc_val * 60)
+
+
+def convert_from_tempo(tempo: TempoLike, bpc: BpcLike) -> Cps:
+    """Convert tempo (BPM) and beats per cycle to cycles per second.
+
+    Args:
+        tempo: Tempo in beats per minute
+        bpc: Beats per cycle
+
+    Returns:
+        Cycles per second (CPS = Tempo ÷ BPC ÷ 60)
+    """
+    tempo_val = mk_tempo(tempo)
+    bpc_val = mk_bpc(bpc)
+    return mk_cps(tempo_val / bpc_val / 60)

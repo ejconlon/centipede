@@ -7,6 +7,7 @@ MIDI message handling utilities.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
@@ -56,11 +57,14 @@ from minipat.messages import (
     NoteField,
     TimedMessage,
     Velocity,
-    mido_bundle_iterator,
     msg_note_off,
 )
-from minipat.time import Bpc, Cps, PosixTime, now
+from minipat.time import Bpc, Cps, PosixTime
 from spiny.seq import PSeq
+
+# MIDI sender timing constants
+_MIDI_TIMING_THRESHOLD = 0.005  # Log timing errors > 5ms
+_BUSY_WAIT_THRESHOLD = 0.002  # 2ms threshold for switching to busy-wait
 
 
 @dataclass
@@ -76,19 +80,10 @@ class SenderState:
 
 
 class MidiSenderTask(Task):
-    """Background task that sends scheduled MIDI messages at the correct time.
+    """High precision MIDI sender using busy-wait for sub-millisecond accuracy."""
 
-    Runs in a separate thread and continuously pops messages from a shared
-    heap, sending them to a MIDI output at the
-    appropriate timestamps. Uses sleep intervals based on current tempo and generation rate.
-    """
-
-    def __init__(
-        self,
-        state: Mutex[SenderState],
-        output: mido.ports.BaseOutput,
-    ):
-        """Initialize the MIDI sender task.
+    def __init__(self, state: Mutex[SenderState], output: mido.ports.BaseOutput):
+        """Initialize high precision MIDI sender.
 
         Args:
             state: Shared state for scheduled messages
@@ -99,30 +94,46 @@ class MidiSenderTask(Task):
 
     @override
     def run(self, logger: Logger, halt: Event) -> None:
-        """Execute the task using the actor system's threading model.
-
-        Args:
-            logger: Logger for the task to use.
-            halt: Event that will be set when the task should stop.
-        """
+        """Execute with high precision timing using busy-wait."""
         logger.debug("MIDI sender task started")
-        while True:
-            current_time = now()
 
-            # Get the next message that's ready to send
+        while not halt.is_set():
+            current_time = time.time()
+
+            # Get messages that will be due within the current generation interval
             with self._state as st:
                 sleep_interval = st.timing.sleep_interval
-                msgs = st.msg_heap.pop_all_before(current_time)
+                generation_interval = st.timing.generation_interval
+                lookahead_time = PosixTime(current_time + generation_interval)
+                upcoming_msgs = st.msg_heap.pop_all_before(lookahead_time)
 
-            if msgs:
-                for timed_msg in msgs:
-                    for msg in mido_bundle_iterator(timed_msg.bundle):
-                        self._output.send(msg)
+            if upcoming_msgs:
+                for timed_msg in upcoming_msgs:
+                    target_time = float(timed_msg.time)
 
-            # Sleep based on current timing configuration
-            # Use halt.wait() instead of sleep() to be responsive to shutdown
-            if halt.wait(timeout=sleep_interval):
-                break
+                    # Hybrid sleep approach: coarse sleep + precise busy-wait
+                    target_sleep = target_time - time.time()
+
+                    if target_sleep > _BUSY_WAIT_THRESHOLD:
+                        # Coarse sleep until within busy-wait threshold
+                        coarse_sleep = target_sleep - _BUSY_WAIT_THRESHOLD
+                        time.sleep(coarse_sleep)
+
+                    # Precise busy-wait for the final approach
+                    while time.time() < target_time:
+                        pass  # True busy-wait without sleep
+
+                    # Send the message
+                    bundle = timed_msg.bundle
+                    if isinstance(bundle, FrozenMessage):
+                        self._output.send(bundle)
+                    else:
+                        for msg in bundle:
+                            self._output.send(msg)
+            else:
+                # No upcoming messages, sleep briefly
+                if halt.wait(timeout=sleep_interval):
+                    break
 
         logger.debug("MIDI sender task stopped")
 
