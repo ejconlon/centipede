@@ -24,23 +24,32 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#40}
+Next available task ID: {#41}
 
 ### Active
 
-- {#38} Create invN dropN macros to modify chord voicings
-  - Example: ``c`maj7`inv1`drop2`` first inversion, drop 2 voicing of that
-  - Valid voicings must follow the pseudo-grammar: ``note ` chord [` (inv | drop) int ]*``
 
 ### Review
 
 
 ### Upcoming
 
+- {#40} Implement O(log n) versions of PSeq.take, drop, and split_at operations
+  - Current implementations are O(n) using iteration/uncons
+  - Need proper finger tree-based splitting that operates on tree structure
+  - Should leverage existing finger tree invariants for logarithmic complexity
+  - Reference Hinze-Paterson paper for proper splitting algorithms
 - {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
 
 ### Done
 
+- {#38} Create invN dropN macros to modify chord voicings
+  - Implemented chord inversion functionality with `apply_inversion()` function
+  - Implemented drop voicing functionality with `apply_drop_voicing()` function
+  - Extended ChordElemParser to parse voicing modifiers in chord notation
+  - Supports pseudo-grammar: ``note ` chord [` (inv | drop) int ]*``
+  - Examples: ``c4`maj7`inv1`` (first inversion), ``c4`maj7`drop2`` (drop2 voicing), ``c4`maj7`inv1`drop2`` (combined)
+  - Added comprehensive test suite in test_chord_voicings.py with 11 test cases
 - {#39} Unknown chords, notes, or sounds should throw errors in streams
   - Fixed ChordBinder to propagate ValueError instead of silencing unknown chords
   - Verified that unknown notes already raise ValueError

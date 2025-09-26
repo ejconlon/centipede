@@ -814,3 +814,284 @@ def test_fold_with_index_mixed_operations() -> None:
         {"index": 3, "value": 60, "product": 180},
     ]
     assert result == expected
+
+
+# =============================================================================
+# Tests for take, drop, and split_at methods
+# =============================================================================
+
+
+def test_take_empty_sequence() -> None:
+    """Test take on empty sequence."""
+    empty: PSeq[int] = PSeq.empty()
+    assert list(empty.take(0)) == []
+    assert list(empty.take(1)) == []
+    assert list(empty.take(10)) == []
+
+
+def test_take_single_element() -> None:
+    """Test take on single element sequence."""
+    single = PSeq.singleton(42)
+    assert list(single.take(0)) == []
+    assert list(single.take(1)) == [42]
+    assert list(single.take(2)) == [42]
+
+
+def test_take_multiple_elements() -> None:
+    """Test take on multi-element sequence."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+    assert list(seq.take(0)) == []
+    assert list(seq.take(1)) == [1]
+    assert list(seq.take(3)) == [1, 2, 3]
+    assert list(seq.take(5)) == [1, 2, 3, 4, 5]
+    assert list(seq.take(10)) == [1, 2, 3, 4, 5]
+
+
+def test_take_negative() -> None:
+    """Test take with negative numbers."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+    assert list(seq.take(-1)) == []
+    assert list(seq.take(-10)) == []
+
+
+def test_drop_empty_sequence() -> None:
+    """Test drop on empty sequence."""
+    empty: PSeq[int] = PSeq.empty()
+    assert list(empty.drop(0)) == []
+    assert list(empty.drop(1)) == []
+    assert list(empty.drop(10)) == []
+
+
+def test_drop_single_element() -> None:
+    """Test drop on single element sequence."""
+    single = PSeq.singleton(42)
+    assert list(single.drop(0)) == [42]
+    assert list(single.drop(1)) == []
+    assert list(single.drop(2)) == []
+
+
+def test_drop_multiple_elements() -> None:
+    """Test drop on multi-element sequence."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+    assert list(seq.drop(0)) == [1, 2, 3, 4, 5]
+    assert list(seq.drop(1)) == [2, 3, 4, 5]
+    assert list(seq.drop(3)) == [4, 5]
+    assert list(seq.drop(5)) == []
+    assert list(seq.drop(10)) == []
+
+
+def test_drop_negative() -> None:
+    """Test drop with negative numbers."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+    assert list(seq.drop(-1)) == [1, 2, 3, 4, 5]
+    assert list(seq.drop(-10)) == [1, 2, 3, 4, 5]
+
+
+def test_split_at_empty_sequence() -> None:
+    """Test split_at on empty sequence."""
+    empty: PSeq[int] = PSeq.empty()
+    prefix, suffix = empty.split_at(0)
+    assert list(prefix) == []
+    assert list(suffix) == []
+
+    prefix, suffix = empty.split_at(1)
+    assert list(prefix) == []
+    assert list(suffix) == []
+
+
+def test_split_at_single_element() -> None:
+    """Test split_at on single element sequence."""
+    single = PSeq.singleton(42)
+
+    prefix, suffix = single.split_at(0)
+    assert list(prefix) == []
+    assert list(suffix) == [42]
+
+    prefix, suffix = single.split_at(1)
+    assert list(prefix) == [42]
+    assert list(suffix) == []
+
+    prefix, suffix = single.split_at(2)
+    assert list(prefix) == [42]
+    assert list(suffix) == []
+
+
+def test_split_at_multiple_elements() -> None:
+    """Test split_at on multi-element sequence."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+
+    prefix, suffix = seq.split_at(0)
+    assert list(prefix) == []
+    assert list(suffix) == [1, 2, 3, 4, 5]
+
+    prefix, suffix = seq.split_at(1)
+    assert list(prefix) == [1]
+    assert list(suffix) == [2, 3, 4, 5]
+
+    prefix, suffix = seq.split_at(3)
+    assert list(prefix) == [1, 2, 3]
+    assert list(suffix) == [4, 5]
+
+    prefix, suffix = seq.split_at(5)
+    assert list(prefix) == [1, 2, 3, 4, 5]
+    assert list(suffix) == []
+
+    prefix, suffix = seq.split_at(10)
+    assert list(prefix) == [1, 2, 3, 4, 5]
+    assert list(suffix) == []
+
+
+def test_split_at_negative() -> None:
+    """Test split_at with negative numbers."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+
+    prefix, suffix = seq.split_at(-1)
+    assert list(prefix) == []
+    assert list(suffix) == [1, 2, 3, 4, 5]
+
+    prefix, suffix = seq.split_at(-10)
+    assert list(prefix) == []
+    assert list(suffix) == [1, 2, 3, 4, 5]
+
+
+def test_split_at_vs_take_drop() -> None:
+    """Test that split_at is equivalent to (take, drop) but more efficient."""
+    seq = PSeq.mk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    for n in range(12):  # Test various split points including out of bounds
+        prefix, suffix = seq.split_at(n)
+        expected_prefix = seq.take(n)
+        expected_suffix = seq.drop(n)
+
+        assert list(prefix) == list(expected_prefix), f"Failed at split position {n}"
+        assert list(suffix) == list(expected_suffix), f"Failed at split position {n}"
+
+
+def test_take_drop_split_preserve_original() -> None:
+    """Test that take, drop, and split_at don't modify the original sequence."""
+    original = PSeq.mk([1, 2, 3, 4, 5])
+
+    # Operations shouldn't change the original
+    original.take(3)
+    original.drop(2)
+    original.split_at(2)
+
+    assert list(original) == [1, 2, 3, 4, 5]
+
+
+def test_take_drop_split_with_strings() -> None:
+    """Test take, drop, and split_at with string elements."""
+    seq = PSeq.mk(["a", "b", "c", "d", "e"])
+
+    assert list(seq.take(3)) == ["a", "b", "c"]
+    assert list(seq.drop(2)) == ["c", "d", "e"]
+
+    prefix, suffix = seq.split_at(2)
+    assert list(prefix) == ["a", "b"]
+    assert list(suffix) == ["c", "d", "e"]
+
+
+def test_large_sequence_operations() -> None:
+    """Test take, drop, and split_at on large sequences."""
+    large_seq = PSeq.mk(range(1000))
+
+    # Test take
+    taken = large_seq.take(100)
+    assert len(taken) == 100
+    assert list(taken) == list(range(100))
+
+    # Test drop
+    dropped = large_seq.drop(900)
+    assert len(dropped) == 100
+    assert list(dropped) == list(range(900, 1000))
+
+    # Test split_at
+    prefix, suffix = large_seq.split_at(500)
+    assert len(prefix) == 500
+    assert len(suffix) == 500
+    assert list(prefix) == list(range(500))
+    assert list(suffix) == list(range(500, 1000))
+
+
+def test_chaining_operations() -> None:
+    """Test chaining take, drop, and split_at operations."""
+    seq = PSeq.mk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    # Chain operations
+    result = seq.drop(2).take(5).drop(1)
+    assert list(result) == [4, 5, 6, 7]
+
+    # Split and then operate on parts
+    prefix, suffix = seq.split_at(5)
+    result1 = prefix.take(3)
+    result2 = suffix.drop(2)
+    assert list(result1) == [1, 2, 3]
+    assert list(result2) == [8, 9, 10]
+
+
+def test_edge_cases_boundary_conditions() -> None:
+    """Test edge cases and boundary conditions."""
+    seq = PSeq.mk([1, 2, 3])
+
+    # Boundary at sequence length
+    assert list(seq.take(3)) == [1, 2, 3]
+    assert list(seq.drop(3)) == []
+
+    prefix, suffix = seq.split_at(3)
+    assert list(prefix) == [1, 2, 3]
+    assert list(suffix) == []
+
+    # Just beyond boundary
+    assert list(seq.take(4)) == [1, 2, 3]
+    assert list(seq.drop(4)) == []
+
+    prefix, suffix = seq.split_at(4)
+    assert list(prefix) == [1, 2, 3]
+    assert list(suffix) == []
+
+
+def test_take_drop_split_functional_properties() -> None:
+    """Test functional properties and laws."""
+    seq = PSeq.mk([1, 2, 3, 4, 5, 6])
+
+    # take 0 should give empty
+    assert seq.take(0).null()
+
+    # drop 0 should give original
+    assert list(seq.drop(0)) == list(seq)
+
+    # take n + drop n should give original (when concatenated)
+    for n in range(len(seq) + 2):
+        taken = seq.take(n)
+        dropped = seq.drop(n)
+        reconstructed = taken + dropped
+        assert list(reconstructed) == list(seq)
+
+    # split_at should be equivalent to take + drop
+    for n in range(len(seq) + 2):
+        prefix, suffix = seq.split_at(n)
+        assert list(prefix + suffix) == list(seq)
+
+
+def test_immutability_shared_structure() -> None:
+    """Test that operations preserve immutability and can share structure."""
+    seq = PSeq.mk([1, 2, 3, 4, 5])
+
+    # Multiple operations on same sequence
+    seq1 = seq.take(3)
+    seq2 = seq.drop(2)
+    seq3, seq4 = seq.split_at(2)
+
+    # Original unchanged
+    assert list(seq) == [1, 2, 3, 4, 5]
+
+    # Results are correct
+    assert list(seq1) == [1, 2, 3]
+    assert list(seq2) == [3, 4, 5]
+    assert list(seq3) == [1, 2]
+    assert list(seq4) == [3, 4, 5]
+
+    # Further operations don't affect others
+    seq1_modified = seq1.drop(1)
+    assert list(seq1) == [1, 2, 3]  # seq1 unchanged
+    assert list(seq1_modified) == [2, 3]

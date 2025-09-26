@@ -486,13 +486,15 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
     Parses chord notation with the following formats:
     1. Note with chord: "c4`maj7", "f#`min", "bb3`sus4"
     2. Bare note: "c4", "f#", "bb3" (returns single note)
+    3. Chord with voicing modifiers: "c4`maj7`inv1`drop2"
 
-    Format: [note][accidental][octave][`[chord_name]]
+    Format: [note][accidental][octave][`[chord_name][`voicing_modifier]*]
     - note: c, d, e, f, g, a, b (case insensitive)
     - accidental: # (sharp) or b (flat), optional
     - octave: digit 0-9, optional (defaults to DEFAULT_OCTAVE)
     - `: backtick separator between note and chord (required for chords)
     - chord_name: maj, min, maj7, dom7, etc. (see chords.py for full list)
+    - voicing_modifier: inv[n] for inversion, drop[n] for drop voicing
 
     Examples:
         "c4`maj7"  -> [48, 52, 55, 59]  # C major 7th
@@ -500,11 +502,19 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
         "bb3`sus4" -> [46, 51, 53]      # Bb sus4
         "c4"       -> [48]              # Just C4
         "f#"       -> [54]              # F# (default octave)
+        "c4`maj7`inv1"      # First inversion of C major 7th
+        "c4`maj7`drop2"     # Drop2 voicing of C major 7th
+        "c4`maj7`inv1`drop2" # First inversion then drop2 voicing
     """
 
     @override
     def apply(self, value: str) -> PSeq[Note]:
-        from minipat.chords import chord_to_notes, parse_chord_name
+        from minipat.chords import (
+            apply_drop_voicing,
+            apply_inversion,
+            chord_to_notes,
+            parse_chord_name,
+        )
 
         chord_str = value.lower()
 
@@ -543,12 +553,17 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
 
         # Check for backtick separator
         if pos < len(chord_str) and chord_str[pos] == "`":
-            # Has a backtick, must have a chord name after it
+            # Has a backtick, parse chord and voicing modifiers
             pos += 1
             if pos >= len(chord_str):
                 raise ValueError(f"Backtick without chord name: {value}")
 
-            chord_name_str = chord_str[pos:]
+            # Split the rest by backticks to get chord and modifiers
+            remaining = chord_str[pos:]
+            parts = remaining.split("`")
+
+            # First part should be the chord name
+            chord_name_str = parts[0]
             chord_name = parse_chord_name(chord_name_str)
             if chord_name is None:
                 raise ValueError(f"Unknown chord type: {chord_name_str}")
@@ -558,6 +573,27 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
 
             if len(chord_notes) == 0:
                 raise ValueError(f"Chord {value} produces no valid MIDI notes")
+
+            # Apply voicing modifiers in order
+            for modifier in parts[1:]:
+                if modifier.startswith("inv"):
+                    # Parse inversion number
+                    inv_num_str = modifier[3:]
+                    try:
+                        inv_num = int(inv_num_str)
+                    except ValueError:
+                        raise ValueError(f"Invalid inversion modifier: {modifier}")
+                    chord_notes = apply_inversion(chord_notes, inv_num)
+                elif modifier.startswith("drop"):
+                    # Parse drop number
+                    drop_num_str = modifier[4:]
+                    try:
+                        drop_num = int(drop_num_str)
+                    except ValueError:
+                        raise ValueError(f"Invalid drop voicing modifier: {modifier}")
+                    chord_notes = apply_drop_voicing(chord_notes, drop_num)
+                else:
+                    raise ValueError(f"Unknown voicing modifier: {modifier}")
 
             return chord_notes
         else:

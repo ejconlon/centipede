@@ -315,6 +315,51 @@ class PSeq[T](Sized, LexComparable[T, "PSeq[T]"]):
         """
         return _seq_fold_with_index(self, fn, acc)
 
+    def take(self, n: int) -> PSeq[T]:
+        """Take the first n elements of the sequence.
+
+        Time Complexity: O(n) - iterates through first n elements
+        Space Complexity: O(n) for building result sequence
+
+        Args:
+            n: The number of elements to take from the front.
+
+        Returns:
+            A new sequence containing at most the first n elements.
+        """
+        return _seq_take(self, n)
+
+    def drop(self, n: int) -> PSeq[T]:
+        """Drop the first n elements of the sequence.
+
+        Time Complexity: O(n) amortized - uses uncons n times
+        Space Complexity: O(log n) for path copying during uncons operations
+
+        Args:
+            n: The number of elements to drop from the front.
+
+        Returns:
+            A new sequence with the first n elements removed.
+        """
+        return _seq_drop(self, n)
+
+    def split_at(self, n: int) -> Tuple[PSeq[T], PSeq[T]]:
+        """Split the sequence at the given index.
+
+        Equivalent to (self.take(n), self.drop(n)) but more efficient.
+
+        Time Complexity: O(n) amortized - single pass with uncons/snoc
+        Space Complexity: O(log n) for path copying
+
+        Args:
+            n: The index at which to split the sequence.
+
+        Returns:
+            A tuple (prefix, suffix) where prefix contains the first n elements
+            and suffix contains the remaining elements.
+        """
+        return _seq_split_at(self, n)
+
     def __getitem__(self, ix: int) -> T:
         """Alias for get()."""
         return self.get(ix)
@@ -890,3 +935,54 @@ def _seq_fold_with_index[T, Z](seq: PSeq[T], fn: Callable[[Z, int, T], Z], acc: 
         result = fn(result, index, item)
         index += 1
     return result
+
+
+def _seq_take[T](seq: PSeq[T], n: int) -> PSeq[T]:
+    """Internal implementation of take using iteration. O(n) time complexity."""
+    if n <= 0:
+        return PSeq.empty()
+
+    result: PSeq[T] = PSeq.empty()
+    count = 0
+    for item in _seq_iter(seq):
+        if count >= n:
+            break
+        result = result.snoc(item)
+        count += 1
+
+    return result
+
+
+def _seq_drop[T](seq: PSeq[T], n: int) -> PSeq[T]:
+    """Internal implementation of drop using uncons. O(n) amortized time complexity."""
+    if n <= 0:
+        return seq
+
+    current = seq
+    for _ in range(n):
+        uncons_result = current.uncons()
+        if uncons_result is None:
+            return PSeq.empty()
+        _, tail = uncons_result
+        current = tail
+
+    return current
+
+
+def _seq_split_at[T](seq: PSeq[T], n: int) -> Tuple[PSeq[T], PSeq[T]]:
+    """Internal implementation of split_at using single-pass approach. O(n) time complexity."""
+    if n <= 0:
+        return (PSeq.empty(), seq)
+
+    # Use the efficient single-pass approach
+    current = seq
+    taken: PSeq[T] = PSeq.empty()
+    for _ in range(n):
+        uncons_result = current.uncons()
+        if uncons_result is None:
+            break
+        head, tail = uncons_result
+        taken = taken.snoc(head)
+        current = tail
+
+    return (taken, current)

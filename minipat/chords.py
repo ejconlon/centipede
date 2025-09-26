@@ -242,3 +242,76 @@ def chord_to_notes(root: Note, chord: Chord) -> PSeq[Note]:
         if 0 <= midi_value <= 127:
             notes.append(Note(midi_value))
     return PSeq.mk(notes)
+
+
+def apply_inversion(notes: PSeq[Note], inversion: int) -> PSeq[Note]:
+    """Apply inversion to chord notes.
+
+    An inversion rotates the notes of a chord upward by octaves.
+    For example:
+    - inv0 (root position): [C, E, G]
+    - inv1 (first inversion): [E, G, C'] where C' is C up an octave
+    - inv2 (second inversion): [G, C', E'] where both C and E are up an octave
+
+    Args:
+        notes: The chord notes to invert
+        inversion: The inversion number (0 = root position, 1 = first, 2 = second, etc.)
+
+    Returns:
+        PSeq of inverted Note objects (filtered to valid MIDI range)
+    """
+    if inversion == 0 or len(notes) == 0:
+        return notes
+
+    # Clamp inversion to valid range
+    actual_inversion = min(inversion, len(notes))
+
+    # Split at the inversion point
+    to_rotate, rest = notes.split_at(actual_inversion)
+
+    # Move rotated notes up an octave (if within MIDI range)
+    rotated_notes: PSeq[Note] = PSeq.empty()
+    for note in to_rotate:
+        octave_up = note + 12
+        if octave_up <= 127:
+            rotated_notes = rotated_notes.snoc(Note(octave_up))
+
+    # Combine: rest first, then octave-shifted rotated notes
+    return rest.concat(rotated_notes)
+
+
+def apply_drop_voicing(notes: PSeq[Note], drop: int) -> PSeq[Note]:
+    """Apply drop voicing to chord notes.
+
+    Drop voicing takes specific notes from the top of a close voicing
+    and drops them down an octave. For example:
+    - drop2: Drop the second note from the top down an octave
+    - drop3: Drop the third note from the top down an octave
+    - drop2+4: Drop both the second and fourth notes from top
+
+    Args:
+        notes: The chord notes to apply drop voicing to
+        drop: The drop number (2 = drop2, 3 = drop3, etc.)
+
+    Returns:
+        PSeq of notes with drop voicing applied (filtered to valid MIDI range)
+    """
+    if drop <= 0 or len(notes) <= 1:
+        return notes
+
+    notes_list = list(notes)
+    dropped_notes = notes_list.copy()
+
+    # Find the position to drop (counting from the top, which is the end)
+    # drop2 means drop the 2nd note from the top
+    position_from_end = drop
+    if position_from_end <= len(notes_list):
+        # The actual index (0-based from the start)
+        idx = len(notes_list) - position_from_end
+
+        # Drop this note down an octave if possible
+        midi_value = notes_list[idx] - 12
+        if midi_value >= 0:
+            dropped_notes[idx] = Note(midi_value)
+
+    return PSeq.mk(dropped_notes)
