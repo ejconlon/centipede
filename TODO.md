@@ -28,26 +28,24 @@ Next available task ID: {#40}
 
 ### Active
 
+- {#38} Create invN dropN macros to modify chord voicings
+  - Example: ``c`maj7`inv1`drop2`` first inversion, drop 2 voicing of that
+  - Valid voicings must follow the pseudo-grammar: ``note ` chord [` (inv | drop) int ]*``
 
 ### Review
+
+
+### Upcoming
+
+- {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
+
+### Done
 
 - {#39} Unknown chords, notes, or sounds should throw errors in streams
   - Fixed ChordBinder to propagate ValueError instead of silencing unknown chords
   - Verified that unknown notes already raise ValueError
   - Verified that unknown sounds already raise ValueError
   - Added comprehensive test suite in test_stream_errors.py
-  - All tests pass and code is clean
-
-
-### Upcoming
-
-- {#38} Create invN dropN macros to modify chord voicings
-  - Example: ``c`maj7`inv1`drop2`` first inversion, drop 2 voicing of that
-  - Valid voicings must follow the pseudo-grammar: ``note ` chord [` (inv | drop) int ]*``
-- {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
-
-### Done
-
 - {#37} Change chord separator from single quote to backtick
 - {#36} Add midi file playing with fluidsynth to minipat/offline.py
   - Implemented play_midi function that saves MIDI file to temp directory
