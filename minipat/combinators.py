@@ -597,28 +597,20 @@ class ChordBinder(PatBinder[str, MidiAttrs], Singleton):
     @override
     def apply(self, value: str) -> Pat[MidiAttrs]:
         """Parse chord and create simultaneous MIDI note events."""
-        try:
-            chord_parser = ChordElemParser()
-            notes = chord_parser.apply(value)
+        chord_parser = ChordElemParser()
+        notes = chord_parser.apply(value)
 
-            # Create a parallel pattern of all the chord notes
-            note_pats = []
-            for note in notes:
-                attrs = DMap.singleton(NoteKey(), note)
-                note_pats.append(Pat.pure(attrs))
+        # Create a parallel pattern of all the chord notes
+        note_pats = []
+        for note in notes:
+            attrs = DMap.singleton(NoteKey(), note)
+            note_pats.append(Pat.pure(attrs))
 
-            # Return parallel pattern if multiple notes, single pattern if one note
-            if len(note_pats) == 1:
-                return note_pats[0]
-            else:
-                return Pat.par(note_pats)
-
-        except ValueError:
-            # If chord parsing fails, return silence
-            return Pat.silent()
-
-
-_CHORD_BINDER = ChordBinder()
+        # Return parallel pattern if multiple notes, single pattern if one note
+        if len(note_pats) == 1:
+            return note_pats[0]
+        else:
+            return Pat.par(note_pats)
 
 
 def midinote_stream(input_val: IntStreamLike) -> Stream[MidiAttrs]:
@@ -695,14 +687,15 @@ def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
         note_stream("g4 ~ c4`maj7")          # G note, rest, C major 7th
         note_stream("[c4`maj7,f4`min]")       # Layered chords
     """
+    chord_binder = ChordBinder()
     if isinstance(input_val, str):
-        return Stream.pat_bind(parse_sym_pattern(input_val), _CHORD_BINDER)
+        return Stream.pat_bind(parse_sym_pattern(input_val), chord_binder)
     elif isinstance(input_val, (Pat, Stream)):
         # For pattern/stream inputs, convert to string stream and bind with chord binder
         sym_stream = convert_to_sym_stream(input_val)
 
         def convert_to_midi_attrs(chord_name: str) -> Stream[MidiAttrs]:
-            return Stream.pat(_CHORD_BINDER.apply(chord_name))
+            return Stream.pat(chord_binder.apply(chord_name))
 
         return sym_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
     else:
