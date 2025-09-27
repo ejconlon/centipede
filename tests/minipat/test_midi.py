@@ -9,23 +9,24 @@ import mido
 from mido.frozen import FrozenMessage
 
 from minipat.combinators import (
+    bundle_stream,
     combine,
     combine_all,
     note_stream,
     program_stream,
     velocity_stream,
 )
+from minipat.dsl import bundle
 from minipat.ev import Ev, ev_heap_empty, ev_heap_singleton
 from minipat.live import Instant, Orbit
 from minipat.messages import (
     DEFAULT_VELOCITY,
-    Channel,
+    BundleKey,
     ChannelField,
     ChannelKey,
     ControlField,
-    ControlNum,
+    ControlMessage,
     ControlNumKey,
-    ControlVal,
     ControlValKey,
     MidiAttrs,
     MidiBundle,
@@ -33,15 +34,14 @@ from minipat.messages import (
     MidiMessage,
     MsgHeap,
     MsgTypeField,
-    Note,
     NoteField,
     NoteKey,
-    Program,
+    NoteOnMessage,
     ProgramField,
     ProgramKey,
+    ProgramMessage,
     TimedMessage,
     ValueField,
-    Velocity,
     VelocityField,
     VelocityKey,
     midi_bundle_concat,
@@ -55,8 +55,18 @@ from minipat.midi import (
     echo_system,
     parse_messages,
 )
+from minipat.pat import Pat
 from minipat.time import CycleArc, CycleSpan, CycleTime, PosixTime, mk_cps
+from minipat.types import (
+    Channel,
+    ControlNum,
+    ControlVal,
+    Note,
+    Program,
+    Velocity,
+)
 from spiny.dmap import DMap
+from spiny.seq import PSeq
 
 
 def test_note_parsing() -> None:
@@ -1260,18 +1270,6 @@ def test_timed_message_comparison_edge_cases() -> None:
 
 def test_bundle_key_in_midi_attrs() -> None:
     """Test that MidiMessage.parse_attrs handles BundleKey correctly."""
-    from minipat.messages import (
-        BundleKey,
-        Channel,
-        MidiDom,
-        Note,
-        NoteOnMessage,
-        Program,
-        ProgramMessage,
-        Velocity,
-    )
-    from spiny.dmap import DMap
-    from spiny.seq import PSeq
 
     # Create some messages for the bundle
     note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
@@ -1294,18 +1292,6 @@ def test_bundle_key_in_midi_attrs() -> None:
 
 def test_bundle_key_with_other_attributes() -> None:
     """Test that BundleKey works alongside other MIDI attributes."""
-    from minipat.messages import (
-        BundleKey,
-        Channel,
-        ChannelKey,
-        MidiDom,
-        Note,
-        NoteKey,
-        NoteOnMessage,
-        Velocity,
-        VelocityKey,
-    )
-    from spiny.dmap import DMap
 
     # Create a bundle with one message
     bundle_msg = NoteOnMessage(Channel(1), Note(72), Velocity(80))
@@ -1347,24 +1333,11 @@ def test_bundle_key_with_other_attributes() -> None:
 
 def test_bundle_stream_function() -> None:
     """Test the bundle_stream function from combinators."""
-    from fractions import Fraction
-
-    from minipat.combinators import bundle_stream
-    from minipat.messages import (
-        BundleKey,
-        Channel,
-        Note,
-        NoteOnMessage,
-        Velocity,
-    )
-    from minipat.time import CycleArc, CycleTime
 
     # Create a message
     note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
 
     # Create a Pat with the bundle and then a stream
-    from minipat.pat import Pat
-
     bundle_pat: Pat[MidiBundle] = Pat.pure(note_msg)
     stream = bundle_stream(bundle_pat)
 
@@ -1384,24 +1357,11 @@ def test_bundle_stream_function() -> None:
 
 def test_bundle_dsl_function() -> None:
     """Test the bundle function from DSL."""
-    from fractions import Fraction
-
-    from minipat.dsl import bundle
-    from minipat.messages import (
-        BundleKey,
-        Channel,
-        Note,
-        NoteOnMessage,
-        Velocity,
-    )
-    from minipat.time import CycleArc, CycleTime
 
     # Create a message
     note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
 
     # Create a Pat with the bundle and then a flow
-    from minipat.pat import Pat
-
     bundle_pat: Pat[MidiBundle] = Pat.pure(note_msg)
     flow = bundle(bundle_pat)
 
@@ -1424,24 +1384,6 @@ def test_bundle_dsl_function() -> None:
 
 def test_bundle_with_multiple_messages() -> None:
     """Test bundle functionality with multiple messages."""
-    from fractions import Fraction
-
-    from minipat.dsl import bundle
-    from minipat.messages import (
-        BundleKey,
-        Channel,
-        ControlMessage,
-        ControlNum,
-        ControlVal,
-        Note,
-        NoteOnMessage,
-        Program,
-        ProgramMessage,
-        Velocity,
-        midi_bundle_iterator,
-    )
-    from minipat.time import CycleArc, CycleTime
-    from spiny.seq import PSeq
 
     # Create multiple messages
     note_msg = NoteOnMessage(Channel(0), Note(60), Velocity(100))
@@ -1452,8 +1394,6 @@ def test_bundle_with_multiple_messages() -> None:
     bundle_val = PSeq.mk([note_msg, program_msg, control_msg])
 
     # Create a Pat with the bundle and then a flow
-    from minipat.pat import Pat
-
     bundle_pat: Pat[MidiBundle] = Pat.pure(bundle_val)
     flow = bundle(bundle_pat)
 

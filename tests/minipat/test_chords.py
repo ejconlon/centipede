@@ -71,7 +71,7 @@ def test_chord_intervals() -> None:
 
 def test_chord_to_notes() -> None:
     """Test converting chords to Note objects."""
-    from minipat.messages import Note
+    from minipat.types import Note
 
     # C major chord (C4 = 48)
     c_major = chord_to_notes(Note(48), Chord("maj"))

@@ -47,7 +47,6 @@ from minipat.live import (
 )
 from minipat.messages import (
     DEFAULT_VELOCITY,
-    Channel,
     ChannelField,
     ChannelKey,
     MidiAttrs,
@@ -56,10 +55,13 @@ from minipat.messages import (
     MsgTypeField,
     NoteField,
     TimedMessage,
-    Velocity,
     msg_note_off,
 )
 from minipat.time import Bpc, Cps, PosixTime
+from minipat.types import (
+    Channel,
+    Velocity,
+)
 from spiny.seq import PSeq
 
 # MIDI sender timing constants

@@ -24,7 +24,6 @@ from minipat.messages import (
     ProgramField,
     TimedMessage,
     ValueField,
-    Velocity,
     VelocityField,
     mido_bundle_iterator,
     msg_note_off,
@@ -39,6 +38,7 @@ from minipat.time import (
     PosixTime,
     mk_cycle_delta,
 )
+from minipat.types import Velocity
 
 
 def render_midi(

@@ -10,12 +10,14 @@ from dataclasses import dataclass
 from typing import Optional, override
 
 from minipat.messages import (
-    Channel,
     ChannelField,
-    Note,
     NoteField,
-    Velocity,
     VelocityField,
+)
+from minipat.types import (
+    Channel,
+    Note,
+    Velocity,
 )
 from spiny.arrow import BiArrow
 from spiny.map import PMap

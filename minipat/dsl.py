@@ -22,6 +22,7 @@ from minipat.combinators import (
     notename_stream,
     program_stream,
     sound_stream,
+    tab_stream,
     value_stream,
     velocity_stream,
 )
@@ -667,6 +668,23 @@ def note(input_val: SymStreamLike) -> Flow:
         note("[c4`maj7,f4`min]")    # Layered chords (simultaneous)
     """
     return Flow(note_stream(input_val))
+
+
+def tab(input_val: SymStreamLike) -> Flow:
+    """Create a flow from tablature notation.
+
+    Args:
+        input_val: Pattern string or stream containing tab notation
+
+    Returns:
+        A Flow containing MIDI note attributes with tab info
+
+    Examples:
+        tab("#x32010 #320003")     # C major, G major chords
+        tab("#x32010 ~ #320003")   # C major, rest, G major
+        tab("[#x32010,#320003]")   # Layered chords
+    """
+    return Flow(tab_stream(input_val))
 
 
 def midinote(input_val: IntStreamLike) -> Flow:

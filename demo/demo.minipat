@@ -8,12 +8,14 @@ hw = FLUIDR3_HARDWARE
 guit_inst = hw.find_instrument('guit')
 harp_inst = hw.find_instrument('harp')
 
-n[0] = note("d`min7`drop2 g`dom7 c`maj7 _")
-n.bundle(set_reverb(0, 120))
-n.bundle(set_pan(0, 127))
-n.bundle(set_sound(0, guit_inst.preset.bank, guit_inst.preset.program))
+# n[0] = note("d`min7`drop2 g`dom7 c`maj7 _")
+# n.bundle(set_reverb(0, 120))
+# n.bundle(set_pan(0, 127))
+# n.bundle(set_sound(0, guit_inst.preset.bank, guit_inst.preset.program))
 
-n[1] = note("d`min7 g`dom7`inv3 c`maj7 e`min")
-n.bundle(set_reverb(1, 120))
-n.bundle(set_pan(1, 0))
-n.bundle(set_sound(1, harp_inst.preset.bank, harp_inst.preset.program))
+# n[1] = note("d`min7 g`dom7`inv3 c`maj7 e`min")
+# n.bundle(set_reverb(1, 120))
+# n.bundle(set_pan(1, 0))
+# n.bundle(set_sound(1, harp_inst.preset.bank, harp_inst.preset.program))
+
+# n[2] = guit("#x32010 #320003")

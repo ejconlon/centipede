@@ -8,8 +8,9 @@ from minipat.chords import (
 )
 from minipat.combinators import ChordElemParser, note_stream
 from minipat.dsl import note
-from minipat.messages import Note, NoteKey
+from minipat.messages import NoteKey
 from minipat.time import CycleArc, CycleTime
+from minipat.types import Note
 from spiny import PSeq
 
 

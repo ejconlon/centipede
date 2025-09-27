@@ -3,29 +3,47 @@ from __future__ import annotations
 from fractions import Fraction
 from typing import Sequence, override
 
+from minipat.chords import (
+    apply_drop_voicing,
+    apply_inversion,
+    chord_to_notes,
+    parse_chord_name,
+)
 from minipat.kit import DrumSoundElemParser, Kit
 from minipat.messages import (
     BundleKey,
-    Channel,
     ChannelField,
     ControlField,
-    ControlNum,
-    ControlVal,
     MessageField,
     MidiAttrs,
     MidiBundle,
-    Note,
     NoteField,
     NoteKey,
-    Program,
     ProgramField,
+    TabFretKey,
+    TabInstKey,
+    TabStringKey,
     ValueField,
-    Velocity,
     VelocityField,
 )
-from minipat.parser import parse_int_pattern, parse_num_pattern, parse_sym_pattern
+from minipat.parser import (
+    parse_int_pattern,
+    parse_num_pattern,
+    parse_sym_pattern,
+    parse_tab_pattern,
+)
 from minipat.pat import Pat, PatBinder
 from minipat.stream import MergeStrat, Stream
+from minipat.tab import TabInst, interpret_tab_data
+from minipat.types import (
+    Channel,
+    ControlNum,
+    ControlVal,
+    Note,
+    Program,
+    TabData,
+    Velocity,
+)
 from spiny import PSeq
 from spiny.arrow import Arrow, BiArrow
 from spiny.common import Singleton
@@ -509,13 +527,6 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
 
     @override
     def apply(self, value: str) -> PSeq[Note]:
-        from minipat.chords import (
-            apply_drop_voicing,
-            apply_inversion,
-            chord_to_notes,
-            parse_chord_name,
-        )
-
         chord_str = value.lower()
 
         # Parse note name
@@ -613,6 +624,26 @@ class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
                 raise ValueError(f"Note {value} is out of MIDI range")
 
 
+class TabElemParser(Arrow[TabData, PSeq[tuple[Note, int, int]]], Singleton):
+    """Parser for TabData that generates notes with tab info.
+
+    Takes structured TabData and interprets it based on default instrument tuning.
+
+    Examples:
+        TabData(None, "x32010")  -> C major chord notes
+        TabData(6, "320003")     -> G major chord notes
+
+    Uses standard guitar by default.
+    """
+
+    @override
+    def apply(self, value: TabData) -> PSeq[tuple[Note, int, int]]:
+        # Interpret the tab data using default instrument
+        tab_notes = interpret_tab_data(value, TabInst.StandardGuitar)
+        # Return tuples of (note, string_num, fret) for further processing
+        return PSeq.mk([(tn.note, tn.string_num, tn.fret) for tn in tab_notes])
+
+
 # =============================================================================
 # Pattern Stream Functions
 # =============================================================================
@@ -640,6 +671,36 @@ class ChordBinder(PatBinder[str, MidiAttrs], Singleton):
         note_pats = []
         for note in notes:
             attrs = DMap.singleton(NoteKey(), note)
+            note_pats.append(Pat.pure(attrs))
+
+        # Return parallel pattern if multiple notes, single pattern if one note
+        if len(note_pats) == 1:
+            return note_pats[0]
+        else:
+            return Pat.par(note_pats)
+
+
+class TabBinder(PatBinder[TabData, MidiAttrs], Singleton):
+    """Binder for TabData that generates notes with tab attributes."""
+
+    @override
+    def apply(self, value: TabData) -> Pat[MidiAttrs]:
+        """Parse TabData and create simultaneous MIDI note events with tab info."""
+
+        tab_parser = TabElemParser()
+        note_infos = tab_parser.apply(value)
+
+        # Create a parallel pattern of all the notes with tab attributes
+        note_pats = []
+        for note, string_num, fret in note_infos:
+            # Create base attributes with note
+            attrs = DMap.singleton(NoteKey(), note)
+            # Add tab instrument
+            attrs = attrs.merge(DMap.singleton(TabInstKey(), TabInst.StandardGuitar))
+            # Add string number
+            attrs = attrs.merge(DMap.singleton(TabStringKey(), string_num))
+            # Add fret number
+            attrs = attrs.merge(DMap.singleton(TabFretKey(), fret))
             note_pats.append(Pat.pure(attrs))
 
         # Return parallel pattern if multiple notes, single pattern if one note
@@ -736,6 +797,36 @@ def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
         return sym_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
     else:
         raise ValueError(f"Unsupported type for chord_stream: {type(input_val)}")
+
+
+def tab_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
+    """Create stream from tablature patterns.
+
+    Parses tab notation and creates a stream of MIDI attributes
+    with tab instrument, string, and fret information.
+
+    Args:
+        input_val: Pattern string or stream containing tab notation
+
+    Examples:
+        tab_stream("#x32010 #320003")  # C major, G major
+        tab_stream("#x32010 ~ #320003")  # C major, rest, G major
+        tab_stream("[#x32010,#320003]")  # Layered chords
+    """
+    tab_binder = TabBinder()
+    if isinstance(input_val, str):
+        return Stream.pat_bind(parse_tab_pattern(input_val), tab_binder)
+    elif isinstance(input_val, (Pat, Stream)):
+        # For pattern/stream inputs, convert to string stream and bind with tab binder
+        str_stream = convert_to_sym_stream(input_val)
+
+        # Convert each string to midi attrs using the tab binder
+        def convert_to_midi_attrs(tab_string: str) -> Stream[MidiAttrs]:
+            return Stream.pat_bind(parse_tab_pattern(tab_string), tab_binder)
+
+        return str_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
+    else:
+        raise ValueError(f"Unsupported type for tab_stream: {type(input_val)}")
 
 
 def sound_stream(kit: Kit, input_val: SymStreamLike) -> Stream[MidiAttrs]:

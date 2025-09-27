@@ -10,15 +10,17 @@ from dataclasses import dataclass
 from typing import Iterable, Optional, TypeVar
 
 from minipat.messages import (
-    Channel,
     ControlMessage,
-    ControlNum,
-    ControlVal,
     MidiBundle,
     MidiMessage,
-    Program,
     ProgramMessage,
     midi_bundle_concat,
+)
+from minipat.types import (
+    Channel,
+    ControlNum,
+    ControlVal,
+    Program,
 )
 from spiny.seq import PSeq
 

@@ -24,12 +24,26 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#41}
+Next available task ID: {#42}
 
 ### Active
 
 
 ### Review
+
+- {#41} Add guitar tab parsing
+  - **Restructured**: Renamed to comprehensive tablature system supporting multiple instruments
+  - Created tab.py module with TabInst enum and TabConfig dataclass system
+  - Supports multiple instruments: StandardGuitar, DropDGuitar, StandardBass, Ukulele, Mandolin, Banjo, etc.
+  - Added TabInstKey, TabStringKey, TabFretKey MIDI message fields for tab metadata
+  - Renamed guit() to tab() and guitar_tab_stream to tab_stream for consistency
+  - Created TabElemParser and TabBinder classes that generate full tab attributes
+  - Format: "#frets" where frets are continuous digits/x, spaces separate tab entries
+  - Examples: "#x32010" (C chord), "#320003" (G chord), "#x32010 #320003" (sequence)
+  - Tab attributes include: Note, TabInst, string number (1-based), fret number
+  - Configurable string ordering (HIGH_TO_LOW default for guitar)
+  - Comprehensive test suite with 20 tests covering all functionality
+  - All tests pass and precommit checks succeed
 
 
 ### Upcoming

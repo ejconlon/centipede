@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import Any, Type, cast
+from typing import Any, Optional, Type, cast
 
 from lark import Lark, Transformer
 
 from minipat.pat import Pat, PatSeq, PatStretch, SpeedOp
+from minipat.types import TabData
 from spiny.common import Singleton
+from spiny.seq import PSeq
 
+# TODO add tab: to grammar
 # Lark grammar for parsing minipat pattern notation.
 # This grammar defines the syntax for the minipat pattern language, including
 # sequences, choices, parallel patterns, euclidean rhythms, and more.
@@ -30,6 +33,7 @@ COLON: ":"
 
 // Tokens
 SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_#`-]*[a-zA-Z0-9#`])?/
+TAB: /(\d+)?#[0-9x]+/
 POS_INTEGER: /\d+/
 INTEGER: /-?\d+/
 DECIMAL: /-?\d*\.\d+/
@@ -51,6 +55,7 @@ element: elongation | repetition | replicate | probability | atom | seq | choice
 atom: $$ATOM$$ | silence
 symbol: symbol_with_selector | SYMBOL
 symbol_with_selector: SYMBOL COLON SYMBOL
+tab: TAB
 silence: "~"
 
 // Grouping structures
@@ -86,9 +91,10 @@ def _mk_grammar(atom: str) -> str:
 _SYM_GRAMMAR = _mk_grammar("symbol")
 _NUM_GRAMMAR = _mk_grammar("numeric")
 _INT_GRAMMAR = _mk_grammar("INTEGER")
+_TAB_GRAMMAR = _mk_grammar("tab")
 
 
-class PatternTransformer[T](Transformer[Any, Pat[T]], Singleton):
+class PatternTransformer[T, U](Transformer[Any, U], Singleton):
     """Transform parsed pattern into Pat objects."""
 
     def start(self, items: list[Any]) -> Pat[T]:
@@ -169,6 +175,10 @@ class PatternTransformer[T](Transformer[Any, Pat[T]], Singleton):
         # Combine symbol and selector with colon
         combined_value = f"{symbol_str}:{selector_str}"
         return Pat.pure(combined_value)
+
+    def tab(self, items: list[Any]) -> Pat[TabData]:
+        """Transform a tab element into a pattern."""
+        return Pat.pure(cast(TabData, items[0]))
 
     def silence(self, _items: list[Any]) -> Pat[Any]:
         """Transform silence into empty pattern."""
@@ -341,6 +351,47 @@ class PatternTransformer[T](Transformer[Any, Pat[T]], Singleton):
         """Transform a symbol token into a pure pattern with string value."""
         return Pat.pure(str(token))
 
+    def TAB(self, token: Any) -> TabData:
+        """Transform a tab token into a pure pattern with TabData value."""
+        tab_str = str(token)
+
+        # Parse format: [string]#frets
+        if "#" not in tab_str:
+            raise ValueError(f"Invalid tab format (missing #): {tab_str}")
+
+        parts = tab_str.split("#", 1)
+        string_part = parts[0]
+        fret_str = parts[1]
+
+        if not fret_str:
+            raise ValueError("No fret positions specified")
+
+        # Parse optional starting string number
+        start_string = None
+        if string_part:
+            try:
+                start_string = int(string_part)
+                if start_string < 1:
+                    raise ValueError(f"Invalid string number: {start_string}")
+            except ValueError:
+                raise ValueError(f"Invalid string number: {string_part}")
+
+        # Parse fret string into PSeq[Optional[int]]
+        fret_values: list[Optional[int]] = []
+        for ch in fret_str:
+            if ch.lower() == "x":
+                fret_values.append(None)  # Muted string
+            else:
+                try:
+                    fret = int(ch)
+                    if fret < 0 or fret > 9:
+                        raise ValueError(f"Invalid fret number: {fret}")
+                    fret_values.append(fret)
+                except ValueError:
+                    raise ValueError(f"Invalid fret token: {ch}")
+
+        return TabData(start_string=start_string, frets=PSeq.mk(fret_values))
+
     def POS_INTEGER(self, token: Any) -> int:
         """Transform a positive integer token."""
         return int(str(token))
@@ -386,7 +437,7 @@ def _parse_pattern[T](_ty: Type[T], grammar: str, pattern_str: str) -> Pat[T]:
         # Returns choice pattern
     """
     parser = Lark(grammar)
-    transformer = PatternTransformer[T]()
+    transformer = PatternTransformer[T, Pat[T]]()
     tree = parser.parse(pattern_str)
     return transformer.transform(tree)
 
@@ -437,3 +488,33 @@ def parse_int_pattern(pattern_str: str) -> Pat[int]:
     See parse_sym_pattern for more information.
     """
     return _parse_pattern(int, _INT_GRAMMAR, pattern_str)
+
+
+def parse_tab_pattern(pattern_str: str) -> Pat[TabData]:
+    """Parse a pattern string into a Pat[TabData] object containing tab notation.
+
+    This parses tab patterns using the TAB terminal which matches strings like:
+    - "#x32010" (C major chord)
+    - "6#320003" (G major chord starting from string 6)
+    - "#0000" (open strings)
+
+    The resulting Pat[TabData] contains structured tab data which can then be
+    processed by TabBinder to generate MIDI attributes based on instrument tuning.
+
+    Args:
+        pattern_str: Pattern string containing tab notation
+
+    Returns:
+        Pat[TabData] object containing structured tab data
+
+    Examples:
+        parse_tab_pattern("#x32010 #320003")  # C major, G major
+        parse_tab_pattern("#x32010 ~ #320003")  # C major, rest, G major
+        parse_tab_pattern("[#x32010,#320003]")  # Parallel chords
+    """
+    return _parse_pattern(TabData, _TAB_GRAMMAR, pattern_str)
+
+
+def parse_tab(tab_str: str) -> TabData:
+    """Parse a singleton tab pattern (see parse_tab_pattern)."""
+    return PatternTransformer().TAB(tab_str)

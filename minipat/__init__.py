@@ -16,7 +16,7 @@ from minipat.kit import (
     Sound,
     add_hit,
 )
-from minipat.messages import Note
+from minipat.types import Note
 
 __all__ = [
     "note",

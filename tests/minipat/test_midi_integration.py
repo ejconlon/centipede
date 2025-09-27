@@ -451,14 +451,16 @@ class TestMidiLiveSystemIntegration:
         # Create a bundle with multiple message types
         from minipat.dsl import bundle
         from minipat.messages import (
-            Channel,
             ControlMessage,
+            NoteOnMessage,
+            ProgramMessage,
+        )
+        from minipat.types import (
+            Channel,
             ControlNum,
             ControlVal,
             Note,
-            NoteOnMessage,
             Program,
-            ProgramMessage,
             Velocity,
         )
         from spiny.seq import PSeq

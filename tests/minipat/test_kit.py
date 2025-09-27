@@ -11,7 +11,7 @@ from minipat.kit import (
     Sound,
     add_hit,
 )
-from minipat.messages import Note
+from minipat.types import Note
 from spiny.map import PMap
 
 
@@ -27,7 +27,7 @@ class TestAddHit:
 
     def test_add_hit_with_velocity_and_channel(self) -> None:
         """Test hit creation with velocity and channel."""
-        from minipat.messages import Channel, Velocity
+        from minipat.types import Channel, Velocity
 
         hit = add_hit(36, 100, 9)
         assert hit.note == Note(36)
@@ -61,7 +61,7 @@ class TestSound:
 
     def test_hit_with_velocity_and_channel(self) -> None:
         """Test Sound creation with velocity and channel."""
-        from minipat.messages import Channel, Velocity
+        from minipat.types import Channel, Velocity
 
         sound = Sound(Note(36), Velocity(100), Channel(9))
         assert sound.note == Note(36)
@@ -236,7 +236,7 @@ class TestNucleusKitManagement:
     def test_nucleus_add_hit(self) -> None:
         """Test adding hits via Nucleus.add_hit() method."""
         from minipat.dsl import Nucleus
-        from minipat.messages import Channel, Velocity
+        from minipat.types import Channel, Velocity
 
         n = Nucleus.boot()
         try:

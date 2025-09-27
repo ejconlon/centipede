@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import NewType, Optional, cast
 
-from minipat.messages import Note
+from minipat.types import Note
 from spiny import PSeq
 
 Chord = NewType("Chord", str)

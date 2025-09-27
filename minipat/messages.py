@@ -2,15 +2,31 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Generator, NewType, Optional, cast, override
+from typing import Generator, Optional, cast, override
 
 from mido import Message
 from mido.frozen import FrozenMessage
 
+from minipat.tab import TabInst
 from minipat.time import PosixTime
+from minipat.types import (
+    Channel,
+    ControlNum,
+    ControlVal,
+    Note,
+    Program,
+    Velocity,
+)
 from spiny.dmap import DKey, DMap
 from spiny.heap import PHeap
 from spiny.seq import PSeq
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+DEFAULT_VELOCITY = Velocity(64)
+"""Default MIDI velocity when not specified"""
 
 # =============================================================================
 # Bundle Types
@@ -31,33 +47,6 @@ def _assert_midi_range(value: int, max_value: int, name: str) -> None:
     """Assert that a value is in valid MIDI range."""
     if not (0 <= value <= max_value):
         raise ValueError(f"{name} {value} out of range (0-{max_value})")
-
-
-# =============================================================================
-# MIDI Value Types
-# =============================================================================
-
-
-Note = NewType("Note", int)
-"""MIDI note number (0-127)"""
-
-Velocity = NewType("Velocity", int)
-"""MIDI velocity (0-127)"""
-
-Channel = NewType("Channel", int)
-"""MIDI channel (0-15)"""
-
-Program = NewType("Program", int)
-"""MIDI program number (0-127)"""
-
-ControlNum = NewType("ControlNum", int)
-"""MIDI control number (0-127)"""
-
-ControlVal = NewType("ControlVal", int)
-"""MIDI control value (0-127)"""
-
-DEFAULT_VELOCITY = Velocity(64)
-"""Default MIDI velocity when not specified"""
 
 
 # =============================================================================
@@ -387,6 +376,24 @@ class ControlValKey(MidiKey[ControlVal]):
 
 class BundleKey(MidiKey[MidiBundle]):
     """Key for control value in MIDI attributes."""
+
+    pass
+
+
+class TabInstKey(MidiKey[TabInst]):
+    """Key for tab instrument type in MIDI attributes."""
+
+    pass
+
+
+class TabStringKey(MidiKey[int]):
+    """Key for tab string number (1-based) in MIDI attributes."""
+
+    pass
+
+
+class TabFretKey(MidiKey[int]):
+    """Key for tab fret number in MIDI attributes."""
 
     pass
 
