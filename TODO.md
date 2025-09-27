@@ -31,6 +31,18 @@ Next available task ID: {#42}
 
 ### Review
 
+
+### Upcoming
+
+- {#40} Implement O(log n) versions of PSeq.take, drop, and split_at operations
+  - Current implementations are O(n) using iteration/uncons
+  - Need proper finger tree-based splitting that operates on tree structure
+  - Should leverage existing finger tree invariants for logarithmic complexity
+  - Reference Hinze-Paterson paper for proper splitting algorithms
+- {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
+
+### Done
+
 - {#41} Add guitar tab parsing
   - **Restructured**: Renamed to comprehensive tablature system supporting multiple instruments
   - Created tab.py module with TabInst enum and TabConfig dataclass system
@@ -44,19 +56,6 @@ Next available task ID: {#42}
   - Configurable string ordering (HIGH_TO_LOW default for guitar)
   - Comprehensive test suite with 20 tests covering all functionality
   - All tests pass and precommit checks succeed
-
-
-### Upcoming
-
-- {#40} Implement O(log n) versions of PSeq.take, drop, and split_at operations
-  - Current implementations are O(n) using iteration/uncons
-  - Need proper finger tree-based splitting that operates on tree structure
-  - Should leverage existing finger tree invariants for logarithmic complexity
-  - Reference Hinze-Paterson paper for proper splitting algorithms
-- {#25} Add `Flow.beat(self, beat_str: str, steps: int) -> Flow` to repeat flow in the given pattern
-
-### Done
-
 - {#38} Create invN dropN macros to modify chord voicings
   - Implemented chord inversion functionality with `apply_inversion()` function
   - Implemented drop voicing functionality with `apply_drop_voicing()` function
