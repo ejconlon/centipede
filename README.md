@@ -1,3 +1,3 @@
 # centipede
 
-a python synth/tracker
+python music utils

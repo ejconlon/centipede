@@ -24,10 +24,11 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#42}
+Next available task ID: {#43}
 
 ### Active
 
+- {#42} Engrave event heaps with lilypond, including tab information
 
 ### Review
 
