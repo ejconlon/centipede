@@ -139,12 +139,13 @@ def test_repetition_slow() -> None:
 
     assert len(event_list) == 1
     _, event = event_list[0]
-    # Slow repetition stretches the pattern and scales back - results in compressed event
+    # Slow repetition stretches the pattern - query (0,1) shows partial event
     assert event.span.active.start == Fraction(0)
-    assert event.span.active.end == Fraction(
-        1
-    )  # Actually fills the whole arc after scaling back
-    assert event.span.whole == event.span.active  # Fills entire arc, no wider context
+    assert event.span.active.end == Fraction(1)  # Query arc extent
+    assert event.span.whole.start == Fraction(0)
+    assert event.span.whole.end == Fraction(
+        2
+    )  # Full pattern extent (stretched by factor 2)
     assert event.val == "x"
 
 

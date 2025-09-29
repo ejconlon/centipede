@@ -4,6 +4,7 @@ from fractions import Fraction
 
 from minipat.chords import (
     Chord,
+    chord_data_to_notes,
     chord_to_notes,
     get_chord_intervals,
     parse_chord_name,
@@ -11,7 +12,9 @@ from minipat.chords import (
 from minipat.combinators import ChordElemParser
 from minipat.dsl import note
 from minipat.messages import NoteKey
+from minipat.parser import parse_chord
 from minipat.time import CycleArc, CycleTime
+from minipat.types import Note
 
 
 def test_chord_name_parsing() -> None:
@@ -306,3 +309,103 @@ def test_complex_chord_names() -> None:
     cdim7 = parser.apply("c4`dim7")
     note_values = [int(note) for note in cdim7]
     assert note_values == [48, 51, 54, 57]  # C, Eb, Gb, A
+
+
+def test_parse_chord() -> None:
+    """Test parsing chord fragments into ChordData."""
+    # Test basic major chord
+    data = parse_chord("c4`maj")
+    assert data.root_note == Note(48)  # C4
+    assert data.chord_name == "maj"
+    assert len(data.modifiers) == 0
+
+    # Test with sharp
+    data = parse_chord("f#3`min")
+    assert data.root_note == Note(42)  # F#3
+    assert data.chord_name == "min"
+    assert len(data.modifiers) == 0
+
+    # Test with flat
+    data = parse_chord("bb5`sus4")
+    assert data.root_note == Note(70)  # Bb5
+    assert data.chord_name == "sus4"
+    assert len(data.modifiers) == 0
+
+    # Test default octave
+    data = parse_chord("d`maj7")
+    assert data.root_note == Note(50)  # D4 (default octave 4)
+    assert data.chord_name == "maj7"
+
+    # Test with inversion
+    data = parse_chord("c4`maj7`inv1")
+    assert data.root_note == Note(48)
+    assert data.chord_name == "maj7"
+    assert len(data.modifiers) == 1
+    assert data.modifiers[0] == ("inv", 1)
+
+    # Test with drop voicing
+    data = parse_chord("g3`min7`drop2")
+    assert data.root_note == Note(43)
+    assert data.chord_name == "min7"
+    assert len(data.modifiers) == 1
+    assert data.modifiers[0] == ("drop", 2)
+
+    # Test with multiple modifiers
+    data = parse_chord("e4`maj9`inv2`drop3")
+    assert data.root_note == Note(52)
+    assert data.chord_name == "maj9"
+    assert len(data.modifiers) == 2
+    assert data.modifiers[0] == ("inv", 2)
+    assert data.modifiers[1] == ("drop", 3)
+
+    # Test error cases
+    import pytest
+
+    # Missing backtick
+    with pytest.raises(ValueError, match="must include backtick"):
+        parse_chord("c4maj")
+
+    # Invalid note
+    with pytest.raises(ValueError, match="Invalid note"):
+        parse_chord("x4`maj")
+
+    # Unknown chord
+    with pytest.raises(ValueError, match="Unknown chord"):
+        parse_chord("c4`xyz")
+
+    # Invalid inversion
+    with pytest.raises(ValueError, match="Invalid inversion"):
+        parse_chord("c4`maj`invx")
+
+    # Invalid drop
+    with pytest.raises(ValueError, match="Invalid drop"):
+        parse_chord("c4`maj`dropZ")
+
+
+def test_chord_data_to_notes() -> None:
+    """Test converting ChordData to notes."""
+    # Test basic chord
+    data = parse_chord("c4`maj")
+    notes = chord_data_to_notes(data)
+    note_values = [int(note) for note in notes]
+    assert note_values == [48, 52, 55]  # C, E, G
+
+    # Test chord with inversion
+    data = parse_chord("c4`maj7`inv1")
+    notes = chord_data_to_notes(data)
+    note_values = [int(note) for note in notes]
+    assert note_values == [52, 55, 59, 60]  # E, G, B, C (first inversion)
+
+    # Test chord with drop voicing
+    data = parse_chord("c4`maj7`drop2")
+    notes = chord_data_to_notes(data)
+    note_values = [int(note) for note in notes]
+    assert note_values == [48, 52, 43, 59]  # C, E, G (dropped), B
+
+    # Test complex chord with multiple modifiers
+    data = parse_chord("g3`min7`inv1`drop2")
+    notes = chord_data_to_notes(data)
+    # First apply inv1 to G min7 [43, 46, 50, 53] -> [46, 50, 53, 55]
+    # Then apply drop2 (2nd from top) -> [46, 50, 41, 55]
+    note_values = [int(note) for note in notes]
+    assert note_values == [46, 50, 41, 55]

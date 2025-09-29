@@ -28,12 +28,6 @@ Next available task ID: {#44}
 
 ### Active
 
-- {#43} Parse chord fragments (note, name, list of inv/drop modifiers) as ChordData
-  - Useful to parse Pat[ChordData] to render chord names
-  - frozen dataclass ChordData in minipat.types
-  - Later render ChordData -> sequence of Note in minipat.chords
-  - Add chord engraving to Lilypad output by taking StreamLike[ChordData]
-
 
 ### Review
 
@@ -49,6 +43,12 @@ Next available task ID: {#44}
 
 ### Done
 
+- {#43} Parse chord fragments (note, name, list of inv/drop modifiers) as ChordData
+  - Implemented frozen dataclass ChordData in minipat.types
+  - Added parse_chord_fragment() function to parse chord strings into ChordData
+  - Added chord_data_to_notes() function to render ChordData to sequence of Notes
+  - Supports format: [note][accidental][octave]`[chord_name][`voicing_modifier]*
+  - Supports inv[n] and drop[n] voicing modifiers
 - {#42} Engrave event heaps with lilypond, including tab information
   - ✓ Implemented `render_lilypond()` function in minipat/offline.py
   - ✓ Takes EvHeap[MidiAttrs] with tab information and renders to LilyPond format

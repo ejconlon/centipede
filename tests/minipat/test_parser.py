@@ -2,7 +2,7 @@ from fractions import Fraction
 
 import pytest
 
-from minipat.parser import parse_sym_pattern
+from minipat.parser import parse_chord_pattern, parse_sym_pattern
 from minipat.pat import (
     PatAlt,
     PatEuc,
@@ -18,6 +18,7 @@ from minipat.pat import (
     PatStretch,
     SpeedOp,
 )
+from minipat.types import ChordData, Note
 
 
 def assert_string_value(value: str, expected_value: str) -> None:
@@ -515,3 +516,90 @@ def test_parse_nested_new_features() -> None:
     result = parse_sym_pattern("[bd | sd]*2%1")
     assert isinstance(result.unwrap, PatSpeed)
     assert isinstance(result.unwrap.pat.unwrap, PatRand)
+
+
+def test_parse_basic_chord() -> None:
+    """Test parsing a single chord."""
+    result = parse_chord_pattern("c4`maj7")
+    assert isinstance(result.unwrap, PatPure)
+    chord_data = result.unwrap.value
+    assert isinstance(chord_data, ChordData)
+    assert chord_data.root_note == Note(48)  # C4
+    assert chord_data.chord_name == "maj7"
+    assert len(chord_data.modifiers) == 0
+
+
+def test_parse_chord_sequence() -> None:
+    """Test parsing a sequence of chords."""
+    result = parse_chord_pattern("c4`maj7 f#3`min g5`sus4")
+    assert isinstance(result.unwrap, PatSeq)
+
+    children = list(result.unwrap.pats)
+    assert len(children) == 3
+
+    # Check first chord (C major 7)
+    chord1 = children[0].unwrap.value
+    assert isinstance(chord1, ChordData)
+    assert chord1.root_note == Note(48)
+    assert chord1.chord_name == "maj7"
+
+    # Check second chord (F# minor)
+    chord2 = children[1].unwrap.value
+    assert isinstance(chord2, ChordData)
+    assert chord2.root_note == Note(42)  # F#3
+    assert chord2.chord_name == "min"
+
+    # Check third chord (G sus4)
+    chord3 = children[2].unwrap.value
+    assert isinstance(chord3, ChordData)
+    assert chord3.root_note == Note(67)  # G5
+    assert chord3.chord_name == "sus4"
+
+
+def test_parse_chord_with_modifiers() -> None:
+    """Test parsing chords with voicing modifiers."""
+    result = parse_chord_pattern("c4`maj7`inv1`drop2")
+    assert isinstance(result.unwrap, PatPure)
+    chord_data = result.unwrap.value
+    assert isinstance(chord_data, ChordData)
+    assert chord_data.root_note == Note(48)
+    assert chord_data.chord_name == "maj7"
+    assert len(chord_data.modifiers) == 2
+    assert chord_data.modifiers[0] == ("inv", 1)
+    assert chord_data.modifiers[1] == ("drop", 2)
+
+
+def test_parse_chord_with_silence() -> None:
+    """Test parsing chord patterns with silence."""
+    result = parse_chord_pattern("c4`maj ~ f#`min")
+    assert isinstance(result.unwrap, PatSeq)
+
+    children = list(result.unwrap.pats)
+    assert len(children) == 3  # chord, silence, chord
+
+    # First chord
+    assert isinstance(children[0].unwrap, PatPure)
+    chord1 = children[0].unwrap.value
+    assert chord1.chord_name == "maj"
+
+    # Silence
+    assert isinstance(children[1].unwrap, PatSilent)
+
+    # Second chord
+    assert isinstance(children[2].unwrap, PatPure)
+    chord2 = children[2].unwrap.value
+    assert chord2.chord_name == "min"
+
+
+def test_parse_parallel_chords() -> None:
+    """Test parsing parallel chord patterns."""
+    result = parse_chord_pattern("[c4`maj7,e4`min]")
+    assert isinstance(result.unwrap, PatPar)
+
+    patterns = list(result.unwrap.pats)
+    assert len(patterns) == 2
+
+    chord1 = patterns[0].unwrap.value
+    chord2 = patterns[1].unwrap.value
+    assert chord1.chord_name == "maj7"
+    assert chord2.chord_name == "min"

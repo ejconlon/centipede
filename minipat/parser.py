@@ -7,8 +7,10 @@ from typing import Any, Optional, Type, cast
 
 from lark import Lark, Transformer
 
+from minipat.chords import parse_chord_name
+from minipat.constants import DEFAULT_OCTAVE, NOTE_NAME_TO_SEMITONE
 from minipat.pat import Pat, PatSeq, PatStretch, SpeedOp
-from minipat.types import TabData
+from minipat.types import ChordData, Note, TabData
 from spiny.common import Singleton
 from spiny.seq import PSeq
 
@@ -32,6 +34,7 @@ DOT: "."
 COLON: ":"
 
 // Tokens
+CHORD: /[a-gA-G][#b]?\d?(`[a-zA-Z0-9]+)+/
 SYMBOL: /[a-zA-Z0-9]([a-zA-Z0-9_#`-]*[a-zA-Z0-9#`])?/
 TAB: /(\d+)?#[0-9x]+/
 POS_INTEGER: /\d+/
@@ -55,6 +58,7 @@ element: elongation | repetition | replicate | probability | atom | seq | choice
 atom: $$ATOM$$ | silence
 symbol: symbol_with_selector | SYMBOL
 symbol_with_selector: SYMBOL COLON SYMBOL
+chord: CHORD
 tab: TAB
 silence: "~"
 
@@ -92,6 +96,7 @@ _SYM_GRAMMAR = _mk_grammar("symbol")
 _NUM_GRAMMAR = _mk_grammar("numeric")
 _INT_GRAMMAR = _mk_grammar("INTEGER")
 _TAB_GRAMMAR = _mk_grammar("tab")
+_CHORD_GRAMMAR = _mk_grammar("chord")
 
 
 class PatternTransformer[T, U](Transformer[Any, U], Singleton):
@@ -175,6 +180,10 @@ class PatternTransformer[T, U](Transformer[Any, U], Singleton):
         # Combine symbol and selector with colon
         combined_value = f"{symbol_str}:{selector_str}"
         return Pat.pure(combined_value)
+
+    def chord(self, items: list[Any]) -> Pat[ChordData]:
+        """Transform a chord element into a pattern."""
+        return Pat.pure(cast(ChordData, items[0]))
 
     def tab(self, items: list[Any]) -> Pat[TabData]:
         """Transform a tab element into a pattern."""
@@ -392,6 +401,85 @@ class PatternTransformer[T, U](Transformer[Any, U], Singleton):
 
         return TabData(start_string=start_string, frets=PSeq.mk(fret_values))
 
+    def CHORD(self, token: Any) -> ChordData:
+        """Transform a chord token into ChordData."""
+        chord_str = str(token).lower()
+
+        # Parse note name
+        if len(chord_str) < 1:
+            raise ValueError(f"Invalid chord format: {chord_str}")
+
+        # Get base note
+        base_note = chord_str[0]
+        if base_note not in NOTE_NAME_TO_SEMITONE:
+            raise ValueError(f"Invalid note name in chord: {chord_str}")
+
+        semitone = NOTE_NAME_TO_SEMITONE[base_note]
+        pos = 1
+
+        # Check for sharp or flat
+        if pos < len(chord_str):
+            if chord_str[pos] == "#":
+                semitone += 1
+                pos += 1
+            elif chord_str[pos] == "b":
+                semitone -= 1
+                pos += 1
+
+        # Extract octave if present
+        octave = DEFAULT_OCTAVE
+        if pos < len(chord_str) and chord_str[pos].isdigit():
+            octave_start = pos
+            while pos < len(chord_str) and chord_str[pos].isdigit():
+                pos += 1
+            octave = int(chord_str[octave_start:pos])
+
+        # Calculate root MIDI note number
+        root_midi = octave * 12 + semitone
+        root_note = Note(root_midi)
+
+        # Check for backtick separator
+        if pos >= len(chord_str) or chord_str[pos] != "`":
+            raise ValueError(
+                f"Chord fragment must include backtick separator: {chord_str}"
+            )
+
+        pos += 1
+        if pos >= len(chord_str):
+            raise ValueError(f"Backtick without chord name: {chord_str}")
+
+        # Split the rest by backticks to get chord and modifiers
+        remaining = chord_str[pos:]
+        parts = remaining.split("`")
+
+        # First part should be the chord name
+        chord_name_str = parts[0]
+        chord_name = parse_chord_name(chord_name_str)
+        if chord_name is None:
+            raise ValueError(f"Unknown chord type: {chord_name_str}")
+
+        # Parse voicing modifiers
+        modifiers = []
+        for modifier in parts[1:]:
+            if modifier.startswith("inv"):
+                # Parse inversion number
+                inv_num_str = modifier[3:]
+                if not inv_num_str.isdigit():
+                    raise ValueError(f"Invalid inversion modifier: {modifier}")
+                modifiers.append(("inv", int(inv_num_str)))
+            elif modifier.startswith("drop"):
+                # Parse drop number
+                drop_num_str = modifier[4:]
+                if not drop_num_str.isdigit():
+                    raise ValueError(f"Invalid drop modifier: {modifier}")
+                modifiers.append(("drop", int(drop_num_str)))
+            else:
+                raise ValueError(f"Unknown voicing modifier: {modifier}")
+
+        return ChordData(
+            root_note=root_note, chord_name=chord_name, modifiers=PSeq.mk(modifiers)
+        )
+
     def POS_INTEGER(self, token: Any) -> int:
         """Transform a positive integer token."""
         return int(str(token))
@@ -518,3 +606,33 @@ def parse_tab_pattern(pattern_str: str) -> Pat[TabData]:
 def parse_tab(tab_str: str) -> TabData:
     """Parse a singleton tab pattern (see parse_tab_pattern)."""
     return PatternTransformer().TAB(tab_str)
+
+
+def parse_chord_pattern(pattern_str: str) -> Pat[ChordData]:
+    """Parse a pattern string into a Pat[ChordData] object containing chord notation.
+
+    This parses chord patterns using the CHORD terminal which matches strings like:
+    - "c4`maj7" (C major 7th chord)
+    - "f#3`min`inv1" (F# minor chord, first inversion)
+    - "bb5`sus4`drop2" (Bb sus4 chord with drop2 voicing)
+
+    The resulting Pat[ChordData] contains structured chord data which can then be
+    processed to generate MIDI note sequences or chord names for display.
+
+    Args:
+        pattern_str: Pattern string containing chord notation
+
+    Returns:
+        Pat[ChordData] object containing structured chord data
+
+    Examples:
+        parse_chord_pattern("c4`maj7 f#`min")  # C maj7, F# min
+        parse_chord_pattern("c4`maj7 ~ f#`min")  # C maj7, rest, F# min
+        parse_chord_pattern("[c4`maj7,e4`min]")  # Parallel chords
+    """
+    return _parse_pattern(ChordData, _CHORD_GRAMMAR, pattern_str)
+
+
+def parse_chord(chord_str: str) -> ChordData:
+    """Parse a singleton chord pattern (see parse_chord_pattern)."""
+    return PatternTransformer().CHORD(chord_str)

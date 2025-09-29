@@ -817,72 +817,139 @@ class SpeedStream[T](Stream[T]):
     count: Fraction
 
     def _unstream_fast(
-        self,
-        factor: Fraction,
-        arc: CycleArc,
-        cycle_arc: CycleArc,
-        result: PHeapMap[CycleSpan, Ev[T]],
+        self, factor: Fraction, arc: CycleArc
     ) -> PHeapMap[CycleSpan, Ev[T]]:
-        cycle_start = cycle_arc.start
-        cycle_end = cycle_arc.end
+        """Unified speed implementation.
 
-        # Handle fractional repetitions: x*2.5 = 2 full + 0.5 partial repetition
-        if factor > 0:
-            # Get integer and fractional parts
-            int_part = int(factor)  # Number of full repetitions
-            frac_part = factor - int_part  # Fractional part for partial repetition
+        For factor > 1: Pattern repeats 'factor' times per cycle (fast)
+        For factor < 1: Pattern stretches over 1/factor cycles (slow)
+        """
+        if factor <= 0:
+            return ev_heap_empty()
 
-            # Use canonical cycle duration for proper timing
-            rep_duration = (
-                Fraction(1) / factor
-            )  # Duration of each repetition within canonical cycle
+        if factor == 1:
+            return self.pattern.unstream(arc)
 
-            # Add full repetitions - evaluate each separately for proper alternation
+        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
+
+        if factor < 1:
+            # Handle slow case: stretch by 1/factor
+            stretch_factor = 1 / factor
+
+            # Scale query arc down
+            scaled_start = arc.start / stretch_factor
+            scaled_end = arc.end / stretch_factor
+            scaled_arc = CycleArc(CycleTime(scaled_start), CycleTime(scaled_end))
+
+            pattern_events = self.pattern.unstream(scaled_arc)
+
+            for span, ev in pattern_events:
+                # Scale both active and whole spans up
+                real_active_start = span.active.start * stretch_factor
+                real_active_end = span.active.end * stretch_factor
+                real_active = CycleArc(
+                    CycleTime(real_active_start), CycleTime(real_active_end)
+                )
+
+                # Scale whole span if it exists
+                if span.whole.start is not None and span.whole.end is not None:
+                    real_whole_start = span.whole.start * stretch_factor
+                    real_whole_end = span.whole.end * stretch_factor
+                    real_whole = CycleArc(
+                        CycleTime(real_whole_start), CycleTime(real_whole_end)
+                    )
+                else:
+                    real_whole = real_active
+
+                # Find intersection with query arc
+                active_intersection = real_active.intersect(arc)
+
+                if not active_intersection.null():
+                    intersected_span = CycleSpan.mk(
+                        whole=real_whole, active=active_intersection
+                    )
+                    real_ev = Ev(intersected_span, ev.val)
+                    result = ev_heap_push(real_ev, result)
+
+            return result
+
+        # Fast repetition logic (factor > 1)
+        start_cycle = floor(arc.start)
+        end_cycle = ceil(arc.end)
+
+        for cycle_index in range(start_cycle, end_cycle):
+            cycle_start = Fraction(cycle_index)
+            cycle_end = Fraction(cycle_index + 1)
+            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
+
+            cycle_intersection = cycle_arc.intersect(arc)
+            if cycle_intersection.null():
+                continue
+
+            # Repeat pattern 'factor' times within this cycle
+            int_part = int(factor)
+            frac_part = factor - int_part
+            rep_duration = Fraction(1) / factor
+
+            # Full repetitions within this cycle
             for i in range(int_part):
                 rep_start = cycle_start + i * rep_duration
+                rep_end = rep_start + rep_duration
 
-                # Only include the repetition if the query arc contains its start point
-                if arc.start <= rep_start < arc.end:
-                    # Evaluate pattern for the full cycle to get canonical behavior, then scale
-                    full_cycle_arc = CycleArc(
-                        CycleTime(cycle_start), CycleTime(cycle_end)
-                    )
-                    rep_events = self.pattern.unstream(full_cycle_arc)
-                    for span, ev in rep_events:
-                        # Scale the event to fit within the repetition
-                        # Original event is relative to (0,1), scale to repetition span
-                        event_start_ratio = span.active.start - cycle_start
-                        event_end_ratio = span.active.end - cycle_start
+                # Only include if this repetition intersects with query arc
+                rep_arc = CycleArc(CycleTime(rep_start), CycleTime(rep_end))
+                if not rep_arc.intersect(arc).null():
+                    pattern_events = self.pattern.unstream(cycle_arc)
+                    for _, ev in pattern_events:
+                        # Scale event to fit within repetition
+                        event_start_ratio = ev.span.active.start - cycle_start
+                        event_end_ratio = ev.span.active.end - cycle_start
 
                         scaled_start = rep_start + event_start_ratio * rep_duration
                         scaled_end = rep_start + event_end_ratio * rep_duration
+
+                        # Find intersection with query arc
                         scaled_arc = CycleArc(
                             CycleTime(scaled_start), CycleTime(scaled_end)
                         )
-
-                        # Check if scaled arc intersects with query arc
                         intersection = scaled_arc.intersect(arc)
+
                         if not intersection.null():
-                            scaled_span = CycleSpan.mk(
-                                whole=intersection, active=intersection
+                            # Preserve whole span by scaling it too
+                            if (
+                                ev.span.whole.start is not None
+                                and ev.span.whole.end is not None
+                            ):
+                                whole_start_ratio = ev.span.whole.start - cycle_start
+                                whole_end_ratio = ev.span.whole.end - cycle_start
+                                scaled_whole_start = (
+                                    rep_start + whole_start_ratio * rep_duration
+                                )
+                                scaled_whole_end = (
+                                    rep_start + whole_end_ratio * rep_duration
+                                )
+                                scaled_whole = CycleArc(
+                                    CycleTime(scaled_whole_start),
+                                    CycleTime(scaled_whole_end),
+                                )
+                            else:
+                                scaled_whole = intersection
+
+                            intersected_span = CycleSpan.mk(
+                                whole=scaled_whole, active=intersection
                             )
-                            scaled_ev = Ev(scaled_span, ev.val)
+                            scaled_ev = Ev(intersected_span, ev.val)
                             result = ev_heap_push(scaled_ev, result)
 
-            # Add partial repetition if needed
+            # Partial repetition if needed
             if frac_part > 0:
                 partial_start = cycle_start + int_part * rep_duration
                 partial_end = partial_start + frac_part * rep_duration
 
-                # Only include the partial repetition if it intersects with the query arc
-                if partial_start < arc.end and partial_end > arc.start:
-                    # Evaluate pattern for the full cycle to get canonical behavior
-                    full_cycle_arc = CycleArc(
-                        CycleTime(cycle_start), CycleTime(cycle_end)
-                    )
-                    partial_pattern_events = self.pattern.unstream(full_cycle_arc)
-                    for _, ev in partial_pattern_events:
-                        # Scale the event to fit within the partial repetition, clipped
+                partial_arc = CycleArc(CycleTime(partial_start), CycleTime(partial_end))
+                if not partial_arc.intersect(arc).null():
+                    pattern_events = self.pattern.unstream(cycle_arc)
+                    for _, ev in pattern_events:
                         event_start_ratio = ev.span.active.start - cycle_start
                         event_end_ratio = ev.span.active.end - cycle_start
                         partial_duration = frac_part * rep_duration
@@ -892,22 +959,52 @@ class SpeedStream[T](Stream[T]):
                         )
                         scaled_end = partial_start + event_end_ratio * partial_duration
 
-                        # Clip to partial repetition boundaries
+                        # Clip to partial boundaries
                         scaled_start = max(scaled_start, partial_start)
                         scaled_end = min(scaled_end, partial_end)
 
                         if scaled_start < scaled_end:
+                            # Find intersection with query arc
                             scaled_arc = CycleArc(
-                                CycleTime(scaled_start),
-                                CycleTime(scaled_end),
+                                CycleTime(scaled_start), CycleTime(scaled_end)
                             )
-                            # Check if scaled arc intersects with query arc
                             intersection = scaled_arc.intersect(arc)
+
                             if not intersection.null():
-                                scaled_span = CycleSpan.mk(
-                                    whole=intersection, active=intersection
+                                # Preserve whole span
+                                if (
+                                    ev.span.whole.start is not None
+                                    and ev.span.whole.end is not None
+                                ):
+                                    whole_start_ratio = (
+                                        ev.span.whole.start - cycle_start
+                                    )
+                                    whole_end_ratio = ev.span.whole.end - cycle_start
+                                    scaled_whole_start = (
+                                        partial_start
+                                        + whole_start_ratio * partial_duration
+                                    )
+                                    scaled_whole_end = (
+                                        partial_start
+                                        + whole_end_ratio * partial_duration
+                                    )
+                                    scaled_whole_start = max(
+                                        scaled_whole_start, partial_start
+                                    )
+                                    scaled_whole_end = min(
+                                        scaled_whole_end, partial_end
+                                    )
+                                    scaled_whole = CycleArc(
+                                        CycleTime(scaled_whole_start),
+                                        CycleTime(scaled_whole_end),
+                                    )
+                                else:
+                                    scaled_whole = intersection
+
+                                intersected_span = CycleSpan.mk(
+                                    whole=scaled_whole, active=intersection
                                 )
-                                scaled_ev = Ev(scaled_span, ev.val)
+                                scaled_ev = Ev(intersected_span, ev.val)
                                 result = ev_heap_push(scaled_ev, result)
 
         return result
@@ -917,29 +1014,10 @@ class SpeedStream[T](Stream[T]):
         if arc.null() or self.count <= 0:
             return ev_heap_empty()
 
-        result: PHeapMap[CycleSpan, Ev[T]] = ev_heap_empty()
-
-        # Find all cycles that intersect with the query arc
-        start_cycle = floor(arc.start)
-        end_cycle = ceil(arc.end)
-
-        for cycle_index in range(start_cycle, end_cycle):
-            cycle_start = Fraction(cycle_index)
-            cycle_end = Fraction(cycle_index + 1)
-            cycle_arc = CycleArc(CycleTime(cycle_start), CycleTime(cycle_end))
-
-            # Check if this cycle intersects with the query arc
-            cycle_intersection = cycle_arc.intersect(arc)
-            if cycle_intersection.null():
-                continue
-
-            match self.operator:
-                case SpeedOp.Fast:
-                    result = self._unstream_fast(self.count, arc, cycle_arc, result)
-                case SpeedOp.Slow:
-                    result = self._unstream_fast(1 / self.count, arc, cycle_arc, result)
-
-        return result
+        if self.operator == SpeedOp.Fast:
+            return self._unstream_fast(self.count, arc)
+        else:  # SpeedOp.Slow
+            return self._unstream_fast(1 / self.count, arc)
 
 
 @dataclass(frozen=True)

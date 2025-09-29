@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import NewType, Optional, cast
 
-from minipat.types import Note
+from minipat.types import ChordData, Note
 from spiny import PSeq
 
 Chord = NewType("Chord", str)
+
 
 _CHORD_MAP = cast(
     dict[str, Chord],
@@ -315,3 +316,28 @@ def apply_drop_voicing(notes: PSeq[Note], drop: int) -> PSeq[Note]:
             dropped_notes[idx] = Note(midi_value)
 
     return PSeq.mk(dropped_notes)
+
+
+def chord_data_to_notes(chord_data: ChordData) -> PSeq[Note]:
+    """Convert ChordData to a sequence of Note objects.
+
+    Applies the chord type and any voicing modifiers to generate
+    the actual notes of the chord.
+
+    Args:
+        chord_data: The ChordData to render
+
+    Returns:
+        PSeq of Note objects for the chord (filtered to valid MIDI range)
+    """
+    # Get base chord notes
+    notes = chord_to_notes(chord_data.root_note, Chord(chord_data.chord_name))
+
+    # Apply voicing modifiers in order
+    for modifier_type, modifier_value in chord_data.modifiers:
+        if modifier_type == "inv":
+            notes = apply_inversion(notes, modifier_value)
+        elif modifier_type == "drop":
+            notes = apply_drop_voicing(notes, modifier_value)
+
+    return notes

@@ -11,6 +11,7 @@ from minipat.tab import TabInst
 from minipat.time import PosixTime
 from minipat.types import (
     Channel,
+    ChordData,
     ControlNum,
     ControlVal,
     Note,
@@ -394,6 +395,12 @@ class TabStringKey(MidiKey[int]):
 
 class TabFretKey(MidiKey[int]):
     """Key for tab fret number in MIDI attributes."""
+
+    pass
+
+
+class ChordDataKey(MidiKey[ChordData]):
+    """Key for chord data in MIDI attributes."""
 
     pass
 

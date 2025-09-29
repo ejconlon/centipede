@@ -41,3 +41,14 @@ class TabData:
 
     start_string: Optional[int]  # Starting string number (1-based), None for default
     frets: PSeq[Optional[int]]  # Fret positions for each string (None for muted)
+
+
+@dataclass(frozen=True)
+class ChordData:
+    """Structured representation of parsed chord notation."""
+
+    root_note: Note  # The root note of the chord
+    chord_name: str  # The chord type (e.g., "maj7", "min", "sus4")
+    modifiers: PSeq[
+        tuple[str, int]
+    ]  # List of (modifier_type, value) pairs like ("inv", 1), ("drop", 2)

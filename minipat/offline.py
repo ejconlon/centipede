@@ -10,12 +10,14 @@ from typing import Iterable, Optional
 
 import mido
 
+from minipat.chords import chord_data_to_notes
 from minipat.dsl import FlowLike, convert_to_midi_stream
 from minipat.ev import EvHeap, ev_heap_empty
 from minipat.live import Orbit
 from minipat.messages import (
     DEFAULT_VELOCITY,
     ChannelField,
+    ChordDataKey,
     ControlField,
     MidiAttrs,
     MsgHeap,
@@ -32,6 +34,7 @@ from minipat.messages import (
     msg_note_off,
 )
 from minipat.midi import parse_messages
+from minipat.stream import Stream
 from minipat.tab import TabInst
 from minipat.time import (
     Bpc,
@@ -42,7 +45,7 @@ from minipat.time import (
     PosixTime,
     mk_cycle_delta,
 )
-from minipat.types import Velocity
+from minipat.types import ChordData, TabData, Velocity
 
 # LilyPond note names for each semitone in an octave
 _LILYPOND_NOTE_NAMES: list[str] = [
@@ -68,6 +71,49 @@ _LILYPOND_TUNINGS: dict[TabInst, str] = {
     TabInst.Ukulele: "ukulele-tuning",
     TabInst.Mandolin: "mandolin-tuning",
     TabInst.Banjo: "banjo-open-g-tuning",
+}
+
+# Mapping of chord names to LilyPond chord symbols
+_CHORD_MAP: dict[str, str] = {
+    "maj": "",  # Major chords have no suffix in LilyPond
+    "min": "m",
+    "dim": "dim",
+    "aug": "aug",
+    "sus2": "sus2",
+    "sus4": "sus4",
+    "maj7": "maj7",
+    "min7": "m7",
+    "dom7": "7",
+    "maj9": "maj9",
+    "min9": "m9",
+    "9": "9",
+    "maj11": "maj11",
+    "min11": "m11",
+    "11": "11",
+    "maj13": "maj13",
+    "min13": "m13",
+    "13": "13",
+    "6": "6",
+    "min6": "m6",
+    "69": "6.9",
+    "min69": "m6.9",
+    "dim7": "dim7",
+    "mmaj7": "mMaj7",
+    "add9": "add9",
+    "add11": "add11",
+    "add13": "add13",
+    "7f5": "7-5",
+    "7s5": "7+5",
+    "7f9": "7-9",
+    "min7f5": "m7-5",
+    "min7s5": "m7+5",
+    "min7f9": "m7-9",
+    "min7s9": "m7+9",
+    "7sus2": "7sus2",
+    "7sus4": "7sus4",
+    "9sus4": "9sus4",
+    "5": "5",
+    "1": "",  # Root only
 }
 
 
@@ -323,7 +369,6 @@ def play_midi(mid: mido.MidiFile, name: Optional[str] = None) -> None:
         raise FileNotFoundError(f"Soundfont not found at {soundfont_path}")
 
     # Play the MIDI file using fluidsynth
-    # -a alsa: use ALSA audio driver (Linux) or auto-detect on other platforms
     # -i: don't read commands from stdin (non-interactive)
     # -q: quiet mode (suppress most output)
     cmd = [
@@ -340,31 +385,41 @@ def play_midi(mid: mido.MidiFile, name: Optional[str] = None) -> None:
 
 
 def render_lilypond(
-    start: CycleTime,
-    events: EvHeap[MidiAttrs],
-    name: str,
+    arc: CycleArc,
+    tab_stream: Stream[TabData],
+    chord_stream: Optional[Stream[ChordData]] = None,
+    name: str = "lilypond_output",
     directory: Optional[Path] = None,
     cps: Optional[Cps] = None,
     bpc: Optional[Bpc] = None,
-) -> Path:
-    """Render an EvHeap to LilyPond file and compile to PDF with tablature information.
+    pdf: bool = False,
+    svg: bool = False,
+) -> dict[str, Path]:
+    """Render streams to LilyPond file and compile to PDF and/or SVG with tablature information.
 
     Args:
-        start: Start cycle time - events will be timed relative to this
-        events: The event heap containing MIDI attribute events with tab info
+        arc: The cycle arc defining the time range to render
+        tab_stream: Stream[TabData] containing tab data (e.g., from tab_data_stream)
+        chord_stream: Optional Stream[ChordData] for rendering chord names (e.g., from chord_data_stream)
         name: Filename without extension (e.g., "my_song")
         directory: Output directory (defaults to temporary directory if None)
         cps: Cycles per second (tempo) - affects note duration calculations
         bpc: Beats per cycle (time signature numerator)
+        pdf: Whether to generate PDF output (default: False)
+        svg: Whether to generate SVG output (default: False)
 
     Returns:
-        Path to the generated PDF file
+        Dictionary with keys for generated files:
+        - "ly": Path to the LilyPond source file (always generated)
+        - "pdf": Path to the PDF file (if pdf=True)
+        - "svg": Path to the SVG file (if svg=True)
 
     Note:
         One cycle equals one bar, bpc is the numerator of the time signature.
-        Events with TabInstKey, TabStringKey, and TabFretKey will be rendered
-        with explicit string/fret notation in tablature.
-        Both .ly and .pdf files are created in the specified directory.
+        TabData objects are converted to MIDI attributes with tab information
+        and rendered with explicit string/fret notation in tablature.
+        The .ly source file is always created in the specified directory.
+        Use tab_data_stream() and chord_data_stream() to create appropriate streams.
     """
     cps = cps if cps is not None else Cps(Fraction(1, 2))
     bpc = bpc if bpc is not None else Bpc(4)
@@ -380,16 +435,77 @@ def render_lilypond(
 
     ly_path = output_dir / f"{name}.ly"
     pdf_path = output_dir / f"{name}.pdf"
+    svg_path = output_dir / f"{name}.svg"
 
     # Collect events with timing and tab information
     timed_events: list[tuple[float, float, MidiAttrs]] = []
+    chord_names: dict[float, ChordData] = {}  # Store chord data by timing
 
-    for span, ev in events:
+    # Get the start time from the arc for relative timing calculations
+    start = arc.start
+
+    # Process tab_stream into events by converting TabData to MidiAttrs
+    all_events: EvHeap[MidiAttrs] = ev_heap_empty()
+    for span, tab_ev in tab_stream.unstream(arc):
+        # Convert TabData to MidiAttrs using TabBinder
+        from minipat.combinators import TabBinder
+
+        tab_binder = TabBinder()
+        midi_attrs_pat = tab_binder.apply(tab_ev.val)
+
+        # Process the pattern and add events to our heap
+        # The TabBinder creates patterns that span a unit cycle (0-1), so we need to
+        # unstream over a unit cycle and then shift the results to the correct timing
+        unit_cycle = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(1)))
+        for inner_span, inner_ev in Stream.pat(midi_attrs_pat).unstream(unit_cycle):
+            # Shift the span to match the timing of the original TabData event
+            span_duration = span.active.end - span.active.start
+            adjusted_start = span.active.start + (
+                inner_span.active.start * span_duration
+            )
+            adjusted_end = span.active.start + (inner_span.active.end * span_duration)
+
+            from minipat.time import CycleSpan
+
+            adjusted_span = CycleSpan(
+                inner_span.whole,
+                CycleArc(CycleTime(adjusted_start), CycleTime(adjusted_end)),
+            )
+            all_events = all_events.insert(adjusted_span, inner_ev)
+
+    # Process chord_stream to collect chord names by timing
+    if chord_stream is not None:
+        for span, chord_ev in chord_stream.unstream(arc):
+            event_start_cycles = float(span.active.start - start)
+            # ChordData is directly in the event now
+            chord_names[event_start_cycles] = chord_ev.val
+
+    events_to_process = all_events
+
+    for span, ev in events_to_process:
         # Calculate timing relative to start
         event_start_cycles = float(span.active.start - start)
         event_duration_cycles = float(span.active.end - span.active.start)
 
-        timed_events.append((event_start_cycles, event_duration_cycles, ev.val))
+        # Check if this event contains chord data
+        chord_data_key = ChordDataKey()
+        try:
+            chord_data = ev.val.get(chord_data_key)
+            # Store chord data for chord name annotation
+            chord_names[event_start_cycles] = chord_data
+            # Expand chord data into individual note events
+            chord_notes = chord_data_to_notes(chord_data)
+            for note in chord_notes:
+                # Create new attributes with the note
+                note_attrs = ev.val.put(NoteKey(), note)
+                # Remove chord data to avoid confusion
+                note_attrs = note_attrs.remove(chord_data_key)
+                timed_events.append(
+                    (event_start_cycles, event_duration_cycles, note_attrs)
+                )
+        except KeyError:
+            # Regular event without chord data
+            timed_events.append((event_start_cycles, event_duration_cycles, ev.val))
 
     # Sort events by start time
     timed_events.sort(key=lambda x: x[0])
@@ -420,11 +536,46 @@ def render_lilypond(
 
     # Note: instrument configuration is available via TAB_CONFIGS[instrument] if needed
 
-    # Build the music content
+    # Build the music content and chord symbols separately
     music_parts = []
+    chord_symbols = []
+
+    # Track previous chord time to avoid gaps in chord symbols
+    prev_chord_time = 0.0
+
     for event_time in sorted(chord_groups.keys()):
         duration_attrs_list = chord_groups[event_time]
 
+        # Handle chord symbols
+        if event_time in chord_names:
+            # Add spacer rest if needed
+            if event_time > prev_chord_time:
+                rest_duration = event_time - prev_chord_time
+                rest_suffix = _get_lilypond_duration(rest_duration, float(bpc))
+                chord_symbols.append(f"s{rest_suffix}")
+
+            # Add chord symbol
+            chord_data = chord_names[event_time]
+            # Get root note and chord type for LilyPond
+            root_note_str = _midi_to_lilypond_note(chord_data.root_note)
+            chord_type = _CHORD_MAP.get(chord_data.chord_name, chord_data.chord_name)
+            # Get duration to next event or end of piece
+            next_events = [t for t in sorted(chord_groups.keys()) if t > event_time]
+            if next_events:
+                chord_duration = next_events[0] - event_time
+            else:
+                # Last chord - sustain for remaining duration
+                chord_duration = float(arc.end - arc.start) - event_time
+            duration_suffix = _get_lilypond_duration(chord_duration, float(bpc))
+            # Format: root+duration:type (e.g., a4:m or c4 for major)
+            if chord_type:
+                chord_symbols.append(f"{root_note_str}{duration_suffix}:{chord_type}")
+            else:
+                # Major chord has no suffix
+                chord_symbols.append(f"{root_note_str}{duration_suffix}")
+            prev_chord_time = event_time + chord_duration
+
+        # Handle notes/tabs
         if len(duration_attrs_list) == 1:
             # Single note
             duration, attrs = duration_attrs_list[0]
@@ -433,43 +584,59 @@ def render_lilypond(
                 music_parts.append(note_str)
         else:
             # Chord
-            chord_notes = []
-            chord_duration = None
+            chord_note_strings: list[str] = []
+            chord_note_duration: Optional[float] = None
             for duration, attrs in duration_attrs_list:
                 note_str = _format_lilypond_note(
                     attrs, duration, float(bpc), in_chord=True
                 )
                 if note_str:
-                    chord_notes.append(note_str)
-                    if chord_duration is None:
-                        chord_duration = duration
+                    chord_note_strings.append(note_str)
+                    if chord_note_duration is None:
+                        chord_note_duration = duration
 
-            if chord_notes:
-                if len(chord_notes) == 1:
-                    music_parts.append(chord_notes[0])
+            if chord_note_strings:
+                if len(chord_note_strings) == 1:
+                    music_parts.append(chord_note_strings[0])
                 else:
                     duration_suffix = _get_lilypond_duration(
-                        chord_duration or 1.0, float(bpc)
+                        chord_note_duration or 1.0, float(bpc)
                     )
-                    music_parts.append(f"<{' '.join(chord_notes)}>{duration_suffix}")
+                    music_parts.append(
+                        f"<{' '.join(chord_note_strings)}>{duration_suffix}"
+                    )
 
     # Create complete LilyPond file content
+    # Only include ChordNames if we have chord symbols
+    chord_names_section = ""
+    if chord_symbols:
+        chord_names_section = f"""myChords = \\chordmode {{
+  {" ".join(chord_symbols)}
+}}
+
+"""
+
     content = f"""{version_line}
 
-myMusic = {{
+{chord_names_section}myMusic = {{
   \\set TabStaff.stringTunings = #{_get_lilypond_tuning(instrument)}
+  \\time 4/4
   {" ".join(music_parts) if music_parts else "r4"}
 }}
 
 \\score {{
-  \\new StaffGroup <<
-    \\new Staff {{
-      \\clef "treble_8"
-      \\myMusic
-    }}
-    \\new TabStaff {{
-      \\myMusic
-    }}
+  <<
+    {"\\new ChordNames { \\myChords }" if chord_symbols else ""}
+    \\new StaffGroup <<
+      \\new Staff {{
+        \\clef "treble_8"
+        \\override StringNumber.stencil = ##f
+        \\myMusic
+      }}
+      \\new TabStaff {{
+        \\myMusic
+      }}
+    >>
   >>
   \\layout {{ }}
 }}"""
@@ -478,18 +645,34 @@ myMusic = {{
     with open(ly_path, "w") as f:
         f.write(content)
 
-    # Compile to PDF
-    _compile_lilypond_to_pdf(ly_path, pdf_path)
+    # Compile to PDF and/or SVG
+    _compile_lilypond_to_outputs(ly_path, pdf_path, svg_path, pdf, svg)
 
-    return pdf_path
+    # Build result dictionary with generated files
+    result = {"ly": ly_path}
+    if pdf:
+        result["pdf"] = pdf_path
+    if svg:
+        result["svg"] = svg_path
+
+    return result
 
 
-def _compile_lilypond_to_pdf(ly_path: Path, pdf_path: Path) -> None:
-    """Compile a LilyPond file to PDF.
+def _compile_lilypond_to_outputs(
+    ly_path: Path,
+    pdf_path: Path,
+    svg_path: Path,
+    generate_pdf: bool = True,
+    generate_svg: bool = True,
+) -> None:
+    """Compile a LilyPond file to PDF and/or SVG.
 
     Args:
         ly_path: Path to the .ly file to compile
         pdf_path: Expected path to the output PDF file
+        svg_path: Expected path to the output SVG file
+        generate_pdf: Whether to generate PDF output
+        generate_svg: Whether to generate SVG output
 
     Raises:
         RuntimeError: If LilyPond compilation fails
@@ -499,13 +682,24 @@ def _compile_lilypond_to_pdf(ly_path: Path, pdf_path: Path) -> None:
         lilypond_cmd = "/usr/local/bin/lilypond"
         for cmd in [lilypond_cmd, "lilypond"]:
             try:
-                subprocess.run(
-                    [cmd, f"--output={ly_path.stem}", str(ly_path.name)],
-                    cwd=ly_path.parent,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+                # Compile to PDF if requested
+                if generate_pdf:
+                    subprocess.run(
+                        [cmd, "--pdf", f"--output={ly_path.stem}", str(ly_path.name)],
+                        cwd=ly_path.parent,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                # Compile to SVG if requested
+                if generate_svg:
+                    subprocess.run(
+                        [cmd, "--svg", f"--output={ly_path.stem}", str(ly_path.name)],
+                        cwd=ly_path.parent,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
                 break
             except subprocess.CalledProcessError as e:
                 if cmd == "lilypond":  # Last attempt failed
@@ -514,12 +708,37 @@ def _compile_lilypond_to_pdf(ly_path: Path, pdf_path: Path) -> None:
                 if cmd == "lilypond":  # Last attempt failed
                     raise RuntimeError("LilyPond not found. Please install LilyPond.")
 
-        # Verify PDF was created
-        if not pdf_path.exists():
+        # Verify requested outputs were created
+        if generate_pdf and not pdf_path.exists():
             raise RuntimeError(f"PDF was not generated at {pdf_path}")
+        if generate_svg and not svg_path.exists():
+            raise RuntimeError(f"SVG was not generated at {svg_path}")
 
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"LilyPond compilation failed: {e.stderr}")
+
+
+def _chord_data_to_lilypond_name(chord_data: ChordData) -> str:
+    """Convert ChordData to a LilyPond chord name."""
+    # Get the root note name
+    root_note_str = _midi_to_lilypond_note(chord_data.root_note)
+
+    # Convert chord name to LilyPond format
+    chord_name = chord_data.chord_name
+
+    lily_chord_name = _CHORD_MAP.get(chord_name, chord_name)
+
+    # Handle inversions and drop voicings in chord name comment
+    modifiers = []
+    for mod_type, mod_value in chord_data.modifiers:
+        if mod_type == "inv":
+            modifiers.append(f"inv{mod_value}")
+        elif mod_type == "drop":
+            modifiers.append(f"drop{mod_value}")
+
+    modifier_str = f" ({', '.join(modifiers)})" if modifiers else ""
+
+    return f"{root_note_str}:{lily_chord_name}{modifier_str}"
 
 
 def _format_lilypond_note(
@@ -542,18 +761,17 @@ def _format_lilypond_note(
     except KeyError:
         string_num = None
 
-    # Format the note with string indication
-    if string_num is not None and not in_chord:
-        note_with_string = f"{note_name}\\{string_num}"
-    else:
-        note_with_string = note_name
-
     # Add duration for non-chord notes
     if not in_chord:
         duration_suffix = _get_lilypond_duration(duration, bpc)
-        return f"{note_with_string}{duration_suffix}"
+        # Format: note + duration + string indication (hidden from display)
+        if string_num is not None:
+            return f"{note_name}{duration_suffix}\\{string_num}"
+        else:
+            return f"{note_name}{duration_suffix}"
     else:
-        return note_with_string
+        # For chord notes, just return note name (no duration, string handled elsewhere)
+        return note_name
 
 
 def _midi_to_lilypond_note(midi_note: int) -> str:

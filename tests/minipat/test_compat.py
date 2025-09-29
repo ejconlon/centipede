@@ -23,6 +23,21 @@ def _test_pattern_events(
         """Convert events to comparable tuples using whole spans for logical equivalence."""
         return [(ev.span.whole.start, ev.span.whole.end, ev.val) for _, ev in events]
 
+    def _filter_valid_events(
+        events: list[tuple[CycleSpan, Ev[str]]],
+    ) -> list[tuple[CycleSpan, Ev[str]]]:
+        """Filter events to include only those where whole span start is contained in active span.
+
+        This ensures each logical event is counted exactly once when combining results from
+        overlapping query arcs, particularly important for slow patterns that create
+        long-duration events spanning multiple query boundaries.
+        """
+        return [
+            (span, ev)
+            for span, ev in events
+            if span.active.start <= span.whole.start < span.active.end
+        ]
+
     # Test strategy 1: (0, 2) in one call - use as golden truth
     arc_full = CycleArc(CycleTime(Fraction(0)), CycleTime(Fraction(2)))
     events_full = stream.unstream(arc_full)
@@ -60,7 +75,11 @@ def _test_pattern_events(
         events = stream.unstream(arc)
         quarter_events.extend(events)
 
-    quarter_events_sorted = sorted(quarter_events, key=lambda x: x[0].active.start)
+    # Filter quarter events to avoid double-counting overlapping events
+    quarter_events_filtered = _filter_valid_events(quarter_events)
+    quarter_events_sorted = sorted(
+        quarter_events_filtered, key=lambda x: x[0].active.start
+    )
     quarter_tuples = _events_to_tuples(quarter_events_sorted)
 
     assert quarter_tuples == full_tuples, (
@@ -166,14 +185,12 @@ def test_slow_alternation() -> None:
     _test_pattern_events(
         "[bd <hh oh>]/2",
         [
-            (Fraction(0), Fraction(1, 2), "bd"),  # bd (0, 0.5)
-            (Fraction(1, 2), Fraction(1), "hh"),  # hh (0.5, 1)
-            (Fraction(1), Fraction(3, 2), "bd"),  # bd (1, 1.5)
+            (Fraction(0), Fraction(1), "bd"),  # bd (0, 1)
             (
-                Fraction(3, 2),
+                Fraction(1),
                 Fraction(2),
-                "oh",
-            ),  # oh (1.5, 2) - alternation changes mid-pattern
+                "hh",
+            ),  # hh (1, 2) - alternation produces hh in first cycle
         ],
     )
 

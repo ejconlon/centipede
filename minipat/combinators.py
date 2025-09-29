@@ -9,6 +9,7 @@ from minipat.chords import (
     chord_to_notes,
     parse_chord_name,
 )
+from minipat.constants import DEFAULT_OCTAVE, NOTE_NAME_TO_SEMITONE
 from minipat.kit import DrumSoundElemParser, Kit
 from minipat.messages import (
     BundleKey,
@@ -27,6 +28,7 @@ from minipat.messages import (
     VelocityField,
 )
 from minipat.parser import (
+    parse_chord_pattern,
     parse_int_pattern,
     parse_num_pattern,
     parse_sym_pattern,
@@ -37,6 +39,7 @@ from minipat.stream import MergeStrat, Stream
 from minipat.tab import TabInst, interpret_tab_data
 from minipat.types import (
     Channel,
+    ChordData,
     ControlNum,
     ControlVal,
     Note,
@@ -88,24 +91,29 @@ Accepts:
 - Stream[str]: Pre-constructed bundle stream
 """
 
+type TabDataStreamLike = str | Pat[TabData] | Stream[TabData]
+"""Types accepted by functions for tab data patterns.
+
+Accepts:
+- str: Pattern string containing tab notation (e.g., "#x32010 #320003")
+- Pat[TabData]: Pattern of TabData objects
+- Stream[TabData]: Pre-constructed TabData stream
+"""
+
+type ChordDataStreamLike = str | Pat[ChordData] | Stream[ChordData]
+"""Types accepted by functions for chord data patterns.
+
+Accepts:
+- str: Pattern string containing chord notation (e.g., "c4`maj7 f#`min")
+- Pat[ChordData]: Pattern of ChordData objects
+- Stream[ChordData]: Pre-constructed ChordData stream
+"""
+
 
 # =============================================================================
 # Pattern Parsing and Rendering
 # =============================================================================
 
-# Default octave for notes specified without octave number
-DEFAULT_OCTAVE = 4
-
-# Note name to semitone mapping (C is 0)
-NOTE_NAME_TO_SEMITONE: dict[str, int] = {
-    "c": 0,
-    "d": 2,
-    "e": 4,
-    "f": 5,
-    "g": 7,
-    "a": 9,
-    "b": 11,
-}
 
 # Semitone to note name mapping (using sharps)
 SEMITONE_TO_NOTE_NAME: list[str] = [
@@ -124,7 +132,7 @@ SEMITONE_TO_NOTE_NAME: list[str] = [
 ]
 
 
-class IntBinder(PatBinder[str, int]):
+class IntBinder(PatBinder[str, int], Singleton):
     """Binder that converts string integers to integer values."""
 
     def apply(self, value: str) -> Pat[int]:
@@ -498,6 +506,30 @@ def convert_to_bundle_stream(input_val: BundleStreamLike) -> Stream[MidiBundle]:
         raise ValueError(f"Unsupported type for BundleStreamLike: {type(input_val)}")
 
 
+def convert_to_tab_data_stream(input_val: TabDataStreamLike) -> Stream[TabData]:
+    """Convert various input types to a Stream[TabData]."""
+    if isinstance(input_val, str):
+        return Stream.pat(parse_tab_pattern(input_val))
+    elif isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for TabDataStreamLike: {type(input_val)}")
+
+
+def convert_to_chord_data_stream(input_val: ChordDataStreamLike) -> Stream[ChordData]:
+    """Convert various input types to a Stream[ChordData]."""
+    if isinstance(input_val, str):
+        return Stream.pat(parse_chord_pattern(input_val))
+    elif isinstance(input_val, Pat):
+        return Stream.pat(input_val)
+    elif isinstance(input_val, Stream):
+        return input_val
+    else:
+        raise ValueError(f"Unsupported type for ChordDataStreamLike: {type(input_val)}")
+
+
 class ChordElemParser(Arrow[str, PSeq[Note]], Singleton):
     """Parser for chord symbols that generates multiple notes.
 
@@ -796,7 +828,7 @@ def note_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
 
         return sym_stream.bind(MergeStrat.Outer, convert_to_midi_attrs)
     else:
-        raise ValueError(f"Unsupported type for chord_stream: {type(input_val)}")
+        raise ValueError(f"Unsupported type for note_stream: {type(input_val)}")
 
 
 def tab_stream(input_val: SymStreamLike) -> Stream[MidiAttrs]:
@@ -1119,3 +1151,63 @@ def combine_all(ss: Sequence[Stream[MidiAttrs]]) -> Stream[MidiAttrs]:
         for el in ss[1:]:
             acc = combine(acc, el)
         return acc
+
+
+def tab_data_stream(input_val: TabDataStreamLike) -> Stream[TabData]:
+    """Create a stream of TabData objects from various input types.
+
+    Takes a TabDataStreamLike input and converts it to a Stream[TabData].
+    This function produces raw TabData objects without wrapping them in MidiAttrs.
+
+    Args:
+        input_val: A TabDataStreamLike value which can be:
+                   - str: Pattern string with tab notation (e.g., "#x32010 #320003")
+                   - Pat[TabData]: Pattern of TabData objects
+                   - Stream[TabData]: Pre-constructed TabData stream
+
+    Returns:
+        A Stream[TabData] containing raw TabData objects
+
+    Examples:
+        # From pattern string
+        stream = tab_data_stream("#x32010 #320003")  # C major, G major
+
+        # From pattern
+        from minipat.pat import Pat
+        from minipat.types import TabData
+        from spiny import PSeq
+        tab_data = TabData(None, PSeq.mk([3, 2, 0, 0, 1, 0]))
+        pat = Pat.pure(tab_data)
+        stream = tab_data_stream(pat)
+    """
+    return convert_to_tab_data_stream(input_val)
+
+
+def chord_data_stream(input_val: ChordDataStreamLike) -> Stream[ChordData]:
+    """Create a stream of ChordData objects from various input types.
+
+    Takes a ChordDataStreamLike input and converts it to a Stream[ChordData].
+    This function produces raw ChordData objects without wrapping them in MidiAttrs.
+
+    Args:
+        input_val: A ChordDataStreamLike value which can be:
+                   - str: Pattern string with chord notation (e.g., "c4`maj7 f#`min")
+                   - Pat[ChordData]: Pattern of ChordData objects
+                   - Stream[ChordData]: Pre-constructed ChordData stream
+
+    Returns:
+        A Stream[ChordData] containing raw ChordData objects
+
+    Examples:
+        # From pattern string
+        stream = chord_data_stream("c4`maj7 f#`min")  # C maj7, F# min
+
+        # From pattern
+        from minipat.pat import Pat
+        from minipat.types import ChordData, Note
+        from spiny import PSeq
+        chord_data = ChordData(Note(60), "maj7", PSeq.mk([]))
+        pat = Pat.pure(chord_data)
+        stream = chord_data_stream(pat)
+    """
+    return convert_to_chord_data_stream(input_val)
