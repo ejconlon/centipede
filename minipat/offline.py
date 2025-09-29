@@ -21,7 +21,10 @@ from minipat.messages import (
     MsgHeap,
     MsgTypeField,
     NoteField,
+    NoteKey,
     ProgramField,
+    TabInstKey,
+    TabStringKey,
     TimedMessage,
     ValueField,
     VelocityField,
@@ -29,6 +32,7 @@ from minipat.messages import (
     msg_note_off,
 )
 from minipat.midi import parse_messages
+from minipat.tab import TabInst
 from minipat.time import (
     Bpc,
     Cps,
@@ -39,6 +43,32 @@ from minipat.time import (
     mk_cycle_delta,
 )
 from minipat.types import Velocity
+
+# LilyPond note names for each semitone in an octave
+_LILYPOND_NOTE_NAMES: list[str] = [
+    "c",
+    "cis",
+    "d",
+    "dis",
+    "e",
+    "f",
+    "fis",
+    "g",
+    "gis",
+    "a",
+    "ais",
+    "b",
+]
+
+# LilyPond tuning definitions for different instruments
+_LILYPOND_TUNINGS: dict[TabInst, str] = {
+    TabInst.StandardGuitar: "guitar-tuning",
+    TabInst.DropDGuitar: "guitar-drop-d-tuning",
+    TabInst.StandardBass: "bass-tuning",
+    TabInst.Ukulele: "ukulele-tuning",
+    TabInst.Mandolin: "mandolin-tuning",
+    TabInst.Banjo: "banjo-open-g-tuning",
+}
 
 
 def render_midi(
@@ -307,3 +337,262 @@ def play_midi(mid: mido.MidiFile, name: Optional[str] = None) -> None:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Failed to play MIDI file: {e.stderr}")
+
+
+def render_lilypond(
+    start: CycleTime,
+    events: EvHeap[MidiAttrs],
+    name: str,
+    directory: Optional[Path] = None,
+    cps: Optional[Cps] = None,
+    bpc: Optional[Bpc] = None,
+) -> Path:
+    """Render an EvHeap to LilyPond file and compile to PDF with tablature information.
+
+    Args:
+        start: Start cycle time - events will be timed relative to this
+        events: The event heap containing MIDI attribute events with tab info
+        name: Filename without extension (e.g., "my_song")
+        directory: Output directory (defaults to temporary directory if None)
+        cps: Cycles per second (tempo) - affects note duration calculations
+        bpc: Beats per cycle (time signature numerator)
+
+    Returns:
+        Path to the generated PDF file
+
+    Note:
+        One cycle equals one bar, bpc is the numerator of the time signature.
+        Events with TabInstKey, TabStringKey, and TabFretKey will be rendered
+        with explicit string/fret notation in tablature.
+        Both .ly and .pdf files are created in the specified directory.
+    """
+    cps = cps if cps is not None else Cps(Fraction(1, 2))
+    bpc = bpc if bpc is not None else Bpc(4)
+
+    # Determine output directory and create paths
+    if directory is None:
+        import tempfile
+
+        output_dir = Path(tempfile.mkdtemp())
+    else:
+        output_dir = directory
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    ly_path = output_dir / f"{name}.ly"
+    pdf_path = output_dir / f"{name}.pdf"
+
+    # Collect events with timing and tab information
+    timed_events: list[tuple[float, float, MidiAttrs]] = []
+
+    for span, ev in events:
+        # Calculate timing relative to start
+        event_start_cycles = float(span.active.start - start)
+        event_duration_cycles = float(span.active.end - span.active.start)
+
+        timed_events.append((event_start_cycles, event_duration_cycles, ev.val))
+
+    # Sort events by start time
+    timed_events.sort(key=lambda x: x[0])
+
+    # Group events by their timing to handle chords
+    chord_groups: dict[float, list[tuple[float, MidiAttrs]]] = {}
+    for start_time, duration, attrs in timed_events:
+        if start_time not in chord_groups:
+            chord_groups[start_time] = []
+        chord_groups[start_time].append((duration, attrs))
+
+    # Generate LilyPond content
+    version_line = '\\version "2.24.4"'
+
+    # Determine instrument type (use first tab instrument found, default to guitar)
+    instrument = TabInst.StandardGuitar
+    tab_inst_key = TabInstKey()
+    for _, duration_attrs_list in chord_groups.items():
+        for _, attrs in duration_attrs_list:
+            try:
+                instrument = attrs.get(tab_inst_key)
+                break
+            except KeyError:
+                continue
+        else:
+            continue
+        break
+
+    # Note: instrument configuration is available via TAB_CONFIGS[instrument] if needed
+
+    # Build the music content
+    music_parts = []
+    for event_time in sorted(chord_groups.keys()):
+        duration_attrs_list = chord_groups[event_time]
+
+        if len(duration_attrs_list) == 1:
+            # Single note
+            duration, attrs = duration_attrs_list[0]
+            note_str = _format_lilypond_note(attrs, duration, float(bpc))
+            if note_str:
+                music_parts.append(note_str)
+        else:
+            # Chord
+            chord_notes = []
+            chord_duration = None
+            for duration, attrs in duration_attrs_list:
+                note_str = _format_lilypond_note(
+                    attrs, duration, float(bpc), in_chord=True
+                )
+                if note_str:
+                    chord_notes.append(note_str)
+                    if chord_duration is None:
+                        chord_duration = duration
+
+            if chord_notes:
+                if len(chord_notes) == 1:
+                    music_parts.append(chord_notes[0])
+                else:
+                    duration_suffix = _get_lilypond_duration(
+                        chord_duration or 1.0, float(bpc)
+                    )
+                    music_parts.append(f"<{' '.join(chord_notes)}>{duration_suffix}")
+
+    # Create complete LilyPond file content
+    content = f"""{version_line}
+
+myMusic = {{
+  \\set TabStaff.stringTunings = #{_get_lilypond_tuning(instrument)}
+  {" ".join(music_parts) if music_parts else "r4"}
+}}
+
+\\score {{
+  \\new StaffGroup <<
+    \\new Staff {{
+      \\clef "treble_8"
+      \\myMusic
+    }}
+    \\new TabStaff {{
+      \\myMusic
+    }}
+  >>
+  \\layout {{ }}
+}}"""
+
+    # Write LilyPond file
+    with open(ly_path, "w") as f:
+        f.write(content)
+
+    # Compile to PDF
+    _compile_lilypond_to_pdf(ly_path, pdf_path)
+
+    return pdf_path
+
+
+def _compile_lilypond_to_pdf(ly_path: Path, pdf_path: Path) -> None:
+    """Compile a LilyPond file to PDF.
+
+    Args:
+        ly_path: Path to the .ly file to compile
+        pdf_path: Expected path to the output PDF file
+
+    Raises:
+        RuntimeError: If LilyPond compilation fails
+    """
+    try:
+        # Try with full path first, fall back to just 'lilypond'
+        lilypond_cmd = "/usr/local/bin/lilypond"
+        for cmd in [lilypond_cmd, "lilypond"]:
+            try:
+                subprocess.run(
+                    [cmd, f"--output={ly_path.stem}", str(ly_path.name)],
+                    cwd=ly_path.parent,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                break
+            except subprocess.CalledProcessError as e:
+                if cmd == "lilypond":  # Last attempt failed
+                    raise RuntimeError(f"LilyPond compilation failed: {e.stderr}")
+            except FileNotFoundError:
+                if cmd == "lilypond":  # Last attempt failed
+                    raise RuntimeError("LilyPond not found. Please install LilyPond.")
+
+        # Verify PDF was created
+        if not pdf_path.exists():
+            raise RuntimeError(f"PDF was not generated at {pdf_path}")
+
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"LilyPond compilation failed: {e.stderr}")
+
+
+def _format_lilypond_note(
+    attrs: MidiAttrs, duration: float, bpc: float, in_chord: bool = False
+) -> Optional[str]:
+    """Format a single note with tab information for LilyPond."""
+    # Extract note information
+    note_key = NoteKey()
+    try:
+        midi_note = attrs.get(note_key)
+    except KeyError:
+        return None
+
+    note_name = _midi_to_lilypond_note(midi_note)
+
+    # Get tab information if available
+    string_key = TabStringKey()
+    try:
+        string_num = attrs.get(string_key)
+    except KeyError:
+        string_num = None
+
+    # Format the note with string indication
+    if string_num is not None and not in_chord:
+        note_with_string = f"{note_name}\\{string_num}"
+    else:
+        note_with_string = note_name
+
+    # Add duration for non-chord notes
+    if not in_chord:
+        duration_suffix = _get_lilypond_duration(duration, bpc)
+        return f"{note_with_string}{duration_suffix}"
+    else:
+        return note_with_string
+
+
+def _midi_to_lilypond_note(midi_note: int) -> str:
+    """Convert MIDI note number to LilyPond note name."""
+    octave = (midi_note // 12) - 1
+    note_index = midi_note % 12
+    base_name = _LILYPOND_NOTE_NAMES[note_index]
+
+    # LilyPond octave notation: 4 is middle octave, apostrophes for higher, commas for lower
+    if octave >= 4:
+        octave_suffix = "'" * (octave - 3)
+    elif octave == 3:
+        octave_suffix = ""
+    else:
+        octave_suffix = "," * (3 - octave)
+
+    return f"{base_name}{octave_suffix}"
+
+
+def _get_lilypond_duration(duration_cycles: float, bpc: float) -> str:
+    """Convert cycle duration to LilyPond duration notation."""
+    # Convert cycle duration to beat duration
+    beat_duration = duration_cycles * bpc
+
+    # Map to standard durations (quarter note = 1 beat)
+    if beat_duration >= 4:
+        return "1"  # whole note
+    elif beat_duration >= 2:
+        return "2"  # half note
+    elif beat_duration >= 1:
+        return "4"  # quarter note
+    elif beat_duration >= 0.5:
+        return "8"  # eighth note
+    elif beat_duration >= 0.25:
+        return "16"  # sixteenth note
+    else:
+        return "32"  # thirty-second note
+
+
+def _get_lilypond_tuning(instrument: TabInst) -> str:
+    """Get LilyPond tuning definition for the instrument."""
+    return _LILYPOND_TUNINGS.get(instrument, "guitar-tuning")

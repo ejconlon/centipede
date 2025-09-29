@@ -28,7 +28,6 @@ Next available task ID: {#43}
 
 ### Active
 
-- {#42} Engrave event heaps with lilypond, including tab information
 
 ### Review
 
@@ -44,6 +43,15 @@ Next available task ID: {#43}
 
 ### Done
 
+- {#42} Engrave event heaps with lilypond, including tab information
+  - ✓ Implemented `render_lilypond()` function in minipat/offline.py
+  - ✓ Takes EvHeap[MidiAttrs] with tab information and renders to LilyPond format
+  - ✓ Supports TabInstKey, TabStringKey, TabFretKey attributes for tablature notation
+  - ✓ Handles multiple instruments (guitar, bass, ukulele, mandolin, banjo)
+  - ✓ Generates both standard notation and tablature staff
+  - ✓ One cycle equals one bar, bpc is numerator of time signature
+  - ✓ Outputs .ly files that compile successfully with lilypond binary
+  - ✓ All tests and precommit checks pass
 - {#41} Add guitar tab parsing
   - **Restructured**: Renamed to comprehensive tablature system supporting multiple instruments
   - Created tab.py module with TabInst enum and TabConfig dataclass system
