@@ -24,9 +24,15 @@ We track the next available task ID on its own line below.
 
 ## Lanes
 
-Next available task ID: {#43}
+Next available task ID: {#44}
 
 ### Active
+
+- {#43} Parse chord fragments (note, name, list of inv/drop modifiers) as ChordData
+  - Useful to parse Pat[ChordData] to render chord names
+  - frozen dataclass ChordData in minipat.types
+  - Later render ChordData -> sequence of Note in minipat.chords
+  - Add chord engraving to Lilypad output by taking StreamLike[ChordData]
 
 
 ### Review
