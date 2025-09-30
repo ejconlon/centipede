@@ -46,16 +46,21 @@ _CHORD_MAP = cast(
         "M13": "maj13",
         "add13": "add13",
         # Dominant chords
+        "7": "dom7",
         "dom7": "dom7",
         "dom9": "dom9",
         "dom11": "dom11",
         "dom13": "dom13",
+        "sevenSharp11": "7s11",
+        "7s11": "7s11",
         "sevenFlat5": "7f5",
         "7f5": "7f5",
         "sevenSharp5": "7s5",
         "7s5": "7s5",
         "sevenFlat9": "7f9",
         "7f9": "7f9",
+        "sevenSharp9": "7s9",
+        "7s9": "7s9",
         "nine": "9",
         "9": "9",
         "eleven": "11",
@@ -69,6 +74,7 @@ _CHORD_MAP = cast(
         "diminished": "dim",
         "dim": "dim",
         "minorSharp5": "mins5",
+        "mins5": "mins5",
         "msharp5": "mins5",
         "mS5": "mins5",
         "minor6": "min6",
@@ -161,9 +167,11 @@ _CHORD_INTERVALS = cast(
         "dom9": [0, 4, 7, 14],
         "dom11": [0, 4, 7, 17],
         "dom13": [0, 4, 7, 21],
+        "7s11": [0, 4, 6, 10],
         "7f5": [0, 4, 6, 10],
         "7s5": [0, 4, 8, 10],
         "7f9": [0, 4, 7, 10, 13],
+        "7s9": [0, 4, 7, 10, 15],
         "9": [0, 4, 7, 10, 14],
         "11": [0, 4, 7, 10, 14, 17],
         "13": [0, 4, 7, 10, 14, 17, 21],
@@ -177,7 +185,7 @@ _CHORD_INTERVALS = cast(
         "min7": [0, 3, 7, 10],
         "min7s5": [0, 3, 8, 10],
         "min7f9": [0, 3, 7, 10, 13],
-        "min7s9": [0, 3, 7, 10, 14],
+        "min7s9": [0, 3, 7, 10, 15],
         "dim7": [0, 3, 6, 9],
         "min9": [0, 3, 7, 10, 14],
         "min11": [0, 3, 7, 10, 14, 17],
@@ -316,6 +324,15 @@ def apply_drop_voicing(notes: PSeq[Note], drop: int) -> PSeq[Note]:
             dropped_notes[idx] = Note(midi_value)
 
     return PSeq.mk(dropped_notes)
+
+
+def get_all_chords() -> set[Chord]:
+    """Get all available chord types.
+
+    Returns:
+        Set of all Chord values that can be used with chord_to_notes
+    """
+    return set(Chord(chord) for chord in _CHORD_INTERVALS.keys())
 
 
 def chord_data_to_notes(chord_data: ChordData) -> PSeq[Note]:

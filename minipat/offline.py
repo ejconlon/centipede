@@ -84,6 +84,9 @@ _CHORD_MAP: dict[str, str] = {
     "maj7": "maj7",
     "min7": "m7",
     "dom7": "7",
+    "dom9": "9",  # Dominant 9th
+    "dom11": "11",  # Dominant 11th
+    "dom13": "13",  # Dominant 13th
     "maj9": "maj9",
     "min9": "m9",
     "9": "9",
@@ -102,13 +105,16 @@ _CHORD_MAP: dict[str, str] = {
     "add9": "add9",
     "add11": "add11",
     "add13": "add13",
-    "7f5": "7-5",
-    "7s5": "7+5",
-    "7f9": "7-9",
-    "min7f5": "m7-5",
-    "min7s5": "m7+5",
-    "min7f9": "m7-9",
-    "min7s9": "m7+9",
+    "7f5": "7.5-",
+    "7s5": "7.5+",
+    "7s11": "7.11+",  # Seven sharp 11 (lydian dominant)
+    "7f9": "7.9-",
+    "7s9": "7.9+",  # Seven sharp 9
+    "min7f5": "m7.5-",
+    "min7s5": "m7.5+",
+    "min7f9": "m7.9-",
+    "min7s9": "m7.9+",
+    "mins5": "m.5+",  # Minor sharp 5
     "7sus2": "7sus2",
     "7sus4": "7sus4",
     "9sus4": "9sus4",
@@ -384,6 +390,94 @@ def play_midi(mid: mido.MidiFile, name: Optional[str] = None) -> None:
         raise RuntimeError(f"Failed to play MIDI file: {e.stderr}")
 
 
+def _key_to_lilypond_signature(key: Optional[str]) -> str:
+    """Convert key name to LilyPond key signature.
+
+    Args:
+        key: Key name like "bb", "f#", "dm", etc. None returns empty string
+
+    Returns:
+        LilyPond key signature string (e.g., "\\key bes \\major")
+    """
+    if not key:
+        return ""
+
+    key = key.lower().strip()
+
+    # Map key names to LilyPond key signatures
+    key_signatures = {
+        # Major keys
+        "c": "\\key c \\major",
+        "g": "\\key g \\major",
+        "d": "\\key d \\major",
+        "a": "\\key a \\major",
+        "e": "\\key e \\major",
+        "b": "\\key b \\major",
+        "f#": "\\key fis \\major",
+        "c#": "\\key cis \\major",
+        "f": "\\key f \\major",
+        "bb": "\\key bes \\major",
+        "eb": "\\key ees \\major",
+        "ab": "\\key aes \\major",
+        "db": "\\key des \\major",
+        "gb": "\\key ges \\major",
+        "cb": "\\key ces \\major",
+        # Minor keys
+        "am": "\\key a \\minor",
+        "em": "\\key e \\minor",
+        "bm": "\\key b \\minor",
+        "f#m": "\\key fis \\minor",
+        "c#m": "\\key cis \\minor",
+        "g#m": "\\key gis \\minor",
+        "d#m": "\\key dis \\minor",
+        "a#m": "\\key ais \\minor",
+        "dm": "\\key d \\minor",
+        "gm": "\\key g \\minor",
+        "cm": "\\key c \\minor",
+        "fm": "\\key f \\minor",
+        "bbm": "\\key bes \\minor",
+        "ebm": "\\key ees \\minor",
+        "abm": "\\key aes \\minor",
+    }
+
+    return key_signatures.get(key, "")
+
+
+def _key_uses_flats(key: Optional[str]) -> bool:
+    """Determine if a key signature typically uses flats or sharps.
+
+    Args:
+        key: Key name like "bb", "f#", "c", etc. None defaults to C major (no preference)
+
+    Returns:
+        True if the key typically uses flat notation, False for sharp notation
+    """
+    if not key:
+        return False  # C major, no preference
+
+    key = key.lower().strip()
+
+    # Keys that typically use flats
+    flat_keys = {
+        "f",  # F major (1 flat)
+        "bb",  # Bb major (2 flats)
+        "eb",  # Eb major (3 flats)
+        "ab",  # Ab major (4 flats)
+        "db",  # Db major (5 flats)
+        "gb",  # Gb major (6 flats)
+        "cb",  # Cb major (7 flats)
+        "dm",  # D minor (1 flat, relative to F major)
+        "gm",  # G minor (2 flats, relative to Bb major)
+        "cm",  # C minor (3 flats, relative to Eb major)
+        "fm",  # F minor (4 flats)
+        "bbm",  # Bb minor (5 flats)
+        "ebm",  # Eb minor (6 flats)
+        "abm",  # Ab minor (7 flats)
+    }
+
+    return key in flat_keys
+
+
 def render_lilypond(
     arc: CycleArc,
     tab_stream: Stream[TabData],
@@ -394,6 +488,7 @@ def render_lilypond(
     bpc: Optional[Bpc] = None,
     pdf: bool = False,
     svg: bool = False,
+    key: Optional[str] = None,
 ) -> dict[str, Path]:
     """Render streams to LilyPond file and compile to PDF and/or SVG with tablature information.
 
@@ -407,6 +502,7 @@ def render_lilypond(
         bpc: Beats per cycle (time signature numerator)
         pdf: Whether to generate PDF output (default: False)
         svg: Whether to generate SVG output (default: False)
+        key: Key signature (e.g., "bb", "f#", "c") - determines flat vs sharp notation for chords
 
     Returns:
         Dictionary with keys for generated files:
@@ -423,6 +519,10 @@ def render_lilypond(
     """
     cps = cps if cps is not None else Cps(Fraction(1, 2))
     bpc = bpc if bpc is not None else Bpc(4)
+
+    # Determine chord notation preference based on key signature
+    prefer_flats = _key_uses_flats(key)
+    key_signature = _key_to_lilypond_signature(key)
 
     # Determine output directory and create paths
     if directory is None:
@@ -540,14 +640,12 @@ def render_lilypond(
     music_parts = []
     chord_symbols = []
 
-    # Track previous chord time to avoid gaps in chord symbols
-    prev_chord_time = 0.0
+    # Process chord symbols independently of tab/note events
+    if chord_names:
+        prev_chord_time = 0.0
+        sorted_chord_times = sorted(chord_names.keys())
 
-    for event_time in sorted(chord_groups.keys()):
-        duration_attrs_list = chord_groups[event_time]
-
-        # Handle chord symbols
-        if event_time in chord_names:
+        for i, event_time in enumerate(sorted_chord_times):
             # Add spacer rest if needed
             if event_time > prev_chord_time:
                 rest_duration = event_time - prev_chord_time
@@ -557,15 +655,19 @@ def render_lilypond(
             # Add chord symbol
             chord_data = chord_names[event_time]
             # Get root note and chord type for LilyPond
-            root_note_str = _midi_to_lilypond_note(chord_data.root_note)
+            # Use notation preference based on key signature
+            root_note_str = _midi_to_lilypond_note(
+                chord_data.root_note, prefer_flats=prefer_flats
+            )
             chord_type = _CHORD_MAP.get(chord_data.chord_name, chord_data.chord_name)
-            # Get duration to next event or end of piece
-            next_events = [t for t in sorted(chord_groups.keys()) if t > event_time]
-            if next_events:
-                chord_duration = next_events[0] - event_time
+
+            # Get duration to next chord or end of piece
+            if i + 1 < len(sorted_chord_times):
+                chord_duration = sorted_chord_times[i + 1] - event_time
             else:
                 # Last chord - sustain for remaining duration
                 chord_duration = float(arc.end - arc.start) - event_time
+
             duration_suffix = _get_lilypond_duration(chord_duration, float(bpc))
             # Format: root+duration:type (e.g., a4:m or c4 for major)
             if chord_type:
@@ -574,6 +676,10 @@ def render_lilypond(
                 # Major chord has no suffix
                 chord_symbols.append(f"{root_note_str}{duration_suffix}")
             prev_chord_time = event_time + chord_duration
+
+    # Process tab/note events
+    for event_time in sorted(chord_groups.keys()):
+        duration_attrs_list = chord_groups[event_time]
 
         # Handle notes/tabs
         if len(duration_attrs_list) == 1:
@@ -616,12 +722,25 @@ def render_lilypond(
 
 """
 
+    # Generate rests for the full duration if no music parts
+    if not music_parts:
+        total_duration = float(arc.end - arc.start)
+        rest_notation = _get_lilypond_duration(total_duration, float(bpc))
+        # Use R for multi-bar rests, r for single notes
+        if total_duration * float(bpc) > 4:
+            music_content = f"R{rest_notation}"
+        else:
+            music_content = f"r{rest_notation}"
+    else:
+        music_content = " ".join(music_parts)
+
     content = f"""{version_line}
 
 {chord_names_section}myMusic = {{
   \\set TabStaff.stringTunings = #{_get_lilypond_tuning(instrument)}
+  {key_signature}
   \\time 4/4
-  {" ".join(music_parts) if music_parts else "r4"}
+  {music_content}
 }}
 
 \\score {{
@@ -718,10 +837,15 @@ def _compile_lilypond_to_outputs(
         raise RuntimeError(f"LilyPond compilation failed: {e.stderr}")
 
 
-def _chord_data_to_lilypond_name(chord_data: ChordData) -> str:
+def _chord_data_to_lilypond_name(
+    chord_data: ChordData, prefer_flats: bool = True
+) -> str:
     """Convert ChordData to a LilyPond chord name."""
     # Get the root note name
-    root_note_str = _midi_to_lilypond_note(chord_data.root_note)
+    # Use notation preference (defaults to flats for standard jazz notation)
+    root_note_str = _midi_to_lilypond_note(
+        chord_data.root_note, prefer_flats=prefer_flats
+    )
 
     # Convert chord name to LilyPond format
     chord_name = chord_data.chord_name
@@ -774,11 +898,29 @@ def _format_lilypond_note(
         return note_name
 
 
-def _midi_to_lilypond_note(midi_note: int) -> str:
-    """Convert MIDI note number to LilyPond note name."""
+def _midi_to_lilypond_note(midi_note: int, prefer_flats: bool = False) -> str:
+    """Convert MIDI note number to LilyPond note name.
+
+    Args:
+        midi_note: MIDI note number (0-127)
+        prefer_flats: If True, use flat notation for accidentals (bes instead of ais)
+                     This is needed for chord symbols
+    """
     octave = (midi_note // 12) - 1
     note_index = midi_note % 12
-    base_name = _LILYPOND_NOTE_NAMES[note_index]
+
+    if prefer_flats and note_index in [1, 3, 6, 8, 10]:
+        # Use flat notation for black keys
+        flat_names = {
+            1: "des",  # Db
+            3: "ees",  # Eb
+            6: "ges",  # Gb
+            8: "aes",  # Ab
+            10: "bes",  # Bb
+        }
+        base_name = flat_names[note_index]
+    else:
+        base_name = _LILYPOND_NOTE_NAMES[note_index]
 
     # LilyPond octave notation: 4 is middle octave, apostrophes for higher, commas for lower
     if octave >= 4:
@@ -796,8 +938,21 @@ def _get_lilypond_duration(duration_cycles: float, bpc: float) -> str:
     # Convert cycle duration to beat duration
     beat_duration = duration_cycles * bpc
 
+    # For multi-bar durations (more than 4 beats)
+    if beat_duration > 4:
+        # Calculate full bars and remaining beats
+        full_bars = int(beat_duration // 4)
+        remaining_beats = beat_duration % 4
+
+        if remaining_beats == 0:
+            # Exact number of bars
+            return f"1*{full_bars}"
+        else:
+            # Bars plus remaining beats - need to handle this more carefully
+            # For simplicity, just use the multi-bar notation
+            return f"1*{duration_cycles:.0f}"
     # Map to standard durations (quarter note = 1 beat)
-    if beat_duration >= 4:
+    elif beat_duration == 4:
         return "1"  # whole note
     elif beat_duration >= 2:
         return "2"  # half note

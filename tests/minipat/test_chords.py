@@ -6,6 +6,7 @@ from minipat.chords import (
     Chord,
     chord_data_to_notes,
     chord_to_notes,
+    get_all_chords,
     get_chord_intervals,
     parse_chord_name,
 )
@@ -52,6 +53,29 @@ def test_chord_name_parsing() -> None:
     assert parse_chord_name("Min") == Chord("min")
     assert parse_chord_name("DOM7") == Chord("dom7")
     assert parse_chord_name("mAJ7") == Chord("maj7")
+
+
+def test_all_chord_types_parse_as_themselves() -> None:
+    """Test that all defined chord types can parse as themselves.
+
+    This is a regression test to ensure that all chord types in _CHORD_INTERVALS
+    have corresponding entries in _CHORD_MAP that map to themselves.
+
+    This test would have caught the mins5 bug where mins5 was defined in intervals
+    but missing the "mins5": "mins5" self-mapping in _CHORD_MAP.
+    """
+    all_chords = get_all_chords()
+
+    failed_chords = []
+    for chord in all_chords:
+        result = parse_chord_name(chord)
+        if result != chord:
+            failed_chords.append(f"{chord} -> {result}")
+
+    assert len(failed_chords) == 0, (
+        f"The following chord types failed to parse as themselves: {failed_chords}. "
+        f"This likely means they are missing self-mappings in _CHORD_MAP."
+    )
 
 
 def test_chord_intervals() -> None:
